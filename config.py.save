@@ -1,0 +1,33 @@
+from discord import Intents  # type: ignore
+
+CONFIG_DICT = {
+    "prefix": ".",
+    "intents": Intents.all(),
+    "owners": {
+        977036206179233862,
+        352190010998390796,
+        978402974667800666,
+        744806691396124673
+    },
+    "token": "MTE0OTUzNTgzNDc1Njg3NDI1MA.GVpIbW.lvZYmGc_g6QdvZyy649OxNtMen5v3Quc_ZlOgM",
+    "rival_api": "abc2f2fe-a27b-43c0-8b0d-5b4b76752209",
+    "domain": "https://greed.ooo",
+}
+
+# testing token MTMwMTg2MTExNTMxMTAzMDMzMw.GMZuAn.BMEDBuh0Tk1MYZUs81-moajFDaV8JbcIQR1OX8
+
+# main token MTE0OTUzNTgzNDc1Njg3NDI1MA.GVpIbW.lvZYmGc_g6QdvZyy649OxNtMen5v3Quc_ZlOgM
+
+
+CHANCES = {
+    "roll": {"percentage": 50.0, "total": 100.0},
+    "coinflip": {"percentage": 50.0, "total": 100.0},
+    "gamble": {"percentage": 20.0, "total": 100.0},
+    "supergamble": {"percentage": 50.0, "total": 1000.0},
+}
+
+
+class Authorization:
+    class Instagram:
+        session_id = ""
+        csrf_token = ""
