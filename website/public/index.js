@@ -14,7 +14,8 @@ function setupData(){
                     servercount += shard.servers;
                 });
             });
-            //set user info class paragraph
+            usercount = usercount.toLocaleString();
+            servercount = servercount.toLocaleString();
             document.getElementsByClassName('user-info')[0].innerHTML = `serving <span class="highlight">${usercount}</span> users across <span class="highlight">${servercount}</span> servers`;
         });
 }
