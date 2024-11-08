@@ -522,6 +522,7 @@ class Miscellaneous(Cog):
 
         
     @commands.command(name="imageonly", brief="Toggle image only mode in a channel")
+    @commands.has_permissions(manage_messages=True)
     
     @commands.command(name="enlarge", aliases=["downloademoji", "e", "jumbo"])
     async def enlarge(self, ctx, emoji: Union[discord.PartialEmoji, str] = None):
