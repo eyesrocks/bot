@@ -191,7 +191,7 @@ class Events(commands.Cog):
         choice = random.choice(self.bot.users)
         return choice.display_avatar.url
     @commands.Cog.listener("on_message")
-    async def 
+    async def on_message(self, message: discord.Message):
     @commands.Cog.listener("on_audit_log_entry_create")
     async def moderation_logs(self, entry: discord.AuditLogEntry):
         return await self.bot.modlogs.do_log(entry)
