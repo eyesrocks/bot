@@ -521,7 +521,7 @@ class Miscellaneous(Cog):
 
 
         
-    @commands.command(name="")
+    @commands.command(name="imageonly")
     @commands.command(name="enlarge", aliases=["downloademoji", "e", "jumbo"])
     async def enlarge(self, ctx, emoji: Union[discord.PartialEmoji, str] = None):
         """
