@@ -1588,7 +1588,7 @@ class Information(commands.Cog):
         brief="avatar [user]",
         help="avatar @lim",
     )
-    async def avatar(self, ctx: Context, user: Optional[Union[discord.Member, discord.User]] = commands.Author):
+    async def avatar(self, ctx: user: Optional[Union[discord.Member, discord.User]] = commands.Author):
 
         async with ctx.handle_response():
 
