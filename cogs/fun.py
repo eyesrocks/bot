@@ -353,109 +353,158 @@ class Fun(commands.Cog):
         await ctx.reply(embed=discord.Embed(color=self.bot.color, description= f"{user.mention} has `{random.randrange(51)}` bitches"), mention_author=False)
 
 
-    @commands.group(
-        name="vape",
-        brief="hit the vape",
-        invoke_without_command=True
-    )
-    @commands.cooldown(1, 10, commands.BucketType.user)
-    async def vape(self, ctx):
-        has_vape = await self.bot.db.fetchrow(
-            "SELECT holder FROM vape WHERE guild_id = $1", ctx.guild.id
-        )
-        if not has_vape:
-            return await ctx.send("> The vape doesn't exist in this server. Someone needs to claim it first!")
+     @commands.group(
+          name="vape",
+          brief="Hit the vape",
+          invoke_without_command=True
+     )
+     @commands.cooldown(1, 10, commands.BucketType.user)
+     async def vape(self, ctx):
+          has_vape = await self.bot.db.fetchrow(
+               "SELECT holder FROM vape WHERE guild_id = $1", ctx.guild.id
+          )
+          
+          # If no vape is found in the server
+          if not has_vape:
+               embed = discord.Embed(
+                    title="No Vape Found",
+                    description="> The vape doesn't exist in this server. Someone needs to claim it first!",
+                    color=self.bot.color
+               )
+               return await ctx.send(embed=embed)
 
-        if has_vape['holder'] is None:
-            return await ctx.send("No one has the vape yet, steal it using the `vape steal` command")
+          if has_vape['holder'] is None:
+               embed = discord.Embed(
+                    title="Vape Unclaimed",
+                    description="> No one has the vape yet. Steal it using the `vape steal` command.",
+                    color=self.bot.color
+               )
+               return await ctx.send(embed=embed)
 
-        elif has_vape['holder'] != ctx.author.id:
-            member = await ctx.guild.fetch_member(has_vape['holder'])
-            if member:
-                return await ctx.send(f"> You don't have the vape! Steal it from **{member.display_name}**.")
-            else:
-                return await ctx.send("> The vape holder is no longer in this server. Someone else can claim it!")
+          elif has_vape['holder'] != ctx.author.id:
+               member = await ctx.guild.fetch_member(has_vape['holder'])
+               if member:
+                    embed = discord.Embed(
+                         title="You Can't Hit The Vape",
+                         description=f"> You don't have the vape! Steal it from **{member.display_name}**.",
+                         color=self.bot.color
+                    )
+               else:
+                    embed = discord.Embed(
+                         title="Vape Holder Missing",
+                         description="> The vape holder is no longer in this server. Someone else can claim it!",
+                         color=self.bot.color
+                    )
+               return await ctx.send(embed=embed)
 
-        await self.bot.db.execute(
-            "UPDATE vape SET guild_hits = guild_hits + 1 WHERE guild_id = $1", ctx.guild.id
-        )
-        res = await self.bot.db.fetchrow(
-            "SELECT * FROM vape WHERE guild_id = $1", ctx.guild.id
-        )
-        return await ctx.send(f"{ctx.author.mention} took a hit of the vape! The server now has `{res['guild_hits']}` hits!")
+          # If the user has the vape, record a hit
+          await self.bot.db.execute(
+               "UPDATE vape SET guild_hits = guild_hits + 1 WHERE guild_id = $1", ctx.guild.id
+          )
+          res = await self.bot.db.fetchrow(
+               "SELECT * FROM vape WHERE guild_id = $1", ctx.guild.id
+          )
+          embed = discord.Embed(
+               title="Hit The Vape!",
+               description=f"{ctx.author.mention} took a hit of the vape! The server now has `{res['guild_hits']}` hits.",
+               color=self.bot.color
+          )
+          return await ctx.send(embed=embed)
 
-    @vape.command(
-        name="steal",
-        brief="steal the vape from the current holder"
-    )
-    @commands.cooldown(1, 20, commands.BucketType.guild)
-    async def vape_steal(self, ctx):
-        res = await self.bot.db.fetchrow("SELECT * FROM vape WHERE guild_id = $1", ctx.guild.id)
-        if res:
-            result = await ctx.guild.fetch_member(res['holder'])
+     @vape.command(
+          name="steal",
+          brief="Steal the vape from the current holder"
+     )
+     @commands.cooldown(1, 20, commands.BucketType.guild)
+     async def vape_steal(self, ctx):
+          res = await self.bot.db.fetchrow("SELECT * FROM vape WHERE guild_id = $1", ctx.guild.id)
+          
+          if res:
+               result = await ctx.guild.fetch_member(res['holder'])
 
-            if result is None:
-                await self.bot.db.execute(
-                    "UPDATE vape SET holder = $1 WHERE guild_id = $2",
+               if result is None:
+                    # Steal the vape if the holder is not in the server
+                    await self.bot.db.execute(
+                         "UPDATE vape SET holder = $1 WHERE guild_id = $2",
+                         ctx.author.id, ctx.guild.id
+                    )
+                    embed = discord.Embed(
+                         title="Vape Claimed",
+                         description=f"You have claimed the vape, {ctx.author.mention}!",
+                         color=self.bot.color
+                    )
+                    return await ctx.send(embed=embed)
+
+               elif result == ctx.author:
+                    # User already has the vape
+                    embed = discord.Embed(
+                         title="Already Have The Vape",
+                         description="> You already have the vape!",
+                         color=self.bot.color
+                    )
+                    return await ctx.send(embed=embed)
+
+               else:
+                    # Steal the vape from the current holder
+                    await self.bot.db.execute(
+                         "UPDATE vape SET holder = $1 WHERE guild_id = $2",
+                         ctx.author.id, ctx.guild.id
+                    )
+                    embed = discord.Embed(
+                         title="Vape Stolen",
+                         description=f"You have successfully stolen the vape from {result.mention}.",
+                         color=self.bot.color
+                    )
+                    return await ctx.send(embed=embed)
+          else:
+               # No vape data exists, so claim it
+               await self.bot.db.execute(
+                    "INSERT INTO vape (holder, guild_id) VALUES ($1, $2)",
                     ctx.author.id, ctx.guild.id
-                )
-                return await ctx.send(f"You have claimed the vape {ctx.author.mention}!")
+               )
+               embed = discord.Embed(
+                    title="Vape Claimed",
+                    description=f"You have claimed the vape, {ctx.author.mention}!",
+                    color=self.bot.color
+               )
+               return await ctx.send(embed=embed)
 
-            elif result == ctx.author:
-                return await ctx.send("> You already have the vape!")
+     @vape.command(
+          name="flavor",
+          aliases=["taste"]
+     )
+     async def vape_flavor(self, ctx, flavor: str):
+          flavors = [
+               "Strawberry", "Mango", "Blueberry", "Watermelon", "Grape",
+               "Pineapple", "Vanilla", "Chocolate", "Caramel", "Mint",
+               "Coffee", "Cinnamon", "Bubblegum", "Peach", "Apple",
+               "Lemon", "Cherry", "Raspberry"
+          ]
 
-            else:
-                await self.bot.db.execute(
-                    "UPDATE vape SET holder = $1 WHERE guild_id = $2",
-                    ctx.author.id, ctx.guild.id
-                )
-                return await ctx.send(f"You have successfully stolen the vape from {result.mention}")
-        else:
-            await self.bot.db.execute(
-                "INSERT INTO vape (holder, guild_id) VALUES ($1, $2)",
-                ctx.author.id, ctx.guild.id
-            )
-            return await ctx.send(f"You have claimed the vape {ctx.author.mention}!")
+          if flavor.lower() not in [f.lower() for f in flavors]:
+               embed = discord.Embed(
+                    title="Invalid Flavor",
+                    description=f"> This is not a valid flavor. Choose from: {', '.join(flavors)}",
+                    color=self.bot.color
+               )
+               return await ctx.send(embed=embed)
 
-    @vape.command(
-        name="flavor",
-        aliases=["taste"]
-    )
-    async def vape_flavor(self, ctx, flavor: str):
-        flavors = [
-            "Strawberry", "Mango", "Blueberry", "Watermelon", "Grape",
-            "Pineapple", "Vanilla", "Chocolate", "Caramel", "Mint",
-            "Coffee", "Cinnamon", "Bubblegum", "Peach", "Apple",
-            "Lemon", "Cherry", "Raspberry"
-        ]
+          # Save the user's selected flavor
+          await self.bot.db.execute(
+               """
+               INSERT INTO vape_flavors (flavor, user_id)
+               VALUES ($1, $2)
+               ON CONFLICT (user_id) DO UPDATE SET flavor = $1
+               """,
+               flavor, ctx.author.id
+          )
 
-        if flavor.lower() not in [f.lower() for f in flavors]:
-            return await ctx.send(
-                f"> This is not a valid flavor. Choose from: {', '.join(flavors)}"
-            )
-
-        await self.bot.db.execute(
-            """
-            INSERT INTO vape_flavors (flavor, user_id)
-            VALUES ($1, $2)
-            ON CONFLICT (user_id) DO UPDATE SET flavor = $1
-            """,
-            flavor, ctx.author.id
-        )
-
-        await ctx.send(f"> You have set your flavor to {flavor}")
-
-    # @vape.command(
-    #     name="individual",
-    #     aliases=["switch", "normal"],
-    #     brief="switches to user vape"
-    # )
-    # async def vape_normal(self, ctx): ...
-
-    @commands.command(name="caption", aliases=["quote"], brief="hello world")
-    async def caption(self, ctx: Context, message: Optional[discord.Message] = None) -> Message:
-        return await self.get_caption(ctx, message)
-
+          embed = discord.Embed(
+               title="Flavor Set",
+               description=f"> You have set your flavor to **{flavor}**.",
+               color=self.bot.color
+          )
+          await ctx.send(embed=embed)
 
 async def setup(bot):
     await bot.add_cog(Fun(bot))
