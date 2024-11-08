@@ -14,7 +14,16 @@ window.addEventListener("load", function() {
         commands.forEach(command => {
           const commandCard = document.createElement("div");
           commandCard.classList.add("command-card");
-          commandCard.innerHTML = `
+          if(command.example == null){
+            commandCard.innerHTML = `
+            <div class="command-title">${command.name}</div>
+            <div class="command-description">${command.brief}</div>
+            <div class="details">
+            <span>Category: ${category}</span>
+            </div>
+          `;
+          }else{
+            commandCard.innerHTML = `
             <div class="command-title">${command.name}</div>
             <div class="command-description">${command.brief}</div>
             <div class="details">
@@ -22,6 +31,8 @@ window.addEventListener("load", function() {
             <span>Category: ${category}</span>
             </div>
           `;
+          }
+          
           document.getElementById("commandCards").appendChild(commandCard);
       })
     }
