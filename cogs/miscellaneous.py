@@ -122,7 +122,7 @@ class Miscellaneous(Cog):
                     await client.destroy()
                 except: 
                     await client.disconnect()
-    @commands.cog.listener("on_message_c")
+    @commands.cog.listener("on_message_create")
     @commands.command(
         name="valorant",
         brief="lookup a user's valorant stats",
