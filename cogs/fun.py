@@ -358,8 +358,8 @@ class Fun(commands.Cog):
           brief="Hit the vape",
           invoke_without_command=True
      )
-    @commands.cooldown(1, 10, commands.BucketType.user)
-    async def vape(self, ctx):
+     @commands.cooldown(1, 10, commands.BucketType.user)
+     async def vape(self, ctx):
           has_vape = await self.bot.db.fetchrow(
                "SELECT holder FROM vape WHERE guild_id = $1", ctx.guild.id
           )
@@ -393,19 +393,29 @@ class Fun(commands.Cog):
                     )
                return await ctx.send(embed=embed)
 
-          # If the user has the vape, record a hit
+          # Initial embed saying "hitting vape"
+          embed = discord.Embed(
+               title="Hitting Vape...",
+               description=f"{ctx.author.mention} is about to take a hit of the vape...",
+               color=self.bot.color
+          )
+          message = await ctx.send(embed=embed)
+
+          # Add a small delay (2.3 seconds) before updating the embed
+          await asyncio.sleep(2.3)
+
+          # Record the hit and update the hit counter
           await self.bot.db.execute(
                "UPDATE vape SET guild_hits = guild_hits + 1 WHERE guild_id = $1", ctx.guild.id
           )
           res = await self.bot.db.fetchrow(
                "SELECT * FROM vape WHERE guild_id = $1", ctx.guild.id
           )
-          embed = discord.Embed(
-               title="Hit The Vape!",
-               description=f"{ctx.author.mention} took a hit of the vape! The server now has `{res['guild_hits']}` hits.",
-               color=self.bot.color
-          )
-          return await ctx.send(embed=embed)
+
+          # Update the embed with the actual hit description and server stats
+          embed.description = f"{ctx.author.mention} took a hit of the vape! The server now has `{res['guild_hits']}` hits."
+          embed.title = "Hit The Vape!"
+          await message.edit(embed=embed)
 
     @vape.command(
           name="steal",
