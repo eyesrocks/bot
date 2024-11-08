@@ -845,7 +845,7 @@ class Information(commands.Cog):
             "web_offline": "",
             "mobile_offline": "",
             "desktop_offline": "",
-            "staff"
+            "staff1"
         }
 
         for flag in (
