@@ -325,7 +325,7 @@ class Fun(commands.Cog):
             )
             return await ctx.send(f"You have claimed the vape {ctx.author.mention}!")
 
-  @vape.command(
+    @vape.command(
         name="flavor",
         aliases=["taste"]
     )
