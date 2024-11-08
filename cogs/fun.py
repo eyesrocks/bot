@@ -374,7 +374,7 @@ class Fun(commands.Cog):
 
           if has_vape['holder'] is None:
                embed = discord.Embed(
-                    description="> No one has the vape yet. Steal it using the **`vape steal`88 command.",
+                    description="> No one has the vape yet. Steal it using the **`vape steal`** command.",
                     color=self.bot.color
                )
                return await ctx.send(embed=embed)
