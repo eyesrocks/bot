@@ -1054,36 +1054,7 @@ class Information(commands.Cog):
 
 
 
-   @command(aliases=["userbanner", "ub"], usage="[member]", brief="@66adam")
-async def banner(
-        self,
-        ctx: Context,
-        *,
-        user: Member | User = parameter(
-            default=lambda ctx: ctx.author,
-        ),
-    ) -> Message:
-        """
-        View a user's banner if one is present.
-        """
 
-        if not isinstance(user, User):
-            user = await self.bot.fetch_user(user.id)
-
-        if not user.banner:
-            return await ctx.warn(
-                "You don't have a banner present"
-                if user == ctx.author
-                else f"**{user}** doesn't have a banner present"
-            )
-
-        embed = Embed(
-            url=user.banner,
-            title="Your banner" if user == ctx.author else f"{user.name}'s banner",
-        )
-        embed.set_image(url=user.banner)
-
-        return await ctx.send(embed=embed)
 
     @commands.command(
         name="guildicon",
