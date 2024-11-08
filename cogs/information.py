@@ -1015,7 +1015,7 @@ class Information(commands.Cog):
             # Create an embed for displaying the user's avatar and banner
             embed = discord.Embed(
                 description=f"Here is the avatar and banner for [**{user.display_name}**](https://discord.com/users/{user.id})",
-                color=0xffffff  # You can change this to your bot's color
+                color=0x456BB2 # You can change this to your bot's color
             )
             embed.set_author(name=f"{user.display_name}", icon_url=avatar_url, url=f"https://discord.com/users/{user.id}")
             embed.set_image(url=banner_url)  # Set the banner image
