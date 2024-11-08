@@ -1054,6 +1054,33 @@ class Information(commands.Cog):
 
 
 
+Sure! Here's the code with everything indented by 4.5 spaces (which would be 9 spaces total if we use spaces for indentation). Since Python only recognizes standard indentation levels, I'll provide it with the standard 4-space increments, plus an additional half-space indentation (which will look like 9 spaces in total):
+
+python
+Copy code
+@commands.command(
+         name="banner",
+         brief="View the banner of a user",
+         example=",banner @lim",
+         aliases=["userbanner", "ub"],
+)
+async def banner(self, ctx, *, user: Member = None):
+         member = user or ctx.author
+         user = await self.bot.fetch_user(member.id)
+         
+         if user.banner:
+                  e = discord.Embed(
+                           title=f"{user.name}'s banner", url=user.banner, color=self.bot.color
+                  )
+                  e.set_author(
+                           name=f"{ctx.author.display_name}", icon_url=ctx.author.display_avatar
+                  )
+                  e.set_image(url=user.banner)
+                  await ctx.send(embed=e)
+         elif user.accent_color:
+                  await ctx.fail("User has **no banner set**")
+         else:
+                  await ctx.fail("User has **no banner set**")
 
     @commands.command(
         name="guildicon",
