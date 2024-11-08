@@ -879,7 +879,7 @@ class Information(commands.Cog):
         if is_boosting(user) is True:
             badges.extend((emojis.get("nitro"), emojis.get("server_boost")))
 
- 
+
         devices = (
             ", ".join(
                 tuple(
@@ -937,7 +937,7 @@ class Information(commands.Cog):
 
         embed.add_field(
             name="**Joined**",
-            value=f"""> **<t:{round(user.joined_at.timestamp())}:D>**""",
+            value=f"""**<t:{round(user.joined_at.timestamp())}:D>**""",
             inline=False,
         )
 
