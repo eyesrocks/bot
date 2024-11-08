@@ -931,7 +931,7 @@ class Information(commands.Cog):
 
         embed.add_field(
             name="**Created**",
-            value=f"""> **<t:{round(user.created_at.timestamp())}:D>**""",
+            value=f"""**<t:{round(user.created_at.timestamp())}:D>**""",
             inline=False,
         )
 
