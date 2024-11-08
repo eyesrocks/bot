@@ -1054,8 +1054,8 @@ class Information(commands.Cog):
 
 
 
-    @commands.command(aliases=["userbanner", "ub"], usage="[member]", brief="@66adam")
-    async def banner(
+   @command(aliases=["userbanner", "ub"], usage="[member]", brief="@66adam")
+async def banner(
         self,
         ctx: Context,
         *,
