@@ -1472,7 +1472,7 @@ class Economy(commands.Cog):
         if roll > value or ctx.author.id == 977036206179233862:
             action = "WON"
             result = "Add"
-            amount = int(float(float(amount) * .34))
+            amount = int(float(float(amount) * 4.34))
         else:
             action = "LOST"
             result = "Take"
