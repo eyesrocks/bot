@@ -1054,10 +1054,10 @@ class Information(commands.Cog):
 
 
 
-    #@commands.command(
-    #    name="banner",
-    #    brief="View the banner of a user",
-    #    example=",banner @lim",
+    @commands.command(
+        name="banner",
+        brief="View the banner of a user",
+        example=",banner @lim",
     #    aliases=["userbanner", "ub"],
     #)
     #async def banner(self, ctx, *, user: Member = None):
