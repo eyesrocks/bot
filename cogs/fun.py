@@ -320,7 +320,7 @@ class Fun(commands.Cog):
                 return await ctx.send(f"You have successfully stolen the vape from {result.mention}")
         else:
             await self.bot.db.execute(
-                "UPDATE vape SET holder = $1 WHERE guild_id = $2",
+                "INSERT INTO vape (holder, guild_id) VALUES ($1, $2)",
                 ctx.author.id, ctx.guild.id
             )
             return await ctx.send(f"You have claimed the vape {ctx.author.mention}!")
