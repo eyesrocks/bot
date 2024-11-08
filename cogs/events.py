@@ -192,7 +192,14 @@ class Events(commands.Cog):
         return choice.display_avatar.url
     @commands.Cog.listener("on_message")
     async def imageonly(self, message: discord.Message):
-        
+        if message.author.bot:
+            return
+        if await self.bot.db.fetchval(
+            "SELECT * FROM imageonly WHERE channel_id = $1", message.channel.id
+        ):
+            if message.attachments or message.embeds:
+                return
+            await message.delete()       
     @commands.Cog.listener("on_audit_log_entry_create")
     async def moderation_logs(self, entry: discord.AuditLogEntry):
         return await self.bot.modlogs.do_log(entry)
