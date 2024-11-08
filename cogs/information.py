@@ -877,7 +877,7 @@ class Information(commands.Cog):
 
         osguild = self.bot.get_guild(1301617147964821524)
         if osguild.get_member(user.id):
-            if
+            
         devices = (
             ", ".join(
                 tuple(
