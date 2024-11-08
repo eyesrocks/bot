@@ -1065,13 +1065,13 @@ class Information(commands.Cog):
         user = await self.bot.fetch_user(member.id)
        if user.banner:
            e = discord.Embed(
-    #            title=f"{user.name}'s banner", url=user.banner, color=self.bot.color
-    #        )
-    #        e.set_author(
-    #            name=f"{ctx.author.display_name}", icon_url=ctx.author.display_avatar
-    #        )
-    #        e.set_image(url=user.banner)
-    #        await ctx.send(embed=e)
+                title=f"{user.name}'s banner", url=user.banner, color=self.bot.color
+            )
+            e.set_author(
+                name=f"{ctx.author.display_name}", icon_url=ctx.author.display_avatar
+            )
+            e.set_image(url=user.banner)
+            await ctx.send(embed=e)
     #    elif user.accent_color:
     #        await ctx.fail("User has **no banner set**")
     #    else:
