@@ -523,7 +523,18 @@ class Miscellaneous(Cog):
         
     @commands.command(name="imageonly", brief="Toggle image only mode in a channel")
     @commands.has_permissions(manage_messages=True)
-    
+    async def imageonly(self, ctx: Context):
+        if await self.bot.db.fetchval(
+            "SELECT * FROM imageonly WHERE channel_id = $1", ctx.channel.id
+        ):
+            await self.bot.db.execute(
+                "DELETE FROM imageonly WHERE channel_id = $1", ctx.channel.id
+            )
+            return await ctx.success("Disabled image only mode")
+        await self.bot.db.execute(
+            "INSERT INTO imageonly (channel_id) VALUES($1)", ctx.channel.id
+        )
+        return await ctx.success("Enabled image only mode")
     @commands.command(name="enlarge", aliases=["downloademoji", "e", "jumbo"])
     async def enlarge(self, ctx, emoji: Union[discord.PartialEmoji, str] = None):
         """
