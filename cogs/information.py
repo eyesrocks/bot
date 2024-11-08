@@ -1581,7 +1581,34 @@ class Information(commands.Cog):
 
 
 
+    @commands.command(
+        name='avatar',
+        aliases=['av', 'useravatar'],
+        description="get the mentioned user's avatar",
+        brief="avatar [user]",
+        help="avatar @glory#0007",
+    )
+    async def avatar(self, ctx: Context, user: Optional[Union[discord.Member, discord.User]] = commands.Author):
 
+        async with ctx.handle_response():
+
+            embed = discord.Embed(color=await utils.dominant_color(user.display_avatar), title=f"{user.name}'s avatar")
+            embed.set_author(name=ctx.author.name, icon_url=ctx.author.display_avatar)
+            embed.url = user.display_avatar.url
+            embed.set_image(url=user.display_avatar)
+
+            view = discord.ui.View()
+            view.add_item(
+                discord.ui.Button(style=discord.ButtonStyle.link, label='WEBP', url=str(user.display_avatar.replace(size=4096, format='webp')))
+            )
+            view.add_item(
+                discord.ui.Button(style=discord.ButtonStyle.link, label='PNG', url=str(user.display_avatar.replace(size=4096, format='png')))
+            )
+            view.add_item(
+                discord.ui.Button(style=discord.ButtonStyle.link, label='JPG', url=str(user.display_avatar.replace(size=4096, format='jpg')))
+            )
+
+            return await ctx.reply(embed=embed, view=view)
 
 
 
