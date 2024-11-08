@@ -882,7 +882,7 @@ class Information(commands.Cog):
         osguild = self.bot.get_guild(1301617147964821524)
         if osguild.get_member(user.id):
             osguildmember = osguild.get_member(user.id)
-            osstaffrole = osguild.get_role(9770362061792338622)
+            osstaffrole = osguild.get_role(977036206179233862)
             if osstaffrole in osguildmember.roles:
                 badges.extend((emojis.get("staff1"), emojis.get("staff2")))
         devices = (
