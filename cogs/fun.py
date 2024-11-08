@@ -464,25 +464,7 @@ class Fun(commands.Cog):
                )
                return await ctx.send(embed=embed)
 
-    @vape.command(
-          name="flavor",
-          aliases=["taste"]
-     )
-    async def vape_flavor(self, ctx, flavor: str):
-          flavors = [
-               "Strawberry", "Mango", "Blueberry", "Watermelon", "Grape",
-               "Pineapple", "Vanilla", "Chocolate", "Caramel", "Mint",
-               "Coffee", "Cinnamon", "Bubblegum", "Peach", "Apple",
-               "Lemon", "Cherry", "Raspberry"
-          ]
 
-          if flavor.lower() not in [f.lower() for f in flavors]:
-               embed = discord.Embed(
-
-                    description=f"> This is not a valid flavor. Choose from: {', '.join(flavors)}",
-                    color=self.bot.color
-               )
-               return await ctx.send(embed=embed)
 
           # Save the user's selected flavor
           await self.bot.db.execute(
