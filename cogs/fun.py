@@ -506,7 +506,9 @@ class Fun(commands.Cog):
           )
           await ctx.send(embed=embed)
 
-          
+            @commands.command(name="caption", aliases=["quote"], brief="hello world")
+    async def caption(self, ctx: Context, message: Optional[discord.Message] = None) -> Message:
+        return await self.get_caption(ctx, message)  
 
 async def setup(bot):
     await bot.add_cog(Fun(bot))
