@@ -1084,9 +1084,6 @@ class Information(commands.Cog):
             view.add_item(
                 discord.ui.Button(style=discord.ButtonStyle.link, label='PNG', url=str(user.banner.replace(size=4096, format='png')))
             )
-            view.add_item(
-                discord.ui.Button(style=discord.ButtonStyle.link, label='JPG', url=str(user.banner.replace(size=4096, format='jpg')))
-            )
 
             return await ctx.reply(embed=embed, view=view)
 
