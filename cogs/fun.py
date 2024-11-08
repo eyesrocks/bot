@@ -436,7 +436,7 @@ class Fun(commands.Cog):
                     # User already has the vape
                     embed = discord.Embed(
 
-                         description="> You already have the vape!",
+                         description="> You already have the vape you fiend",
                          color=self.bot.color
                     )
                     return await ctx.send(embed=embed)
