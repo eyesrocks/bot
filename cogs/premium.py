@@ -740,7 +740,7 @@ class Premium(Cog):
 		if await self.bot.glory_cache.ratelimited("profile", 1, 5) != 0:
 			return await ctx.fail("the guild is on cooldown")
 		try:
-			guild = self.bot.get_guild(1262921792440242286)
+			guild = self.bot.get_guild(1301617147964821524)
 			if guild in user.mutual_guilds:
 				check = True
 			else:
