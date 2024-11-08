@@ -464,7 +464,7 @@ class Fun(commands.Cog):
                )
                return await ctx.send(embed=embed)
 
-     @vape.command(
+    @vape.command(
           name="flavor",
           aliases=["taste"]
      )
