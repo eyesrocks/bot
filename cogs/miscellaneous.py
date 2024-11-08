@@ -536,6 +536,7 @@ class Miscellaneous(Cog):
         )
         return await ctx.success("Enabled image only mode")
     
+    
     @commands.command(name="enlarge", aliases=["downloademoji", "e", "jumbo"])
     async def enlarge(self, ctx, emoji: Union[discord.PartialEmoji, str] = None):
         """
