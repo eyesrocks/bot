@@ -41,7 +41,7 @@ import datetime  # type: ignore
 import asyncio  # type: ignore
 import aiohttp  # type: ignore
 import discord  # type: ignore
-from tool.important.services.TikTok.client import tiktok_video1, tiktok_video2  # type: ignore
+# from tool.important.services.TikTok.client import tiktok_video1, tiktok_video2  # type: ignore
 from discord.utils import chunk_list  # type: ignore
 from rust_chart_generator import create_chart  # type: ignore
 from tool.expressions import YOUTUBE_WILDCARD  # type: ignore
@@ -51,7 +51,7 @@ from cogs.information import get_instagram_user  # type: ignore
 from tuuid import tuuid  # type: ignore
 import io  # type: ignore
 from tool.important.services.Eros import PostResponse  # type: ignore
-from tool.processing.media import MediaHandler  # type: ignore
+# from tool.processing.media import MediaHandler  # type: ignore
 from cashews import cache  # type: ignore
 from aiohttp import ClientSession as Session  # type: ignore
 import re
@@ -279,7 +279,7 @@ class Premium(Cog):
 		self.bot = bot
 		self.bypass = []
 		self.pinterest = Pinterest()
-		self.media = MediaHandler(self.bot)
+#		self.media = MediaHandler(self.bot)
 #		self.services = ServiceManager(self.bot.redis, None)
 
 	# async def handle_upload(self, before: User, after: User):
@@ -731,8 +731,8 @@ class Premium(Cog):
 		self.bypass.append(user.id)
 		return await ctx.send("lol")
 
-	@commands.command(name="profile", brief="get a screenshot of a user's profile", disabled = True)
-	async def profile(
+	@commands.command(name="profiless", brief="get a screenshot of a user's profile", disabled = True)
+	async def profiless(
 		self, ctx: Context, *, user: Optional[User | Member] = commands.Author
 	):
 		if user.bot:
