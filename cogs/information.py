@@ -1075,7 +1075,7 @@ class Information(commands.Cog):
       elif user.accent_color:
             await ctx.warning("User has **no banner set**")
       else:
-            await ctx.fail("User has **no banner set**")
+            await ctx.warning("User has **no banner set**")
 
     @commands.command(
         name="guildicon",
