@@ -1059,7 +1059,7 @@ class Information(commands.Cog):
         aliases=['userbanner'],
         description="get the mentioned user's banner",
         brief="banner [user]",
-        help="banner @glory#0007",
+        help="banner @lim",
     )
     async def banner(self, ctx: Context, user: Optional[Union[discord.Member, discord.User]] = commands.Author):
 
