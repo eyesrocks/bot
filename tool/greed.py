@@ -134,7 +134,7 @@ class Greed(Bot):
         self.rival = RivalAPI(self)
         self.snipes = Snipe(self)
         self.avatar_limit = 50
-        self.color = 0xffffff
+        self.color = 0x456BB2
         self.afks = {}
         self.command_dict = None
         self.transformers = Transformers(self)
