@@ -1,4 +1,4 @@
-fsrom types import resolve_bases
+from types import resolve_bases
 from discord.ext import commands
 from discord.ext.commands import Context, BadArgument
 from discord import Embed, TextChannel
