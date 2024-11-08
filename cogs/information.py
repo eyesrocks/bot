@@ -1074,7 +1074,7 @@ class Information(commands.Cog):
     #        await ctx.send(embed=e)
     #    elif user.accent_color:
     #        await ctx.fail("User has **no banner set**")
-    #    else:
+        else:
             await ctx.fail("User has **no banner set**")
 
     @commands.command(
