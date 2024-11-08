@@ -395,7 +395,6 @@ class Fun(commands.Cog):
 
           # Initial embed saying "hitting vape"
           embed = discord.Embed(
-               title="Hitting Vape...",
                description=f"{ctx.author.mention} is about to take a hit of the vape...",
                color=self.bot.color
           )
