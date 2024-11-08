@@ -468,7 +468,7 @@ class Fun(commands.Cog):
           name="flavor",
           aliases=["taste"]
      )
-     async def vape_flavor(self, ctx, flavor: str):
+    async def vape_flavor(self, ctx, flavor: str):
           flavors = [
                "Strawberry", "Mango", "Blueberry", "Watermelon", "Grape",
                "Pineapple", "Vanilla", "Chocolate", "Caramel", "Mint",
