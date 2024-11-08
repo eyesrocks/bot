@@ -813,7 +813,7 @@ class Information(commands.Cog):
 
         position = sorted(ctx.guild.members, key=lambda m: m.joined_at).index(user) + 1
 
-        badges = [<:certified_moderator:1302229184428511242>]
+        badges = [<:certified_moderator:1302229184428511242>""]
 
         flags = user.public_flags
 
