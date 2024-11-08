@@ -1067,7 +1067,7 @@ class Information(commands.Cog):
         if not user.banner:
             return await ctx.send_error("that user doesn't have a **banner**")
 
-        async with ctx.handle_response():
+
 
             embed = discord.Embed(
                 color=self.bot.color, 
