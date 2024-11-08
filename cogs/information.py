@@ -1072,10 +1072,10 @@ class Information(commands.Cog):
             )
             e.set_image(url=user.banner)
             await ctx.send(embed=e)
-    #    elif user.accent_color:
-    #        await ctx.fail("User has **no banner set**")
-    #    else:
-    #        await ctx.fail("User has **no banner set**")
+        elif user.accent_color:
+            await ctx.fail("User has **no banner set**")
+        else:
+           await ctx.fail("User has **no banner set**")
 
     @commands.command(
         name="guildicon",
