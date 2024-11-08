@@ -1590,7 +1590,6 @@ class Information(commands.Cog):
     )
     async def avatar(self, ctx: Context, user: Optional[Union[discord.Member, discord.User]] = commands.Author):
 
-        async with ctx.handle_response():
 
             embed = discord.Embed(color=await utils.dominant_color(user.display_avatar), title=f"{user.name}'s avatar")
             embed.set_author(name=ctx.author.name, icon_url=ctx.author.display_avatar)
