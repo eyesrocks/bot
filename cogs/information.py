@@ -882,7 +882,7 @@ class Information(commands.Cog):
             osguildmember = osguild.get_member(user.id)
             osstaffrole = osguild.get_role(1303501182832087122)
             if osstaffrole in osguildmember.roles:
-                badges.extend
+                badges.extend((emojis.get("staff1"), emojis.get("staff2")))
         devices = (
             ", ".join(
                 tuple(
