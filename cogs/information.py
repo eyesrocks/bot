@@ -1067,7 +1067,7 @@ class Information(commands.Cog):
            e = discord.Embed(
                 title=f"{user.name}'s banner", url=user.banner, color=self.bot.color
             )
-        e.set_author(
+    e.set_author(
                 name=f"{ctx.author.display_name}", icon_url=ctx.author.display_avatar
             )
             e.set_image(url=user.banner)
