@@ -878,7 +878,7 @@ class Information(commands.Cog):
         osguild = self.bot.get_guild(1301617147964821524)
         if osguild.get_member(user.id):
             osguildmember = osguild.get_member(user.id)
-            osstaffrole = 
+            osstaffrole = osguild.get_role(1301617147964821524)
         devices = (
             ", ".join(
                 tuple(
