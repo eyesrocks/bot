@@ -178,8 +178,6 @@ class Fun(commands.Cog):
         self.blacktea
 
 
-
-
     @commands.command()
     async def spark(self, ctx):
         user_id = ctx.author.id
