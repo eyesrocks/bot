@@ -359,7 +359,7 @@ class Fun(commands.Cog):
           invoke_without_command=True
      )
     @commands.cooldown(1, 10, commands.BucketType.user)
-     async def vape(self, ctx):
+    async def vape(self, ctx):
           has_vape = await self.bot.db.fetchrow(
                "SELECT holder FROM vape WHERE guild_id = $1", ctx.guild.id
           )
