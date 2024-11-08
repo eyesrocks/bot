@@ -1,3 +1,4 @@
+from types import resolve_bases
 from discord.ext import commands
 from discord.ext.commands import Context, BadArgument
 from discord import Embed, TextChannel
@@ -5,6 +6,8 @@ import random
 import discord
 import asyncio
 from datetime import datetime, timedelta
+
+from greed.tool import aliases
 
 class BlackTea:
     def __init__(self, bot):
@@ -189,7 +192,7 @@ class Fun(commands.Cog):
                 await self.bot.db.execute("""
                     INSERT INTO blunt_hits (user_id, sparked, last_sparked)
                     VALUES ($1, TRUE, $2)
-                    ON CONFLICT (user_id) 
+                    ON CONFLICT (user_id)
                     DO UPDATE SET sparked = TRUE, last_sparked = $2
                 """, user_id, datetime.now())
                 embed = discord.Embed(description=f"<:arolighter:1303239578009866252> {ctx.author.mention} sparked the blunt!", color=self.bot.color)
@@ -254,21 +257,83 @@ class Fun(commands.Cog):
             embed=discord.Embed(color=self.bot.color, title="iq test", description= f"{user.mention} has `{random.randrange(201)}` iq :brain:")
             await ctx.reply(embed=embed, mention_author=False)
 
-
-
-
     @commands.command(help="shows how many bitches you have", description="fun", usage="<member>")
     async def bitches(self, ctx, user: discord.Member=None):
+        user = user or ctx.author
+        await ctx.reply(embed=discord.Embed(color=self.bot.color, description= f"{user.mention} has `{random.randrange(51)}` bitches"), mention_author=False)
 
-        if user==None:
-            embed=discord.Embed(color=self.bot.color, description= f"{ctx.author.mention} has `{random.randrange(51)}` bitches")
-            await ctx.reply(embed=embed, mention_author=False)
-        else:
-            embed=discord.Embed(color=self.bot.color, description= f"{user.mention} has `{random.randrange(51)}` bitches")
-            await ctx.reply(embed=embed, mention_author=False)
 
+    @commands.group(
+        name="vape",
+        brief="hit the vape",
+        invoke_without_command=True
+    )
+    async def vape(self, ctx):
+        has_vape = await self.bot.db.fetchrow(
+            "SELECT holder FROM vape WHERE guild_id = $1", ctx.guild.id
+        )
+        if not has_vape:
+            return await ctx.send("> The vape doesn't exist in this server. Someone needs to claim it first!")
+
+        if has_vape['holder'] is None:
+            return await ctx.send("No one has the vape yet, steal it using the `vape steal` command")
+
+        elif has_vape['holder'] != ctx.author.id:
+            member = await ctx.guild.fetch_member(has_vape['holder'])
+            if member:
+                return await ctx.send(f"> You don't have the vape! Steal it from **{member.display_name}**.")
+            else:
+                return await ctx.send("> The vape holder is no longer in this server. Someone else can claim it!")
+
+        await self.bot.db.execute(
+            "UPDATE vape SET guild_hits = guild_hits + 1 WHERE guild_id = $1", ctx.guild.id
+        )
+        res = await self.bot.db.fetchrow(
+            "SELECT * FROM vape WHERE guild_id = $1", ctx.guild.id
+        )
+        return await ctx.send(f"{ctx.author.mention} took a hit of the vape! The server now has `{res['guild_hits']}` hits!")
+
+    @vape.command(
+        name="steal",
+        brief="steal the vape from the current holder"
+    )
+    async def vape_steal(self, ctx):
+        res = await self.bot.db.fetchrow("SELECT * FROM vape WHERE guild_id = $1", ctx.guild.id)
+        if res:
+            result = await ctx.guild.fetch_member(res['holder'])
+            if result == ctx.author:
+                await ctx.send("> you already have the vape!")
+            else:
+                await self.bot.db.execute("UPDATE vape SET holder = $1 WHERE guild_id = $2", ctx.author.id, ctx.guild.id)
+                await ctx.send(f"you have successfully stolen the vape from {result.mention}")
+
+    @vape.command(
+        name="flavor",
+        aliases=["taste"]
+    )
+    async def vape_flavor(self, ctx, flavor: str):
+        flavors = [
+            "Strawberry", "Mango", "Blueberry", "Watermelon", "Grape",
+            "Pineapple", "Vanilla", "Chocolate", "Caramel", "Mint",
+            "Coffee", "Cinnamon", "Bubblegum", "Peach", "Apple",
+            "Lemon", "Cherry", "Raspberry"
+        ]
+
+        if flavor.lower() not in [f.lower() for f in flavors]:
+            return await ctx.send(
+                f"> This is not a valid flavor. Choose from: {', '.join(flavors)}"
+            )
+
+        await self.bot.db.execute(
+            """
+            INSERT INTO vape_flavors (flavor, user_id)
+            VALUES ($1, $2)
+            ON CONFLICT (user_id) DO UPDATE SET flavor = $1
+            """,
+            flavor, ctx.author.id
+        )
+
+        await ctx.send(f"> You have set your flavor to {flavor}")
 
 async def setup(bot):
     await bot.add_cog(Fun(bot))
-
-

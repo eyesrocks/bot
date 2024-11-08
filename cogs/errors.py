@@ -240,7 +240,7 @@ class Errors(Cog):
                 str(exception)
                 .replace("Member", "**Member**")
                 .replace("User", "**User**")
-            )
+            ) # type: ignore
             if await self.bot.glory_cache.ratelimited(
                 f"rl:error_message:{ctx.author.id}", 3, 5
             ):
