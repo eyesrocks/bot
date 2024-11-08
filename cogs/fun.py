@@ -435,7 +435,7 @@ class Fun(commands.Cog):
                elif result == ctx.author:
                     # User already has the vape
                     embed = discord.Embed(
-                         title="Already Have The Vape",
+
                          description="> You already have the vape!",
                          color=self.bot.color
                     )
