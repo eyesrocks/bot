@@ -353,7 +353,7 @@ class Fun(commands.Cog):
         await ctx.reply(embed=discord.Embed(color=self.bot.color, description= f"{user.mention} has `{random.randrange(51)}` bitches"), mention_author=False)
 
 
-     @commands.group(
+    @commands.group(
           name="vape",
           brief="Hit the vape",
           invoke_without_command=True
