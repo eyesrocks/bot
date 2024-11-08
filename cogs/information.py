@@ -1070,7 +1070,7 @@ class Information(commands.Cog):
         async with ctx.handle_response():
 
             embed = discord.Embed(
-                color=await utils.dominant_color(user.banner), 
+                color=self.bot.color, 
                 title=f"{user.name}'s banner",
                 url=user.banner.url
             )
