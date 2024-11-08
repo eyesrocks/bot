@@ -391,7 +391,7 @@ class Fun(commands.Cog):
                     )
                else:
                     embed = discord.Embed(
-                         title="Vape Holder Missing",
+
                          description="> The vape holder is no longer in this server. Someone else can claim it!",
                          color=self.bot.color
                     )
