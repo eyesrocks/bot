@@ -395,7 +395,7 @@ class Fun(commands.Cog):
 
           # Initial embed saying "hitting vape"
           embed = discord.Embed(
-               description=f"{ctx.author.mention} is about to take a hit of the vape...",
+               description=f"<:hits:1303239575250014241> {ctx.author.mention} is about to take a hit of the vape...",
                color=self.bot.color
           )
           message = await ctx.send(embed=embed)
