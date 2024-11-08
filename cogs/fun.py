@@ -349,7 +349,7 @@ class Fun(commands.Cog):
 
         if row and row[0]:  # If sparked is True
             taps = row[1]
-            if taps < 100:
+            if taps < 100000000:
                 await self.bot.db.execute(
                     "UPDATE blunt_hits SET taps = taps + 1 WHERE user_id = $1", user_id
                 )
