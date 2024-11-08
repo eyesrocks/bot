@@ -1071,7 +1071,7 @@ class Information(commands.Cog):
                 name=f"{ctx.author.display_name}", icon_url=ctx.author.display_avatar
             )
             e.set_image(url=user.banner)
-          await ctx.send(embed=e)
+           await ctx.send(embed=e)
         elif user.accent_color:
             await ctx.fail("User has **no banner set**")
         else:
