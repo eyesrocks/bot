@@ -478,7 +478,7 @@ class Fun(commands.Cog):
 
           if flavor.lower() not in [f.lower() for f in flavors]:
                embed = discord.Embed(
-                    title="Invalid Flavor",
+
                     description=f"> This is not a valid flavor. Choose from: {', '.join(flavors)}",
                     color=self.bot.color
                )
