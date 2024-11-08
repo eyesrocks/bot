@@ -385,7 +385,6 @@ class Fun(commands.Cog):
                member = await ctx.guild.fetch_member(has_vape['holder'])
                if member:
                     embed = discord.Embed(
-                         title="You Can't Hit The Vape",
                          description=f"> You don't have the vape! Steal it from **{member.display_name}**.",
                          color=self.bot.color
                     )
