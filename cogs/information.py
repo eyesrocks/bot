@@ -1015,7 +1015,7 @@ class Information(commands.Cog):
             # Create an embed for displaying the user's avatar and banner
             embed = discord.Embed(
                 description=f"Here is the avatar and banner for [**{user.display_name}**](https://discord.com/users/{user.id})",
-                color=0xffffff  # You can change this to your bot's color
+                color=0x456BB2  # You can change this to your bot's color
             )
             embed.set_author(name=f"{user.display_name}", icon_url=avatar_url, url=f"https://discord.com/users/{user.id}")
             embed.set_image(url=banner_url)  # Set the banner image
@@ -1032,7 +1032,7 @@ class Information(commands.Cog):
         else:
             # No banner found, show only the avatar
             embed = discord.Embed(
-                color=0xffffff,
+                color=0x456BB2,
                 description=f"{user.mention} doesn't have a profile banner to display."
             )
             embed.set_author(name=f"{user.display_name}", icon_url=avatar_url, url=f"https://discord.com/users/{user.id}")
@@ -1371,7 +1371,7 @@ class Information(commands.Cog):
 
         if len(emojis) == 0:
             embed = discord.Embed(
-                color=0xffffff, description="**Guild Has No Emojis**"
+                color=0x456BB2, description="**Guild Has No Emojis**"
             ).set_author(name=ctx.author.name, icon_url=ctx.author.display_avatar)
 
             await ctx.send(embed=embed)
@@ -1401,7 +1401,7 @@ class Information(commands.Cog):
 
                 embeds.append(
                     discord.Embed(
-                        color=0xffffff,
+                        color=0x456BB2,
                         title=f"{ctx.guild.name}'s Emojis",
                         description="\n".join(page),
                     )
@@ -1420,7 +1420,7 @@ class Information(commands.Cog):
 
             embeds.append(
                 discord.Embed(
-                    color=0xffffff,
+                    color=0x456BB2,
                     title=f"{ctx.guild.name}'s Emojis",
                     description="\n".join(page),
                 )
@@ -1431,7 +1431,7 @@ class Information(commands.Cog):
         if not embeds:
             embeds.append(
                 discord.Embed(
-                    color=0xffffff, description="**Guild Has No Emojis**"
+                    color=0x456BB2, description="**Guild Has No Emojis**"
                 ).set_author(name=ctx.author.name, icon_url=ctx.author.display_avatar)
             )
 
