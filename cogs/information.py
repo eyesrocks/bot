@@ -1054,41 +1054,28 @@ class Information(commands.Cog):
 
 
 
-    @commands.command(
-        name='banner',
-        aliases=['userbanner'],
-        description="get the mentioned user's banner",
-        brief="banner [user]",
-        help="banner @lim",
-    )
-    async def banner(self, ctx: Context, user: Optional[Union[discord.Member, discord.User]] = commands.Author):
-
-        user = await self.bot.fetch_user(user.id)
-        if not user.banner:
-            return await ctx.send_("that user doesn't have a **banner**")
-
-
-
-            embed = discord.Embed(
-                color=self.bot.color, 
-                title=f"{user.name}'s banner",
-                url=user.banner.url
-            )
-            embed.set_author(name=ctx.author.name, icon_url=ctx.author.display_avatar)
-            embed.set_image(url=user.banner)
-
-            view = discord.ui.View()
-            view.add_item(
-                discord.ui.Button(style=discord.ButtonStyle.link, label='WEBP', url=str(user.banner.replace(size=4096, format='webp')))
-            )
-            view.add_item(
-                discord.ui.Button(style=discord.ButtonStyle.link, label='PNG', url=str(user.banner.replace(size=4096, format='png')))
-            )
-            view.add_item(
-                discord.ui.Button(style=discord.ButtonStyle.link, label='JPG', url=str(user.banner.replace(size=4096, format='jpg')))
-            )
-
-            return await ctx.reply(embed=embed, view=view)
+    #@commands.command(
+    #    name="banner",
+    #    brief="View the banner of a user",
+    #    example=",banner @lim",
+    #    aliases=["userbanner", "ub"],
+    #)
+    #async def banner(self, ctx, *, user: Member = None):
+    #    member = user or ctx.author
+    #    user = await self.bot.fetch_user(member.id)
+    #   if user.banner:
+    #       e = discord.Embed(
+    #            title=f"{user.name}'s banner", url=user.banner, color=self.bot.color
+    #        )
+    #        e.set_author(
+    #            name=f"{ctx.author.display_name}", icon_url=ctx.author.display_avatar
+    #        )
+    #        e.set_image(url=user.banner)
+    #        await ctx.send(embed=e)
+    #    elif user.accent_color:
+    #        await ctx.fail("User has **no banner set**")
+    #    else:
+    #        await ctx.fail("User has **no banner set**")
 
     @commands.command(
         name="guildicon",
