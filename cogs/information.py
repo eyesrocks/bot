@@ -850,7 +850,7 @@ class Information(commands.Cog):
         }
 
         for flag in (
-            "staff
+            "staff1"
             "nitro",
             "bug_hunter",
             "bug_hunter_level_2",
