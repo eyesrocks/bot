@@ -453,7 +453,7 @@ class Fun(commands.Cog):
                          ctx.author.id, ctx.guild.id
                     )
                     embed = discord.Embed(
-                         description=f"You have successfully stolen the vape from {result.mention}.",
+                         description=f"<:hits:1303239575250014241> You have successfully stolen the vape from {result.mention}.",
                          color=self.bot.color
                     )
                     return await ctx.send(embed=embed)
