@@ -1059,10 +1059,10 @@ class Information(commands.Cog):
         brief="View the banner of a user",
         example=",banner @lim",
         aliases=["userbanner", "ub"],
-    #)
-    #async def banner(self, ctx, *, user: Member = None):
-    #    member = user or ctx.author
-    #    user = await self.bot.fetch_user(member.id)
+    )
+    async def banner(self, ctx, *, user: Member = None):
+        member = user or ctx.author
+        user = await self.bot.fetch_user(member.id)
     #   if user.banner:
     #       e = discord.Embed(
     #            title=f"{user.name}'s banner", url=user.banner, color=self.bot.color
