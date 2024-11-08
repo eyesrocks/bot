@@ -414,7 +414,7 @@ class Fun(commands.Cog):
           brief="Steal the vape from the current holder"
      )
     @commands.cooldown(1, 20, commands.BucketType.guild)
-     async def vape_steal(self, ctx):
+    async def vape_steal(self, ctx):
           res = await self.bot.db.fetchrow("SELECT * FROM vape WHERE guild_id = $1", ctx.guild.id)
           
           if res:
