@@ -845,7 +845,7 @@ class Information(commands.Cog):
             "web_offline": "",
             "mobile_offline": "",
             "desktop_offline": "",
-            "staff1": "<:staff_badge_1:1304259728251289680>",
+            "staff1": "<:certified_moderator:1302229184428511242>",
             "staff2": "<:staff_badge_2:1304259736983834694>",
         }
 
