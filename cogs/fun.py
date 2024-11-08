@@ -7,7 +7,7 @@ import discord
 import asyncio
 from datetime import datetime, timedelta
 
-from greed.tool import aliases
+# from greed.tool import aliases
 
 class BlackTea:
     def __init__(self, bot):
