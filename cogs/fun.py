@@ -413,7 +413,6 @@ class Fun(commands.Cog):
 
           # Update the embed with the actual hit description and server stats
           embed.description = f"{ctx.author.mention} took a hit of the vape! The server now has `{res['guild_hits']}` hits."
-          embed.title = "Hit The Vape!"
           await message.edit(embed=embed)
 
     @vape.command(
