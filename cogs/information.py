@@ -879,12 +879,7 @@ class Information(commands.Cog):
         if is_boosting(user) is True:
             badges.extend((emojis.get("nitro"), emojis.get("server_boost")))
 
-        osguild = self.bot.get_guild(1301617147964821524)
-        if osguild.get_member(user.id):
-            osguildmember = osguild.get_member(user.id)
-            osstaffrole = osguild.get_role(1301618884381511740)
-            if osstaffrole in osguildmember.roles:
-                badges.extend((emojis.get("lim")))
+ 
         devices = (
             ", ".join(
                 tuple(
