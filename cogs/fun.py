@@ -319,10 +319,13 @@ class Fun(commands.Cog):
                 )
                 return await ctx.send(f"You have successfully stolen the vape from {result.mention}")
         else:
-            await ctx.send("> No vape exists in this server. Someone needs to create it first!")
+            await self.bot.db.execute(
+                "UPDATE vape SET holder = $1 WHERE guild_id = $2",
+                ctx.author.id, ctx.guild.id
+            )
+            return await ctx.send(f"You have claimed the vape {ctx.author.mention}!")
 
-
-    @vape.command(
+  @vape.command(
         name="flavor",
         aliases=["taste"]
     )
