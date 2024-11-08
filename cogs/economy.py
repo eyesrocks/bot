@@ -1468,11 +1468,11 @@ class Economy(commands.Cog):
         ):
             return await ctx.fail("you too **broke** for that **top G**")
         roll = self.get_random_value(1, 100)
-        value = 80 if not await self.check_shrooms(ctx) else 50
+        value = 95 if not await self.check_shrooms(ctx) else 50
         if roll > value or ctx.author.id == 977036206179233862:
             action = "WON"
             result = "Add"
-            amount = int(float(float(amount) * 10.34))
+            amount = int(float(float(amount) * 4.00))
         else:
             action = "LOST"
             result = "Take"
