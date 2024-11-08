@@ -1586,7 +1586,7 @@ class Information(commands.Cog):
         aliases=['av', 'useravatar'],
         description="get the mentioned user's avatar",
         brief="avatar [user]",
-        help="avatar @glory#0007",
+        help="avatar @",
     )
     async def avatar(self, ctx: Context, user: Optional[Union[discord.Member, discord.User]] = commands.Author):
 
