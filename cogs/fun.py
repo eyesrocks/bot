@@ -11,7 +11,6 @@ from typing import Optional
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 from io import BytesIO
 import textwrap
-#from greed.tool import aliases
 
 # from greed.tool import aliases
 
