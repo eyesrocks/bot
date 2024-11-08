@@ -1065,7 +1065,7 @@ class Information(commands.Cog):
 
         user = await self.bot.fetch_user(user.id)
         if not user.banner:
-            return await ctx.fail()"that user doesn't have a **banner**")
+            return await ctx.fail("that user doesn't have a **banner**")
 
 
 
