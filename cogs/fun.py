@@ -7,6 +7,8 @@ import discord
 import asyncio
 from datetime import datetime, timedelta
 
+from greed.tool import aliases
+
 # from greed.tool import aliases
 
 class BlackTea:
@@ -354,6 +356,14 @@ class Fun(commands.Cog):
         )
 
         await ctx.send(f"> You have set your flavor to {flavor}")
+
+    @vape.command(
+        name="individual",
+        aliases=["switch", "normal"],
+        brief="switches to user vape"
+    )
+    async def vape_normal(self, ctx): ...
+
 
 async def setup(bot):
     await bot.add_cog(Fun(bot))
