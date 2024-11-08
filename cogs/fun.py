@@ -367,7 +367,6 @@ class Fun(commands.Cog):
           # If no vape is found in the server
           if not has_vape:
                embed = discord.Embed(
-
                     description="> The vape doesn't exist in this server. Someone needs to claim it first!",
                     color=self.bot.color
                )
