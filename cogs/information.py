@@ -818,6 +818,7 @@ class Information(commands.Cog):
         flags = user.public_flags
 
         emojis = {
+            
             "nitro": "<:Nitro_badge:1302229179361656876>",
             "hypesquad_brilliance": "<:hmubravery:1303861295833153596>",
             "hypesquad_bravery": "<:HypeSquad_Balance:1303862084844519485>",
