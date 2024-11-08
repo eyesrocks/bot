@@ -944,7 +944,7 @@ class Information(commands.Cog):
         if user.premium_since:
             embed.add_field(
                 name="**Boosted server**",
-                value=f"""><t:{round(user.joined_at.timestamp())}:D>**""",
+                value=f"""<t:{round(user.joined_at.timestamp())}:D>**""",
             )
 
         if user.roles:
