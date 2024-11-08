@@ -1,3 +1,4 @@
+from discord import Message
 from types import resolve_bases
 from discord.ext import commands
 from discord.ext.commands import Context, BadArgument
@@ -10,7 +11,7 @@ from typing import Optional
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 from io import BytesIO
 import textwrap
-from greed.tool import aliases
+#from greed.tool import aliases
 
 # from greed.tool import aliases
 
@@ -79,7 +80,7 @@ class Fun(commands.Cog):
         self.bot = bot
         self.blacktea = BlackTea(self.bot)
 
-    async def get_caption(self, ctx: Context, message: Optional[Message] = None):
+    async def get_caption(self, ctx: Context, message: Optional[discord.Message] = None):
         if message is None:
             msg = ctx.message.reference
             if msg is None:
@@ -452,8 +453,8 @@ class Fun(commands.Cog):
     # )
     # async def vape_normal(self, ctx): ...
 
-    @command(name="caption", aliases=["quote"], brief="hello world")
-    async def caption(self, ctx: Context, message: Optional[Message] = None) -> Message:
+    @commands.command(name="caption", aliases=["quote"], brief="hello world")
+    async def caption(self, ctx: Context, message: Optional[discord.Message] = None) -> Message:
         return await self.get_caption(ctx, message)
 
 
