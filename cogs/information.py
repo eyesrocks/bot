@@ -818,7 +818,8 @@ class Information(commands.Cog):
         flags = user.public_flags
 
         emojis = {
-            
+                        "staff1": "<:certified_moderator:1302229184428511242>",
+            "staff2": "<:staff_badge_2:1304259736983834694>",
             "nitro": "<:Nitro_badge:1302229179361656876>",
             "hypesquad_brilliance": "<:hmubravery:1303861295833153596>",
             "hypesquad_bravery": "<:HypeSquad_Balance:1303862084844519485>",
