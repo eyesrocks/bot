@@ -876,7 +876,7 @@ class Information(commands.Cog):
             badges.extend((emojis.get("nitro"), emojis.get("server_boost")))
 
         osguild = self.bot.get_guild(1301617147964821524)
-        if osguild
+        if osguild.
         devices = (
             ", ".join(
                 tuple(
