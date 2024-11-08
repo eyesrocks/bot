@@ -846,7 +846,7 @@ class Information(commands.Cog):
             "mobile_offline": "",
             "desktop_offline": "",
             "staff1": "<:staff_badge_1:1304259728251289680>",
-            "staff2"
+            "staff2": 
         }
 
         for flag in (
