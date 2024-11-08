@@ -132,6 +132,7 @@ class Miscellaneous(Cog):
             if message.attachments or message.embeds:
                 return
             await message.delete()
+            
     @commands.command(
         name="valorant",
         brief="lookup a user's valorant stats",
