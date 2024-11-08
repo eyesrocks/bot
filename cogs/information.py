@@ -1053,7 +1053,7 @@ class Information(commands.Cog):
             await ctx.reply(embed=embed, view=view, mention_author=False)
 
 
-@commands.command(
+    @commands.command(
       name="banner",
       brief="View the banner of a user",
       example=",banner @lim",
