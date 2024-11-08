@@ -1060,8 +1060,8 @@ class Information(commands.Cog):
         example=",banner @lim",
         aliases=["userbanner", "ub"],
     #)
-    #async def banner(self, ctx, *, user: Member = None):
-    #    member = user or ctx.author
+    async def banner(self, ctx, *, user: Member = None):
+        member = user or ctx.author
         user = await self.bot.fetch_user(member.id)
        if user.banner:
            e = discord.Embed(
