@@ -123,7 +123,15 @@ class Miscellaneous(Cog):
                 except: 
                     await client.disconnect()
     @commands.cog.listener("on_message_create")
-    async def imageonlylistener()
+    async def imageonlylistener(self, message):
+        if message.author.bot:
+            return
+        if await self.bot.db.fetchval(
+            "SELECT * FROM imageonly WHERE channel_id = $1", message.channel.id
+        ):
+            if message.attachments or message.embeds:
+                return
+            await message.delete()
     @commands.command(
         name="valorant",
         brief="lookup a user's valorant stats",
