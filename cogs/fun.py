@@ -1,4 +1,4 @@
-from types import resolve_bases
+fsrom types import resolve_bases
 from discord.ext import commands
 from discord.ext.commands import Context, BadArgument
 from discord import Embed, TextChannel
@@ -301,11 +301,26 @@ class Fun(commands.Cog):
         res = await self.bot.db.fetchrow("SELECT * FROM vape WHERE guild_id = $1", ctx.guild.id)
         if res:
             result = await ctx.guild.fetch_member(res['holder'])
-            if result == ctx.author:
-                await ctx.send("> you already have the vape!")
+
+            if result is None:
+                await self.bot.db.execute(
+                    "UPDATE vape SET holder = $1 WHERE guild_id = $2",
+                    ctx.author.id, ctx.guild.id
+                )
+                return await ctx.send(f"You have claimed the vape {ctx.author.mention}!")
+
+            elif result == ctx.author:
+                return await ctx.send("> You already have the vape!")
+
             else:
-                await self.bot.db.execute("UPDATE vape SET holder = $1 WHERE guild_id = $2", ctx.author.id, ctx.guild.id)
-                await ctx.send(f"you have successfully stolen the vape from {result.mention}")
+                await self.bot.db.execute(
+                    "UPDATE vape SET holder = $1 WHERE guild_id = $2",
+                    ctx.author.id, ctx.guild.id
+                )
+                return await ctx.send(f"You have successfully stolen the vape from {result.mention}")
+        else:
+            await ctx.send("> No vape exists in this server. Someone needs to create it first!")
+
 
     @vape.command(
         name="flavor",
