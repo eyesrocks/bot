@@ -197,14 +197,11 @@ class Starboard(commands.Cog, name="Starboard"):
             ):
                 return
 
-            reaction = [
-                reaction
-                for reaction in message.reactions
-                if str(reaction.emoji) == starboard["emoji"]
-            ]
-            if reaction:
-                reaction = reaction[0]
-            else:
+            reaction = next(
+                (reaction for reaction in message.reactions if str(reaction.emoji) == starboard["emoji"]),
+                None
+            )
+            if not reaction:
                 return
             count = sum(1 async for r in reaction.users() if r is not self.bot.user)
             if count >= starboard.threshold:
