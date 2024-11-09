@@ -71,6 +71,7 @@ def format_factsheet(data: list):
 	_.update(formatted_dict)
 	return _
 
+
 from typing import List, Optional
 
 from pydantic import BaseModel

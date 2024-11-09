@@ -3,6 +3,57 @@ from discord.ext import commands
 import sqlite3
 import logging
 from discord import Embed
+import orjson
+from tool.important.services import get_bing_results
+from bs4 import BeautifulSoup
+from aiomisc.backoff import asyncretry
+from itertools import chain
+from lxml import html
+# from DataProcessing import ServiceManager
+import lxml
+from httpx import AsyncClient
+from rival_tools import timeit
+from aiofiles import open as async_open
+from discord.ext import commands  # ftype: ignore
+from typing import Any
+from rival_tools import thread, lock, ratelimit  # type: ignore
+from tool.worker import offloaded
+from tool.pinterest import Pinterest  # type: ignore
+from tool.pinpostmodels import Model  # type: ignore
+from PIL import Image  # type: ignore
+import imagehash as ih  # type: ignore
+from io import BytesIO
+from logging import getLogger
+from tool.worker import offloaded
+from tool.rival import GoogleSearchResponse
+from cogs2.voice import Whisper
+from typing import Union, Optional  # type: ignore
+from asyncio.subprocess import PIPE  # type: ignore
+from aiohttp import ClientSession  # type: ignore
+from contextlib import suppress  # type: ignore
+import os  # type: ignore
+import string  # type: ignore
+import random  # type: ignore
+from aiomisc.backoff import asyncretry  # type: ignore
+import datetime  # type: ignore
+import asyncio  # type: ignore
+import aiohttp  # type: ignore
+import discord  # type: ignore
+# from tool.important.services.TikTok.client import tiktok_video1, tiktok_video2  # type: ignore
+from discord.utils import chunk_list  # type: ignore
+from rust_chart_generator import create_chart  # type: ignore
+from tool.expressions import YOUTUBE_WILDCARD  # type: ignore
+from tool.important.services.Twitter import Tweet, from_id
+import humanize  # type: ignore
+from cogs.information import get_instagram_user  # type: ignore
+from tuuid import tuuid  # type: ignore
+import io  # type: ignore
+from tool.important.services.Eros import PostResponse  # type: ignore
+# from tool.processing.media import MediaHandler  # type: ignore
+from cashews import cache  # type: ignore
+from aiohttp import ClientSession as Session  # type: ignore
+import re
+from loguru import logger
 
 # Set up logging
 logging.basicConfig(
