@@ -71,6 +71,35 @@ def format_factsheet(data: list):
 	_.update(formatted_dict)
 	return _
 
+async def do_transcribe(filepath: str):
+	return await do_whisper(filepath)
+
+@offloaded
+def do_whisper(filepath: str):
+	from cogs2.voice import Whisper
+	whisper = Whisper()
+	import faster_whisper, ctranslate2
+	import os
+	text = ""
+	segments, _ = whisper.model.transcribe(filepath, vad_filter=True)
+	result = "".join(r.text for r in [m for m in segments])
+	try:
+		os.remove(filepath)
+	except Exception:
+		pass
+	whisper.model.model.unload_model()
+	return result
+
+def get_filetype(url: str) -> str:
+	return url.split('/')[-1].split('.')[1].split('?')[0]
+
+async def download_file(url: str) -> str:
+	file_type = get_filetype(url)
+	async with aiohttp.ClientSession() as session:
+		async with session.get(url) as response:
+			data = await response.read()
+	return await save_file(f"{tuuid()}.{file_type}", data)
+
 
 from typing import List, Optional
 
