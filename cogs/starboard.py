@@ -203,7 +203,7 @@ class Starboard(commands.Cog, name="Starboard"):
                 reaction = reaction[0]
             else:
                 return
-            count = len([r async for r in reaction.users() if r is not self.bot.user])
+            count = sum(1 async for r in reaction.users() if r is not self.bot.user)
             if count >= starboard.threshold:
                 pass
             else:
