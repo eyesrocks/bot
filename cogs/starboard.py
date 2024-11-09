@@ -421,7 +421,7 @@ class Starboard(commands.Cog, name="Starboard"):
     async def starboard(self, ctx: Context):
     async def starboard(self, ctx: Context):
         if ctx.invoked_subcommand is None:
-            return await ctx.send_help(ctx.command.qualified_name) fffff
+            return await ctx.send_help(ctx.command.qualified_name)
 
     @starboard.command(
         name="add",
