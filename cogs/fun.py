@@ -565,6 +565,7 @@ class Fun(commands.Cog):
                 color=self.bot.color,
             )
         )
+        
 
     @commands.command(name="caption", aliases=["quote"], brief="hello world")
     async def caption(
