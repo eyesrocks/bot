@@ -194,7 +194,6 @@ class AntiNuke(Cog):
             if (
                 entry.user.id == guild.owner_id
                 or entry.user.id == self.bot.user.id
-                #                or entry.user.id == 1002294763241885847
                 or entry.user.id in self.bot.owner_ids
             ):
                 return True
@@ -213,7 +212,6 @@ class AntiNuke(Cog):
                 logger.info(
                     f"user {entry.user.name} passed the threshold of {threshold} with {entry.action}"
                 )
-
         return False
 
     def check_guild(self, guild: Guild, action: AuditLogAction | str):
@@ -291,24 +289,14 @@ class AntiNuke(Cog):
                 entry.user = self.bot.get_user(
                     int(entry.reason.split(" | ")[-1].rstrip().lstrip())
                 )
-                if entry.guild.id == 1237821518940209212:
-                    logger.info(
-                        f"user {str(entry.user)} invoked an event for {entry.action} on {str(entry.target)}"
-                    )
         if await self.check_entry(entry.guild, entry) is not True:
-            if entry.user.id == 1002294763241885847:
-                logger.info(f"doing punishment on {entry.user.name} for {entry.action}")
             await self.do_punishment(entry.guild, entry.user, reason)
             if cleanup is not None:
                 await entry.guild.unban(
                     Object(entry.target.id), reason=self.make_reason("Cleanup")
                 )
             return  # await self.do_punishment(entry.guild, entry.user, reason)
-        else:
-            if entry.user.id == 1002294763241885847:
-                logger.info(
-                    f"not doing punishment on {entry.user.name} for {entry.action}"
-                )
+
 
     @Cog.listener("on_member_update")
     async def dangerous_role_assignment(self, before: Member, after: Member):
