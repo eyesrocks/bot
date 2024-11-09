@@ -566,7 +566,8 @@ class Fun(commands.Cog):
             )
         )
     
-    @vape.command(name="hits
+    @vape.command(name="hits", brief="Show the total number of hits taken by the server")
+    
 
     @commands.command(name="caption", aliases=["quote"], brief="hello world")
     async def caption(
