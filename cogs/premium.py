@@ -207,9 +207,9 @@ def is_donator():
 	async def predicate(ctx: Context):
 		# if ctx.author.id in ctx.bot.owner_ids:
 		#     return True
-		# if (
-		#     ctx.author
-		#     in ctx.bot.get_guild(1262921792440242286)
+		 if (
+		     ctx.author
+		     in ctx.bot.get_guild(1262921792440242286)
 		     .get_role(1262957377427341383)
 		     .members
 		 ):
