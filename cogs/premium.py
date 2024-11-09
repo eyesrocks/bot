@@ -183,7 +183,7 @@ async def donator_check(ctx: Context, member: Optional[Union[Member, User]] = No
 		return True
 	if (
 		member
-		in ctx.bot.get_guild(1301617147964821524).get_role(1302817214260580475).members
+		in ctx.bot.get_guild(1301617147964821524).get_role(1302817218110820352).members
 	):
 		return True
 	data = await ctx.bot.db.fetchrow(
