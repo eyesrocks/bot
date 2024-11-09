@@ -810,7 +810,8 @@ class AntiNuke(Cog):
         return await ctx.send(embed=embed)
 
     @antinuke.command(
-        name="bot_add",
+        name="botadd",
+        aliases=["bot", "ba"]
         brief="Toggle the anti bot add of antinuke",
         example=",antinuke bot_add true",
     )
@@ -820,7 +821,7 @@ class AntiNuke(Cog):
         return await self.antinuke_toggle(ctx, "bot_add", state)
 
     @antinuke.command(
-        name="role_update",
+        name="role",
         brief="toggle the anti role update of antinuke",
         parameters={
             "threshold": {
@@ -836,9 +837,10 @@ class AntiNuke(Cog):
         return await self.antinuke_toggle(ctx, "role_update", state)
 
     @antinuke.command(
-        name="channel_update",
+        name="channel",
+        aliases=["channels"]
         brief="toggle the anti channel update of antinuke",
-        example=",antinuke channel_update true",
+        example=",antinuke channel true",
         parameters={
             "threshold": {
                 "type": int,
@@ -870,9 +872,9 @@ class AntiNuke(Cog):
         return await self.antinuke_toggle(ctx, "webhooks", state)
 
     @antinuke.command(
-        name="guild_update",
+        name="guild",
         brief="toggle the anti guild_update of antinuke",
-        example=",antinuke guild_update true",
+        example=",antinuke guild true",
         parameters={
             "threshold": {
                 "type": int,
@@ -887,7 +889,7 @@ class AntiNuke(Cog):
         return await self.antinuke_toggle(ctx, "guild_update", state)
 
     @antinuke.command(
-        name="member_prune",
+        name="prune",
         brief="toggle the anti member_prune of antinuke",
         example=",antinuke member_prune true",
         parameters={
