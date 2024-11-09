@@ -386,9 +386,6 @@ class Starboard(commands.Cog, name="Starboard"):
             name=f"**#{message.channel}**",
             value=f"[Jump to message]({message.jump_url})",
             inline=False,
-        )
-        embed.timestamp = message.created_at
-
             reaction_map = {
                 range(0, 5): "⭐",
                 range(5, 10): "🌟",
@@ -398,6 +395,9 @@ class Starboard(commands.Cog, name="Starboard"):
             for count_range, emoji in reaction_map.items():
                 if reaction.count in count_range:
                     reaction = emoji
+                    break
+            else:
+                reaction = "✨"
                     break
             else:
                 reaction = "✨"
