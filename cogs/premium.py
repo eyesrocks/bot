@@ -215,8 +215,8 @@ def is_donator():
 		# ):
 		#     return True
 		# data = await ctx.bot.db.fetchrow(
-		#     """SELECT * FROM donators WHERE user_id = $1""", ctx.author.id
-		# )
+		     """SELECT * FROM donators WHERE user_id = $1""", ctx.author.id
+		 )
 		 if not data:
 		     if (
 		         await ctx.bot.glory_cache.ratelimited(
