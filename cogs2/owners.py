@@ -67,8 +67,7 @@ class Owners(commands.Cog):
         # If server is not whitelisted, the bot leaves
         if not result:
             embed = Embed(
-                title="Server Not Whitelisted",
-                description="This server is not whitelisted for premium access. Please contact the bot owner for more details.",
+                description="Your server is not whitelisted, join []",
                 color=discord.Color.from_rgb(255, 255, 255)  # White color
             )
             await guild.owner.send(embed=embed)  # Send the message to the server owner

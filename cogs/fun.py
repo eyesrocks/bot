@@ -433,7 +433,7 @@ class Fun(commands.Cog):
             mention_author=False,
         )
 
-    @commands.group(name="vape", brief="Hit the vape", invoke_without_command=True)
+    @commands.group(name="vape", brief="Hit the vape", invoke_without_command=True, aliases)
     @commands.cooldown(1, 15, commands.BucketType.user)
     async def vape(self, ctx):
         has_vape = await self.bot.db.fetchrow(
@@ -577,7 +577,7 @@ class Fun(commands.Cog):
                 color=self.bot.color,
             )
         )
-        
+
 
     @commands.command(name="caption", aliases=["quote"], brief="hello world")
     async def caption(
