@@ -931,7 +931,7 @@ class Moderation(Cog):
     @role.command(
         name="color",
         brief="Create a color for a role",
-        example=",role color @com, 010101",
+        example=",role color 010101",
     )
     @commands.bot_has_permissions(manage_roles=True)
     @commands.has_permissions(manage_roles=True)

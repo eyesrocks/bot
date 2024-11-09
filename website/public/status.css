@@ -7,7 +7,7 @@
 
 body {
   font-family: Arial, sans-serif;
-  background-color: #001f3f;
+  background-color: #121212;
   color: #ffffff;
   display: flex;
   flex-direction: column;
@@ -33,7 +33,7 @@ body {
 }
 
 .top-nav h1 {
-  color: #00aaff;
+  color: #f7f3f3;
   font-size: 1.8rem;
   font-weight: bold;
 }
@@ -61,7 +61,7 @@ body {
 }
 
 .join-discord:hover {
-  background-color: #5a6ebf;
+  background-color: #6d6b6b;
 }
 
 /* Grid container styling */
@@ -111,7 +111,7 @@ body {
 /* Shard information */
 .shard-header {
   font-size: 1.3rem;
-  color: #00aaff;
+  color: #f3f5f6;
   font-weight: bold;
   margin-bottom: 10px;
 }
