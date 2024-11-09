@@ -11,7 +11,7 @@ class AvatarHistory(Cog):
     async def get_data(self, user: User) -> tuple:
         async with ClientSession() as session:
             async with session.get(user.display_avatar.url) as response:
-                data = await response.json()
+                data = await response.read()
         return data, response.headers['Content-Type']
 
 
