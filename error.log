@@ -76,3 +76,43 @@ discord.errors.ConnectionClosed: Shard ID 0 WebSocket closed with 1000
 2024-11-09 17:34:15,122 - ERROR - Unexpected error in command None: Command "selfprefix" is not found
 2024-11-09 19:18:31,844 - ERROR - Unexpected error in command None: Command "ui" is not found
 2024-11-09 19:18:47,547 - ERROR - Unexpected error in command None: Command "lf" is not found
+2024-11-09 19:33:29,623 - ERROR - unhandled exception during asyncio.run() shutdown
+task: <Task finished name='Task-1' coro=<Client.run.<locals>.runner() done, defined at /root/.mamba/envs/10/lib/python3.10/site-packages/discord/client.py:904> exception=AttributeError("'AutoShardedBot' object has no attribute '_closing_task'")>
+Traceback (most recent call last):
+  File "/root/.mamba/envs/10/lib/python3.10/asyncio/runners.py", line 44, in run
+    return loop.run_until_complete(main)
+  File "/root/.mamba/envs/10/lib/python3.10/asyncio/base_events.py", line 636, in run_until_complete
+    self.run_forever()
+  File "/root/.mamba/envs/10/lib/python3.10/asyncio/base_events.py", line 603, in run_forever
+    self._run_once()
+  File "/root/.mamba/envs/10/lib/python3.10/asyncio/base_events.py", line 1871, in _run_once
+    event_list = self._selector.select(timeout)
+  File "/root/.mamba/envs/10/lib/python3.10/selectors.py", line 469, in select
+    fd_event_list = self._selector.poll(timeout, max_ev)
+KeyboardInterrupt
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/root/.mamba/envs/10/lib/python3.10/site-packages/discord/client.py", line 906, in runner
+    await self.start(token, reconnect=reconnect)
+  File "/root/.mamba/envs/10/lib/python3.10/site-packages/discord/client.py", line 835, in start
+    await self.connect(reconnect=reconnect)
+  File "/root/.mamba/envs/10/lib/python3.10/site-packages/discord/shard.py", line 461, in connect
+    item = await self.__queue.get()
+  File "/root/.mamba/envs/10/lib/python3.10/asyncio/queues.py", line 159, in get
+    await getter
+asyncio.exceptions.CancelledError
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/root/.mamba/envs/10/lib/python3.10/site-packages/discord/client.py", line 905, in runner
+    async with self:
+  File "/root/.mamba/envs/10/lib/python3.10/site-packages/discord/client.py", line 329, in __aexit__
+    await self.close()
+  File "/root/.mamba/envs/10/lib/python3.10/site-packages/discord/ext/commands/bot.py", line 249, in close
+    await super().close()  # type: ignore
+  File "/root/.mamba/envs/10/lib/python3.10/site-packages/discord/shard.py", line 490, in close
+    if self._closing_task:
+AttributeError: 'AutoShardedBot' object has no attribute '_closing_task'

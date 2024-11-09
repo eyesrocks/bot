@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+    <head>
+
+        <meta charset="utf-8">
+
+        <title>Avatar History</title>
+
+        <meta name="theme-color" content="#949CA4">
+
+        <meta property="og:type" content="website">
+
+        <meta property="og:title" content="Avatar History">
+
+        <meta property="og:image" content="{{avatar}}">
+
+        <link rel="icon" href="{{avatar}}">
+
+        <link rel="stylesheet" type="text/css" href="collage.css">
+
+    </head> 
+
+    <body style="background-color:#2F3136;">
+
+        <div class="gallery">
+
+        {% for av in avatars %}
+
+            <img src="{{av}}" width="150" height="150" >
+
+        {% endfor %}
+
+        </div>
+
+    </body>
+
+</html>
