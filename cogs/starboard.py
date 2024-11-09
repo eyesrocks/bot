@@ -367,7 +367,8 @@ class Starboard(commands.Cog, name="Starboard"):
             if attachment.url.lower().endswith(
                 (".png", ".jpg", ".jpeg", ".gif", ".webp")
             ):
-                embed.set_image(url=attachment.url)
+                if attachment.size <= message.guild.filesize_limit:
+                    embed.set_image(url=attachment.url)
             elif attachment.url.lower().endswith(
                 (".mp4", ".mov", ".webm", "mp3", ".ogg", ".wav")
             ):
