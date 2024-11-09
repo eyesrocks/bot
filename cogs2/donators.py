@@ -1,60 +1,14 @@
 import discord
+from discord import Message
 from discord.ext import commands
 import sqlite3
 import logging
-from discord import Embed
-import orjson
-from tool.important.services import get_bing_results
-from bs4 import BeautifulSoup
-from aiomisc.backoff import asyncretry
-from itertools import chain
-from lxml import html
-# from DataProcessing import ServiceManager
-import lxml
-from httpx import AsyncClient
-from rival_tools import timeit
-from aiofiles import open as async_open
-from discord.ext import commands  # ftype: ignore
-from typing import Any
-from rival_tools import thread, lock, ratelimit  # type: ignore
-from tool.worker import offloaded
-from tool.pinterest import Pinterest  # type: ignore
-from tool.pinpostmodels import Model  # type: ignore
-from PIL import Image  # type: ignore
-import imagehash as ih  # type: ignore
-from io import BytesIO
-from logging import getLogger
-from tool.worker import offloaded
-from tool.rival import GoogleSearchResponse
-from cogs2.voice import Whisper
-from typing import Union, Optional  # type: ignore
-from asyncio.subprocess import PIPE  # type: ignore
-from aiohttp import ClientSession  # type: ignore
-from contextlib import suppress  # type: ignore
-import os  # type: ignore
-import string  # type: ignore
-import random  # type: ignore
-from aiomisc.backoff import asyncretry  # type: ignore
-import datetime  # type: ignore
-import asyncio  # type: ignore
-import aiohttp  # type: ignore
-import discord  # type: ignore
-# from tool.important.services.TikTok.client import tiktok_video1, tiktok_video2  # type: ignore
-from discord.utils import chunk_list  # type: ignore
-from rust_chart_generator import create_chart  # type: ignore
-from tool.expressions import YOUTUBE_WILDCARD  # type: ignore
-from tool.important.services.Twitter import Tweet, from_id
-import humanize  # type: ignore
-from cogs.information import get_instagram_user  # type: ignore
-from tuuid import tuuid  # type: ignore
-import io  # type: ignore
-from tool.important.services.Eros import PostResponse  # type: ignore
-# from tool.processing.media import MediaHandler  # type: ignore
-from cashews import cache  # type: ignore
-from aiohttp import ClientSession as Session  # type: ignore
-import re
-from loguru import logger
-
+import aiohttp
+import os
+from typing import Optional
+from uuid import uuid4
+from tool.worker import offload
+from voice import Whisper as VoiceWhisper
 # Set up logging
 logging.basicConfig(
     level=logging.ERROR,
@@ -66,6 +20,11 @@ class Donators(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.db = '/root/greed/premium.sql'  # Path to your SQLite database
+        self.transcriptions_dir = '/root/greed/data/transcriptions'
+
+        # Ensure the transcription directory exists
+        if not os.path.exists(self.transcriptions_dir):
+            os.makedirs(self.transcriptions_dir)
 
         # Ensure the database table is created when the cog is initialized
         self._initialize_db()
@@ -79,27 +38,77 @@ class Donators(commands.Cog):
         conn = self._connect_db()
         cursor = conn.cursor()
 
-        # Create a table for whitelisted users if it doesn't exist
+        # Create a table for whitelisted users (donators) if it doesn't exist
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS whitelisted_users (
             user_id INTEGER PRIMARY KEY,
             username TEXT NOT NULL
         );
         """)
+
+        # Create the table for auto_transcribe if it doesn't exist
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS auto_transcribe (
+            guild_id INTEGER PRIMARY KEY,
+            transcribe_enabled BOOLEAN NOT NULL DEFAULT 1
+        );
+        """)
         
         conn.commit()
         conn.close()
 
+    async def save_file(self, content: str, file_name: str):
+        """Save the transcription content as a text file."""
+        file_path = os.path.join(self.transcriptions_dir, file_name)
+        try:
+            with open(file_path, 'w', encoding='utf-8') as file:
+                file.write(content)
+            return file_path  # Return the file path where it was saved
+        except Exception as e:
+            logging.error(f"Error saving transcription file: {e}")
+            return None
 
+    async def do_transcribe(self, filepath: str):
+        """Call the transcription service."""
+        return await self.do_whisper(filepath)
 
+    @offload
+    def do_whisper(self, filepath: str, segments):
+        """Handle transcription using Whisper model."""
+        whisper = VoiceWhisper()
+        import faster_whisper, ctranslate2
+        from faster_whisper import WhisperModel
+        import os
+        result = "".join(r.text for r in segments)
+        try:
+            os.remove(filepath)
+        except Exception:
+            pass
+        whisper.model.unload()
+        return result
 
+    def get_filetype(self, url: str) -> str:
+        return url.split('/')[-1].split('.')[1].split('?')[0]
 
-    async def send_white_embed(self, ctx, title: str, description: str):
-        """Helper function to send an embed with white color."""
-        embed = Embed(title=title, description=description, color=discord.Color.from_rgb(255, 255, 255))
-        await ctx.send(embed=embed)
+    async def download_file(self, url: str) -> str:
+        """Download the file from the URL."""
+        file_type = self.get_filetype(url)
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                data = await response.read()
+        file_name = f"{uuid4()}.{file_type}"
+        content = data.decode('utf-8')
+        return await self.save_file(content, file_name)
 
-    def is_donator(self, ctx):
+    async def make_transcription(self, message: discord.Message):
+        """Transcribe voice messages."""
+        if len(message.attachments) > 0:
+                if attachment.content_type == 'audio/ogg':
+                    filepath = await self.download_file(attachment.url)
+                    return await self.do_transcribe(filepath)
+                    return await self.do_transcribe(filepath)
+
+    def is_donator(self, ctx: commands.Context):
         """Check if the user is a donator."""
         conn = self._connect_db()
         cursor = conn.cursor()
@@ -132,7 +141,7 @@ class Donators(commands.Cog):
                 for user_row in rows:
                     user_id, username = user_row
                     user = self.bot.get_user(user_id)  # Fetch the user object by ID
-                    
+                    user_id, _ = user_row
                     if user:
                         donators_text += f"{user.mention}\n"  # Format as "username#discriminator"
                     else:
@@ -158,17 +167,6 @@ class Donators(commands.Cog):
         # Command logic for donators
         await self.send_white_embed(ctx, "Donator Test", "Congratulations, you are a donator! This command is restricted to donators only.")
 
-
-
-
-    async def make_transcription(self, message: discord.Message):
-        """Transcribe voice messages."""
-        if len(message.attachments) > 0:
-            for attachment in message.attachments:
-                if attachment.is_voice_message() is True:
-                    filepath = await download_file(attachment.url)  # Assuming download_file function exists
-                    return await do_transcribe(filepath)  # Assuming do_transcribe is your transcription function
-
     @commands.Cog.listener("on_message")
     async def on_voice_message(self, message: discord.Message):
         """Triggered when a message is received."""
@@ -188,7 +186,8 @@ class Donators(commands.Cog):
             conn.close()
             return
         
-        if text := await self.make_transcription(message):
+        text = await self.make_transcription(message)
+        if text:
             embed = discord.Embed(description=text, color=0xffffff).set_author(
                 name=message.author.display_name,
                 icon_url=message.author.display_avatar.url,
@@ -200,13 +199,13 @@ class Donators(commands.Cog):
     @commands.command(
         name="transcribe",
         brief="Return the text from a voice message",
-        example=",transcribe [audio_reply]",
+        help="Usage: ,transcribe [audio_reply]",
     )
     async def transcribe(self, ctx: commands.Context, message: Optional[Message] = None):
         """Command to transcribe voice messages."""
         
         # **Check if the user is a donator** before proceeding
-        if not self.is_donator(ctx.author.id):
+        if not self.is_donator(ctx):
             return await ctx.send("You must be a donator to use this command.")
         
         if not message:
@@ -226,20 +225,18 @@ class Donators(commands.Cog):
                     msg = await ctx.send(
                         embed=discord.Embed(
                             color=0xffffff,
-                            description=f"<a:loading:1302351366584270899> {ctx.author.mention}: **Transcribing this message...**",
+                            description=f"<a:loading:1302351366584270899> **Transcribing this message...**",
                         )
                     )
                     text = await self.make_transcription(message)
 
             else:
-                message = await self.bot.fetch_message(
-                    ctx.channel, ctx.message.reference.message_id
-                )
+                message = await ctx.channel.fetch_message(ctx.message.reference.message_id)
 
                 msg = await ctx.send(
                     embed=discord.Embed(
                         color=0xffffff,
-                        description=f"<a:loading:1302351366584270899> {ctx.author.mention}: **Transcribing this message...**",
+                        description=f"<a:loading:1302351366584270899> **Transcribing this message...**",
                     )
                 )
 
@@ -251,14 +248,22 @@ class Donators(commands.Cog):
         if text is None:
             return await ctx.send(f"**Failed to transcribe** [**this message**]({message.jump_url})")
 
-        return await msg.edit(
-            embed=discord.Embed(description=text, color=0xffffff).set_author(
-                name=message.author.display_name,
-                icon_url=message.author.display_avatar.url,
+        # Save the transcription as a file and send the file back
+        file_path = await self.save_file(text, f"{message.id}_transcription.txt")
+
+        if file_path:
+            # Send the transcription file back to the user
+            await msg.edit(
+                embed=discord.Embed(description=text, color=0xffffff).set_author(
+                    name=message.author.display_name,
+                    icon_url=message.author.display_avatar.url,
+                )
             )
-        )
+            await ctx.send(file=discord.File(file_path))  # Send the file
 
-
+        else:
+            # If saving the file failed
+            await ctx.send("An error occurred while saving the transcription file.")
 
 # Setup the cog
 async def setup(bot):
