@@ -72,8 +72,6 @@ def format_factsheet(data: list):
 	return _
 
 
-
-
 from typing import List, Optional
 
 from pydantic import BaseModel
