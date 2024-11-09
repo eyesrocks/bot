@@ -16,7 +16,7 @@ import asyncio  # type: ignore
 import tuuid
 from tool.views import VoicemasterInterface  # type: ignore
 from loguru import logger
-from voice import Whisper
+from cogs2.voice import Whisper
 from tool.important.services.Webhook import Webhook as Webhooks
 # from logging import getLogger
 # logger = getLogger(__name__)

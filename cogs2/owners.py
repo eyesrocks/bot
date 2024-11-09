@@ -1,7 +1,56 @@
 import discord
 from discord.ext import commands
 import sqlite3
+import logging
 from discord import Embed
+from typing import Any
+from rival_tools import thread, lock, ratelimit  # type: ignore
+from tool.worker import offloaded
+from tool.pinterest import Pinterest  # type: ignore
+from tool.pinpostmodels import Model  # type: ignore
+from PIL import Image  # type: ignore
+import imagehash as ih  # type: ignore
+from io import BytesIO
+from logging import getLogger
+from tool.worker import offloaded
+from tool.rival import GoogleSearchResponse
+from cogs2.voice import Whisper
+from typing import Union, Optional  # type: ignore
+from asyncio.subprocess import PIPE  # type: ignore
+from aiohttp import ClientSession  # type: ignore
+from contextlib import suppress  # type: ignore
+import os  # type: ignore
+import string  # type: ignore
+import random  # type: ignore
+from aiomisc.backoff import asyncretry  # type: ignore
+import datetime  # type: ignore
+import asyncio  # type: ignore
+import aiohttp  # type: ignore
+import discord  # type: ignore
+# from tool.important.services.TikTok.client import tiktok_video1, tiktok_video2  # type: ignore
+from discord.utils import chunk_list  # type: ignore
+from rust_chart_generator import create_chart  # type: ignore
+from tool.expressions import YOUTUBE_WILDCARD  # type: ignore
+from tool.important.services.Twitter import Tweet, from_id
+import humanize  # type: ignore
+from cogs.information import get_instagram_user  # type: ignore
+from tuuid import tuuid  # type: ignore
+import io  # type: ignore
+from tool.important.services.Eros import PostResponse  # type: ignore
+# from tool.processing.media import MediaHandler  # type: ignore
+from cashews import cache  # type: ignore
+from aiohttp import ClientSession as Session  # type: ignore
+import re
+
+
+
+
+# Set up logging
+logging.basicConfig(
+    level=logging.ERROR,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[logging.FileHandler("error.log"), logging.StreamHandler()]
+)
 
 class Owners(commands.Cog):
     def __init__(self, bot):
@@ -67,7 +116,7 @@ class Owners(commands.Cog):
         # If server is not whitelisted, the bot leaves
         if not result:
             embed = Embed(
-                description="Your server is not whitelisted, join [support]",
+                description="<:deny2:1302206609719824425> Your server is not whitelisted. Join [support](https://discord.gg/pomice) to get whitelisted.",
                 color=discord.Color.from_rgb(255, 255, 255)  # White color
             )
             await guild.owner.send(embed=embed)  # Send the message to the server owner
@@ -84,18 +133,22 @@ class Owners(commands.Cog):
         conn = self._connect_db()
         cursor = conn.cursor()
 
-        # Check if the server is already whitelisted
-        cursor.execute("SELECT * FROM whitelisted_servers WHERE server_id = ?", (server_id,))
-        result = cursor.fetchone()
+        try:
+            # Check if the server is already whitelisted
+            cursor.execute("SELECT * FROM whitelisted_servers WHERE server_id = ?", (server_id,))
+            result = cursor.fetchone()
 
-        if result:
-            await self.send_white_embed(ctx, "Already Whitelisted", f"Server with ID {server_id} is already on the whitelist.")
-        else:
-            cursor.execute("INSERT INTO whitelisted_servers (server_id) VALUES (?)", (server_id,))
-            conn.commit()
-            await self.send_white_embed(ctx, "Server Whitelisted", f"Server with ID {server_id} has been added to the whitelist.")
-
-        conn.close()
+            if result:
+                await self.send_white_embed(ctx, "Server Already Whitelisted", f"Server ID {server_id} is already on the whitelist.")
+            else:
+                cursor.execute("INSERT INTO whitelisted_servers (server_id) VALUES (?)", (server_id,))
+                conn.commit()
+                await self.send_white_embed(ctx, "Server Whitelisted", f"Server ID {server_id} has been successfully added to the whitelist.")
+        except Exception as e:
+            logging.error(f"Error in whitelist command: {e}")
+            await self.send_white_embed(ctx, "Error", "An error occurred while processing your request. Please try again later.")
+        finally:
+            conn.close()
 
     @commands.command(name='sblacklist')
     @commands.check(is_allowed_server)
@@ -106,12 +159,16 @@ class Owners(commands.Cog):
         conn = self._connect_db()
         cursor = conn.cursor()
 
-        cursor.execute("DELETE FROM whitelisted_servers WHERE server_id = ?", (server_id,))
-        conn.commit()
+        try:
+            cursor.execute("DELETE FROM whitelisted_servers WHERE server_id = ?", (server_id,))
+            conn.commit()
 
-        await self.send_white_embed(ctx, "Server Removed from Whitelist", f"Server with ID {server_id} has been removed from the whitelist.")
-
-        conn.close()
+            await self.send_white_embed(ctx, "Server Removed from Whitelist", f"Server with ID {server_id} has been successfully removed from the whitelist.")
+        except Exception as e:
+            logging.error(f"Error in sblacklist command: {e}")
+            await self.send_white_embed(ctx, "Error", "An error occurred while processing your request. Please try again later.")
+        finally:
+            conn.close()
 
     @commands.command(name='donoradd')
     @commands.check(is_allowed_server)
@@ -122,18 +179,22 @@ class Owners(commands.Cog):
         conn = self._connect_db()
         cursor = conn.cursor()
 
-        # Check if the user is already whitelisted
-        cursor.execute("SELECT * FROM whitelisted_users WHERE user_id = ?", (user_id,))
-        result = cursor.fetchone()
+        try:
+            # Check if the user is already whitelisted
+            cursor.execute("SELECT * FROM whitelisted_users WHERE user_id = ?", (user_id,))
+            result = cursor.fetchone()
 
-        if result:
-            await self.send_white_embed(ctx, f"<@{user_id}> is already on the donor whitelist.")
-        else:
-            cursor.execute("INSERT INTO whitelisted_users (user_id) VALUES (?)", (user_id,))
-            conn.commit()
-            await self.send_white_embed(ctx, f"<@{user_id}> has been added to the donor whitelist.")
-
-        conn.close()
+            if result:
+                await self.send_white_embed(ctx, "User Already on Donor Whitelist", f"<@{user_id}> is already on the donor whitelist.")
+            else:
+                cursor.execute("INSERT INTO whitelisted_users (user_id) VALUES (?)", (user_id,))
+                conn.commit()
+                await self.send_white_embed(ctx, "User Added to Donor Whitelist", f"<@{user_id}> has been successfully added to the donor whitelist.")
+        except Exception as e:
+            logging.error(f"Error in donoradd command: {e}")
+            await self.send_white_embed(ctx, "Error", "An error occurred while processing your request. Please try again later.")
+        finally:
+            conn.close()
 
     @commands.command(name='donorunadd')
     @commands.check(is_allowed_server)
@@ -144,12 +205,27 @@ class Owners(commands.Cog):
         conn = self._connect_db()
         cursor = conn.cursor()
 
-        cursor.execute("DELETE FROM whitelisted_users WHERE user_id = ?", (user_id,))
-        conn.commit()
+        try:
+            cursor.execute("DELETE FROM whitelisted_users WHERE user_id = ?", (user_id,))
+            conn.commit()
 
-        await self.send_white_embed(ctx, f"<@{user_id}> has been removed from the donor whitelist.")
+            await self.send_white_embed(ctx, "User Removed from Donor Whitelist", f"<@{user_id}> has been successfully removed from the donor whitelist.")
+        except Exception as e:
+            logging.error(f"Error in donorunadd command: {e}")
+            await self.send_white_embed(ctx, "Error", "An error occurred while processing your request. Please try again later.")
+        finally:
+            conn.close()
 
-        conn.close()
+    @commands.Cog.listener()
+    async def on_command_error(self, ctx, error):
+        """Catch command errors and log them."""
+        if isinstance(error, commands.CheckFailure):
+            await self.send_white_embed(ctx, "Permission Error", "You do not have permission to use this command.")
+        elif isinstance(error, commands.MissingPermissions):
+            await self.send_white_embed(ctx, "Missing Permissions", "You are missing the required permissions to use this command.")
+        else:
+            logging.error(f"Unexpected error in command {ctx.command}: {error}")
+            await self.send_white_embed(ctx, "Unexpected Error", "An unexpected error occurred. Please try again later.")
 
 # Setup the cog
 async def setup(bot):

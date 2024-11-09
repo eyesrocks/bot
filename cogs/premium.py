@@ -28,7 +28,7 @@ from io import BytesIO
 from logging import getLogger
 from tool.worker import offloaded
 from tool.rival import GoogleSearchResponse
-from voice import Whisper
+from cogs2.voice import Whisper
 from typing import Union, Optional  # type: ignore
 from asyncio.subprocess import PIPE  # type: ignore
 from aiohttp import ClientSession  # type: ignore
@@ -56,7 +56,7 @@ from cashews import cache  # type: ignore
 from aiohttp import ClientSession as Session  # type: ignore
 import re
 from loguru import logger
-from voice import save_file
+from cogs2.voice import save_file
 
 cache.setup("mem://")
 
@@ -76,7 +76,7 @@ async def do_transcribe(filepath: str):
 
 @offloaded
 def do_whisper(filepath: str):
-	from voice import Whisper
+	from cogs2.voice import Whisper
 	whisper = Whisper()
 	import faster_whisper, ctranslate2
 	import os

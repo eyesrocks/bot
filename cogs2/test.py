@@ -29,7 +29,7 @@ from io import BytesIO
 from logging import getLogger
 from tool.worker import offloaded
 from tool.rival import GoogleSearchResponse
-from voice import Whisper
+from cogs2.voice import Whisper
 from typing import Union, Optional  # type: ignore
 from asyncio.subprocess import PIPE  # type: ignore
 from aiohttp import ClientSession  # type: ignore
@@ -57,7 +57,7 @@ from cashews import cache  # type: ignore
 from aiohttp import ClientSession as Session  # type: ignore
 import re
 from loguru import logger
-from voice import save_file
+from cogs2.voice import save_file
 
 
 
