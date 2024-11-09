@@ -566,6 +566,7 @@ class Fun(commands.Cog):
             )
         )
     
+    
 
     @commands.command(name="caption", aliases=["quote"], brief="hello world")
     async def caption(
