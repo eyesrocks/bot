@@ -231,7 +231,7 @@ def is_donator():
 		#     return False
 		# return True
 
-	return check(predicate)
+	#return check(predicate)
 
 
 async def to_string(self: Asset) -> tuple:
