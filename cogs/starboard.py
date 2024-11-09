@@ -386,14 +386,16 @@ class Starboard(commands.Cog, name="Starboard"):
         )
         embed.timestamp = message.created_at
 
-        reactions = f"#{reaction.count:,}"
-        if str(reaction.emoji) == "⭐":
-            if 5 > reaction.count >= 0:
-                reaction = "⭐"
-            elif 10 > reaction.count >= 5:
-                reaction = "🌟"
-            elif 25 > reaction.count >= 10:
-                reaction = "💫"
+            reaction_map = {
+                range(0, 5): "⭐",
+                range(5, 10): "🌟",
+                range(10, 25): "💫",
+                range(25, float('inf')): "✨"
+            }
+            for count_range, emoji in reaction_map.items():
+                if reaction.count in count_range:
+                    reaction = emoji
+                    break
             else:
                 reaction = "✨"
         else:
