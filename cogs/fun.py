@@ -433,7 +433,7 @@ class Fun(commands.Cog):
             mention_author=False,
         )
 
-    @commands.group(name="vape", brief="Hit the vape", invoke_without_command=True, aliases=["hit
+    @commands.group(name="vape", brief="Hit the vape", invoke_without_command=True, aliases=["hit"])
     @commands.cooldown(1, 15, commands.BucketType.user)
     async def vape(self, ctx):
         has_vape = await self.bot.db.fetchrow(
