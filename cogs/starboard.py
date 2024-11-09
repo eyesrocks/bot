@@ -15,11 +15,11 @@ from discord.ext.commands import Context
 
 def shorten(value: str, length: int = 20):
     if len(value) > length:
-        value = value[: length - 2] + ".."
+        value = value[: length - 2] + (".." if len(value) > length else "").strip()
     return value
 
 
-class Starboard(commands.Cog, name="Starboard"):
+class starboard(commands.Cog, name="Starboard"):
     def __init__(self, bot):
         self.bot = bot
         self._locks: WeakValueDictionary[int, asyncio.Lock] = WeakValueDictionary()
@@ -44,13 +44,10 @@ class Starboard(commands.Cog, name="Starboard"):
                     guild.id,
                     str(payload.emoji),
                 )
-                """
-                Command group for managing starboards in the server.
-                """
             )
             or not (starboard_channel := guild.get_channel(starboard["channel_id"]))
             or not starboard_channel.permissions_for(guild.me).send_messages
-        )
+        ):
             return
 
         if not (member := payload.member or guild.get_member(payload.user_id)):
@@ -134,7 +131,7 @@ class Starboard(commands.Cog, name="Starboard"):
     async def on_raw_bulk_message_delete(
         self, payload: discord.RawBulkMessageDeleteEvent
     ):
-        if set(payload.message_ids).issubset(self._about_to_be_deleted):
+        if payload.message_ids <= self._about_to_be_deleted:
             self._about_to_be_deleted.difference_update(payload.message_ids)
             return
 
@@ -146,16 +143,16 @@ class Starboard(commands.Cog, name="Starboard"):
 
     async def star_message(
         self,
-        _starboard: Record,
+        starboard: Record,
         starboard_channel: discord.TextChannel | discord.Thread,
         guild: discord.Guild,
         channel: discord.TextChannel,
-        _member: discord.Member,
+        member: discord.Member,
         message_id: int,
     ):
         try:
             return await self._star_message(
-                _starboard, starboard_channel, guild, channel, member, message_id
+                starboard, starboard_channel, guild, channel, member, message_id
             )
         except Exception as e:
             exc = "".join(traceback.format_exception(type(e), e, e.__traceback__))
@@ -197,13 +194,16 @@ class Starboard(commands.Cog, name="Starboard"):
             ):
                 return
 
-            reaction = next(
-                (reaction for reaction in message.reactions if str(reaction.emoji) == starboard["emoji"]),
-                None
-            )
-            if not reaction:
+            reaction = [
+                reaction
+                for reaction in message.reactions
+                if str(reaction.emoji) == starboard["emoji"]
+            ]
+            if reaction:
+                reaction = reaction[0]
+            else:
                 return
-            count = sum(1 async for r in reaction.users() if r is not self.bot.user)
+            count = len([r async for r in reaction.users() if r is not self.bot.user])
             if count >= starboard.threshold:
                 pass
             else:
@@ -217,7 +217,7 @@ class Starboard(commands.Cog, name="Starboard"):
                 starboard["emoji"],
             )
 
-            content, _ = await self.render_starboard_entry(
+            content, embed, files = await self.render_starboard_entry(
                 starboard, reaction, message
             )
 
@@ -236,7 +236,6 @@ class Starboard(commands.Cog, name="Starboard"):
                     pass
 
 
-            starboard_message = await starboard_channel.send(content=content)
             await self.bot.db.execute(
                 "INSERT INTO starboard_entries (guild_id, channel_id, message_id, emoji, starboard_message_id) VALUES ($1, $2, $3, $4, $5) ON"
                 " CONFLICT (guild_id, channel_id, message_id, emoji) DO UPDATE SET starboard_message_id = $5",
@@ -331,15 +330,10 @@ class Starboard(commands.Cog, name="Starboard"):
             icon_url=message.author.display_avatar,
             url=message.jump_url,
         )
-        content = shorten(message.content, 2048) if message.system_content else ''
-        embed_desc = shorten(embed.description, 2048) if embed.description else ''
-        embed.description = f"{content}\n{embed_desc}"
+        embed.description = f"{shorten(message.content, 2048) if message.system_content else ''}\n{shorten(embed.description, 2048) if embed.description else ''}"
 
         if (
-        embed.description = (
-            f"{content}\n"
-            f"{embed_desc}"
-        )
+            message.embeds
             and (_embed := message.embeds[0])
             and (_embed.url and _embed.type in ("image", "gifv"))
         ):
@@ -367,13 +361,12 @@ class Starboard(commands.Cog, name="Starboard"):
             if attachment.url.lower().endswith(
                 (".png", ".jpg", ".jpeg", ".gif", ".webp")
             ):
-                if attachment.size <= message.guild.filesize_limit:
-                    embed.set_image(url=attachment.url)
+                embed.set_image(url=attachment.url)
             elif attachment.url.lower().endswith(
                 (".mp4", ".mov", ".webm", "mp3", ".ogg", ".wav")
             ):
                 attachment = await attachment.to_file()
-                if not attachment.size > message.guild.filesize_limit:
+                if not sys.getsizeof(attachment.fp) > message.guild.filesize_limit:
                     files.append(attachment)
 
         if message.reference and (reference := message.reference.resolved):
@@ -387,19 +380,17 @@ class Starboard(commands.Cog, name="Starboard"):
             name=f"**#{message.channel}**",
             value=f"[Jump to message]({message.jump_url})",
             inline=False,
-            reaction_map = {
-                range(0, 5): "⭐",
-                range(5, 10): "🌟",
-                range(10, 25): "💫",
-                range(25, float('inf')): "✨"
-            }
-            for count_range, emoji in reaction_map.items():
-                if reaction.count in count_range:
-                    reaction = emoji
-                    break
-            else:
-                reaction = "✨"
-                    break
+        )
+        embed.timestamp = message.created_at
+
+        reactions = f"#{reaction.count:,}"
+        if str(reaction.emoji) == "⭐":
+            if 5 > reaction.count >= 0:
+                reaction = "⭐"
+            elif 10 > reaction.count >= 5:
+                reaction = "🌟"
+            elif 25 > reaction.count >= 10:
+                reaction = "💫"
             else:
                 reaction = "✨"
         else:
@@ -415,10 +406,7 @@ class Starboard(commands.Cog, name="Starboard"):
         brief="Create a channel saved of messsages reacted to with said reaction",
         invoke_without_command=True,
     )
-    """
-    Command group for managing starboards in the server.
-    """
-    async def starboard(self, ctx: Context):
+    @commands.has_permissions(manage_guild=True)
     async def starboard(self, ctx: Context):
         if ctx.invoked_subcommand is None:
             return await ctx.send_help(ctx.command.qualified_name)
@@ -446,6 +434,7 @@ class Starboard(commands.Cog, name="Starboard"):
         ctx: Context,
         channel: discord.TextChannel | discord.Thread,
         emoji: str,
+        brief="",
     ):
         self.bot.p = ctx
         try:
@@ -527,4 +516,4 @@ class Starboard(commands.Cog, name="Starboard"):
 
 
 async def setup(bot):
-    await bot.add_cog(Starboard(bot))
+    await bot.add_cog(starboard(bot))
