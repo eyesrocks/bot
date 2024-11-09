@@ -176,7 +176,7 @@ def format_int(n: int) -> str:
 	return m
 
 
-def donator_check(ctx: Context, member: Optional[Union[Member, User]] = None):
+async def donator_check(ctx: Context, member: Optional[Union[Member, User]] = None):
 	if member is None:
 		member = ctx.author
 	if member.id in ctx.bot.owner_ids:
@@ -229,9 +229,9 @@ def is_donator():
 		#         "[**Greed Premium**](https://discord.gg/pomice) is **required for this command**"
 		#     )
 		#     return False
-		# return True
+		return True
 
-	#return check(predicate)
+	return check(predicate)
 
 
 async def to_string(self: Asset) -> tuple:
