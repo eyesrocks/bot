@@ -204,7 +204,7 @@ def donator_check(ctx: Context, member: Optional[Union[Member, User]] = None):
 
 
 #def is_donator():
-	async def predicate(ctx: Context):
+	#async def predicate(ctx: Context):
 		# if ctx.author.id in ctx.bot.owner_ids:
 		#     return True
 		# if (
