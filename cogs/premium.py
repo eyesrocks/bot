@@ -203,7 +203,7 @@ def donator_check(ctx: Context, member: Optional[Union[Member, User]] = None):
 	return True
 
 
-#def is_donator():
+def is_donator():
 	async def predicate(ctx: Context):
 		# if ctx.author.id in ctx.bot.owner_ids:
 		#     return True
@@ -231,7 +231,7 @@ def donator_check(ctx: Context, member: Optional[Union[Member, User]] = None):
 		#     return False
 		# return True
 
-	# return check(predicate)
+	#return check(predicate)
 
 
 async def to_string(self: Asset) -> tuple:
