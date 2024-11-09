@@ -567,7 +567,16 @@ class Fun(commands.Cog):
         )
     
     @vape.command(name="hits", brief="Show the total number of hits taken by the server")
-    
+    async def vape_hits(self, ctx):
+        hits = await self.bot.db.fetchval(
+            "SELECT guild_hits FROM vape WHERE guild_id = $1", ctx.guild.id
+        )
+        await ctx.send(
+            embed=discord.Embed(
+                description=f"> The server has taken **{hits}** hits from the vape.",
+                color=self.bot.color,
+            )
+        )
 
     @commands.command(name="caption", aliases=["quote"], brief="hello world")
     async def caption(
