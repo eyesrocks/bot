@@ -417,16 +417,6 @@ class starboard(commands.Cog, name="Starboard"):
         usage="(channel) (emoji)",
         example=",starboard add #shame 🤡 2",
         brief="Add a channel for the starboard to be set to, add an emoji for it to be saved when a message is reacted to with said emoji",
-        parameters={
-            "threshold": {
-                "converter": int,
-                "description": "The number of reactions required to be saved",
-                "default": 1,
-                "minimum": 1,
-                "maximum": 120,
-                "aliases": ["amount", "count"],
-            }
-        },
         aliases=["create"],
     )
     @commands.has_permissions(manage_guild=True)
@@ -435,14 +425,13 @@ class starboard(commands.Cog, name="Starboard"):
         ctx: Context,
         channel: discord.TextChannel | discord.Thread,
         emoji: str,
-        brief="",
+        threshold: int,
     ):
         self.bot.p = ctx
         try:
             await ctx.message.add_reaction(emoji)
         except discord.HTTPException:
             return await ctx.fail(f"**{emoji}** is not a valid emoji")
-        threshold = ctx.parameters.get("threshold")
         if threshold == 1:
             m = ""
         else:
@@ -453,7 +442,7 @@ class starboard(commands.Cog, name="Starboard"):
                 ctx.guild.id,
                 channel.id,
                 emoji,
-                ctx.parameters.get("threshold"),
+                threshold,
             )
         except Exception:
             await ctx.fail(f"There is already a **starboard** using **{emoji}**")
