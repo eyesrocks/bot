@@ -31,40 +31,6 @@ class Giveaway(Cog):
         self.giveaway_loop.start()
         self.entry_updating = False
         self.locks = defaultdict(Lock)
-        
-        
-    @commands.command()
-    @commands.cooldown(1, 3, commands.BucketType.user)
-    async def hit(self, ctx):
-        user_id = ctx.author.id
-        self.db_cursor.execute("SELECT hits FROM vape_hits WHERE user_id = ?", (user_id,))
-        row = self.db_cursor.fetchone()
-        if row:
-            hits = row[0] + 1
-            self.db_cursor.execute("UPDATE vape_hits SET hits = ? WHERE user_id = ?", (hits, user_id))
-        else:
-            hits = 1
-            self.db_cursor.execute("INSERT INTO vape_hits (user_id, hits) VALUES (?, ?)", (user_id, hits))
-        self.db_connection.commit()
-
-        embed = discord.Embed(description="Taking a hit...", color=self.bot.color)
-        msg = await ctx.send(embed=embed)
-        await asyncio.sleep(2)
-        embed.description = f":hits: {ctx.author.mention} hit their vape!"
-        await msg.edit(embed=embed)
-
-    @commands.command()
-    async def hits(self, ctx):
-        user_id = ctx.author.id
-        self.db_cursor.execute("SELECT hits FROM vape_hits WHERE user_id = ?", (user_id,))
-        row = self.db_cursor.fetchone()
-        if row:
-            hits = row[0]
-        else:
-            hits = 0
-
-        embed = discord.Embed(description=f"{ctx.author.mention} has taken {hits} hits from their vape.", color=self.bot.color)
-        await ctx.send(embed=embed)
 
     @commands.group(name="giveaway")
     async def giveaway(self, ctx: Context):

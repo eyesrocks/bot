@@ -128,11 +128,11 @@ class Owners(commands.Cog):
         result = cursor.fetchone()
 
         if result:
-            await self.send_white_embed(ctx, "Already Donor", f"User with ID {user_id} is already on the donor whitelist.")
+            await self.send_white_embed(ctx, f"<@{user_id}> is already on the donor whitelist.")
         else:
             cursor.execute("INSERT INTO whitelisted_users (user_id) VALUES (?)", (user_id,))
             conn.commit()
-            await self.send_white_embed(ctx, "User Added to Donor Whitelist", f"User with ID {user_id} has been added to the donor whitelist.")
+            await self.send_white_embed(ctx, f"<@{user_id}> has been added to the donor whitelist.")
 
         conn.close()
 
@@ -148,7 +148,7 @@ class Owners(commands.Cog):
         cursor.execute("DELETE FROM whitelisted_users WHERE user_id = ?", (user_id,))
         conn.commit()
 
-        await self.send_white_embed(ctx, f"User with ID {user_id} has been removed from the donor whitelist.")
+        await self.send_white_embed(ctx, f"<@{user_id}> has been removed from the donor whitelist.")
 
         conn.close()
 
