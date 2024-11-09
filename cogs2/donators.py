@@ -107,6 +107,108 @@ class Donators(commands.Cog):
         # Command logic for donators
         await self.send_white_embed(ctx, "Donator Test", "Congratulations, you are a donator! This command is restricted to donators only.")
 
+
+
+
+    async def make_transcription(self, message: discord.Message):
+        """Transcribe voice messages."""
+        if len(message.attachments) > 0:
+            for attachment in message.attachments:
+                if attachment.is_voice_message() is True:
+                    filepath = await download_file(attachment.url)  # Assuming download_file function exists
+                    return await do_transcribe(filepath)  # Assuming do_transcribe is your transcription function
+
+    @commands.Cog.listener("on_message")
+    async def on_voice_message(self, message: discord.Message):
+        """Triggered when a message is received."""
+        if not message.guild:
+            return
+        if message.author.bot:
+            return
+
+        # Check if auto-transcription is enabled for this server
+        conn = self._connect_db()
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT * FROM auto_transcribe WHERE guild_id = ?", (message.guild.id,))
+        auto_transcribe = cursor.fetchone()
+
+        if not auto_transcribe:
+            conn.close()
+            return
+        
+        if text := await self.make_transcription(message):
+            embed = discord.Embed(description=text, color=0xffffff).set_author(
+                name=message.author.display_name,
+                icon_url=message.author.display_avatar.url,
+            )
+            return await message.reply(embed=embed)
+        
+        conn.close()
+
+    @commands.command(
+        name="transcribe",
+        brief="Return the text from a voice message",
+        example=",transcribe [audio_reply]",
+    )
+    async def transcribe(self, ctx: commands.Context, message: Optional[Message] = None):
+        """Command to transcribe voice messages."""
+        
+        # **Check if the user is a donator** before proceeding
+        if not self.is_donator(ctx.author.id):
+            return await ctx.send("You must be a donator to use this command.")
+        
+        if not message:
+            if not ctx.message.reference:
+                messages = [
+                    message
+                    async for message in ctx.channel.history(limit=50)
+                    if len(message.attachments) > 0
+                    and message.attachments[0].is_voice_message()
+                ]
+
+                if len(messages) == 0:
+                    return await ctx.send("Please reply to a message or provide a message to transcribe.")
+                else:
+                    message = messages[0]
+
+                    msg = await ctx.send(
+                        embed=discord.Embed(
+                            color=0xffffff,
+                            description=f"<a:loading:1302351366584270899> {ctx.author.mention}: **Transcribing this message...**",
+                        )
+                    )
+                    text = await self.make_transcription(message)
+
+            else:
+                message = await self.bot.fetch_message(
+                    ctx.channel, ctx.message.reference.message_id
+                )
+
+                msg = await ctx.send(
+                    embed=discord.Embed(
+                        color=0xffffff,
+                        description=f"<a:loading:1302351366584270899> {ctx.author.mention}: **Transcribing this message...**",
+                    )
+                )
+
+                text = await self.make_transcription(message)
+
+        else:
+            text = await self.make_transcription(message)
+
+        if text is None:
+            return await ctx.send(f"**Failed to transcribe** [**this message**]({message.jump_url})")
+
+        return await msg.edit(
+            embed=discord.Embed(description=text, color=0xffffff).set_author(
+                name=message.author.display_name,
+                icon_url=message.author.display_avatar.url,
+            )
+        )
+
+
+
 # Setup the cog
 async def setup(bot):
     await bot.add_cog(Donators(bot))
