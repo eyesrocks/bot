@@ -217,9 +217,9 @@ def is_donator():
 		# data = await ctx.bot.db.fetchrow(
 		#     """SELECT * FROM donators WHERE user_id = $1""", ctx.author.id
 		# )
-		# if not data:
-		#     if (
-		#         await ctx.bot.glory_cache.ratelimited(
+		 if not data:
+		     if (
+		         await ctx.bot.glory_cache.ratelimited(
 		             f"rl:donator_message:{ctx.author.id}", 2, 10
 		         )
 		         != 0
