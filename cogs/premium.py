@@ -229,7 +229,7 @@ def is_donator():
 		#         "[**Greed Premium**](https://discord.gg/pomice) is **required for this command**"
 		#     )
 		#     return False
-		#return True
+		# return True
 
 	return check(predicate)
 
