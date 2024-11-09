@@ -219,7 +219,7 @@ def is_donator():
             return True
         
         # Check if the author has a specific role in the guild
-        guild = ctx.bot.get_guild(1262921792440242286)
+        guild = ctx.bot.get_guild(1301617147964821524)
         if guild and ctx.author in guild.get_role(1262957377427341383).members:
             return True
         
