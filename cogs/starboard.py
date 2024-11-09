@@ -415,7 +415,10 @@ class Starboard(commands.Cog, name="Starboard"):
         brief="Create a channel saved of messsages reacted to with said reaction",
         invoke_without_command=True,
     )
-    @commands.has_permissions(manage_guild=True)
+    """
+    Command group for managing starboards in the server.
+    """
+    async def starboard(self, ctx: Context):
     async def starboard(self, ctx: Context):
         if ctx.invoked_subcommand is None:
             return await ctx.send_help(ctx.command.qualified_name)
