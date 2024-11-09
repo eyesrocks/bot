@@ -236,15 +236,15 @@ class starboard(commands.Cog, name="Starboard"):
                     pass
 
 
-            await self.bot.db.execute(
-                "INSERT INTO starboard_entries (guild_id, channel_id, message_id, emoji, starboard_message_id) VALUES ($1, $2, $3, $4, $5) ON"
-                " CONFLICT (guild_id, channel_id, message_id, emoji) DO UPDATE SET starboard_message_id = $5",
-                guild.id,
-                channel.id,
-                message.id,
-                starboard["emoji"],
-                starboard_message.id,
-            )
+await self.bot.db.execute(
+    "INSERT INTO starboard_entries (guild_id, channel_id, message_id, emoji, starboard_message_id) VALUES ($1, $2, $3, $4, $5) ON"
+    " CONFLICT (guild_id, channel_id, message_id, emoji) DO UPDATE SET starboard_message_id = $5",
+    guild.id,
+    channel.id,
+    message.id,
+    starboard["emoji"],
+    starboard_message.id,  # Now this is correctly assigned
+)
 
     async def unstar_message(
         self,
