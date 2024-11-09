@@ -148,7 +148,7 @@ class Owners(commands.Cog):
         cursor.execute("DELETE FROM whitelisted_users WHERE user_id = ?", (user_id,))
         conn.commit()
 
-        await self.send_white_embed(ctx, "User Removed from Donor Whitelist", f"User with ID {user_id} has been removed from the donor whitelist.")
+        await self.send_white_embed(ctx, f"User with ID {user_id} has been removed from the donor whitelist.")
 
         conn.close()
 
