@@ -44,6 +44,9 @@ class Starboard(commands.Cog, name="Starboard"):
                     guild.id,
                     str(payload.emoji),
                 )
+                """
+                Command group for managing starboards in the server.
+                """
             )
             or not (starboard_channel := guild.get_channel(starboard["channel_id"]))
             or not starboard_channel.permissions_for(guild.me).send_messages
