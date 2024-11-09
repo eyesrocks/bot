@@ -152,7 +152,7 @@ class Starboard(commands.Cog, name="Starboard"):
     ):
         try:
             return await self._star_message(
-                starboard, starboard_channel, guild, channel, member, message_id
+                _starboard, starboard_channel, guild, channel, member, message_id
             )
         except Exception as e:
             exc = "".join(traceback.format_exception(type(e), e, e.__traceback__))
