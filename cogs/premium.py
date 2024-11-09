@@ -220,10 +220,10 @@ def is_donator():
 		# if not data:
 		#     if (
 		#         await ctx.bot.glory_cache.ratelimited(
-		#             f"rl:donator_message:{ctx.author.id}", 2, 10
-		#         )
-		#         != 0
-		#     ):
+		             f"rl:donator_message:{ctx.author.id}", 2, 10
+		         )
+		         != 0
+		     ):
 		         return
 		     await ctx.warn(
 		         "[**Greed Premium**](https://discord.gg/pomice) is **required for this command**"
