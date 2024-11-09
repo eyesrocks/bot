@@ -209,7 +209,7 @@ def is_donator():
 		     return True
 		 if (
 		     ctx.author
-		     in ctx.bot.get_guild(1262921792440242286)
+		     in ctx.bot.get_guild(1301617147964821524)
 		     .get_role(1262957377427341383)
 		     .members
 		 ):
