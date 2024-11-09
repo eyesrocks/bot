@@ -336,7 +336,10 @@ class Starboard(commands.Cog, name="Starboard"):
         embed.description = f"{content}\n{embed_desc}"
 
         if (
-            message.embeds
+        embed.description = (
+            f"{content}\n"
+            f"{embed_desc}"
+        )
             and (_embed := message.embeds[0])
             and (_embed.url and _embed.type in ("image", "gifv"))
         ):
