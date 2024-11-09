@@ -176,7 +176,7 @@ def format_int(n: int) -> str:
 	return m
 
 
-def is_donatator(ctx: Context, member: Optional[Union[Member, User]] = None):
+def is_donator(ctx: Context, member: Optional[Union[Member, User]] = None):
 	if member is None:
 		member = ctx.author
 	if member.id in ctx.bot.owner_ids:
