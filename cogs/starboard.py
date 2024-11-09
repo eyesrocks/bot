@@ -19,7 +19,7 @@ def shorten(value: str, length: int = 20):
     return value
 
 
-class starboard(commands.Cog, name="Starboard"):
+class Starboard(commands.Cog, name="Starboard"):
     def __init__(self, bot):
         self.bot = bot
         self._locks: WeakValueDictionary[int, asyncio.Lock] = WeakValueDictionary()
@@ -517,4 +517,4 @@ class starboard(commands.Cog, name="Starboard"):
 
 
 async def setup(bot):
-    await bot.add_cog(starboard(bot))
+    await bot.add_cog(Starboard(bot))
