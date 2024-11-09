@@ -176,7 +176,7 @@ def format_int(n: int) -> str:
 	return m
 
 
-async def donator_check(ctx: Context, member: Optional[Union[Member, User]] = None) -> bool:
+a def donator_check(ctx: Context, member: Optional[Union[Member, User]] = None) -> bool:
     # Default to the author if no member is provided
     if member is None:
         member = ctx.author
