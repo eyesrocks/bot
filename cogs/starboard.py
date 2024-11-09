@@ -131,7 +131,7 @@ class Starboard(commands.Cog, name="Starboard"):
     async def on_raw_bulk_message_delete(
         self, payload: discord.RawBulkMessageDeleteEvent
     ):
-        if payload.message_ids <= self._about_to_be_deleted:
+        if set(payload.message_ids).issubset(self._about_to_be_deleted):
             self._about_to_be_deleted.difference_update(payload.message_ids)
             return
 
