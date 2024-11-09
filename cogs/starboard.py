@@ -51,6 +51,7 @@ class Starboard(commands.Cog, name="Starboard"):
             or not (starboard_channel := guild.get_channel(starboard["channel_id"]))
             or not starboard_channel.permissions_for(guild.me).send_messages
         ), or not starboard_channel.permissions_for(guild.me).send_messages
+            
             return
 
         if not (member := payload.member or guild.get_member(payload.user_id)):
