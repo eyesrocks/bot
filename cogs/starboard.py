@@ -427,7 +427,6 @@ class starboard(commands.Cog, name="Starboard"):
         emoji: str,
         threshold: int,
     ):
-        self.bot.p = ctx
         try:
             await ctx.message.add_reaction(emoji)
         except discord.HTTPException:
