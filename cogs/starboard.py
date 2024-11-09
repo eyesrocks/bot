@@ -331,7 +331,9 @@ class Starboard(commands.Cog, name="Starboard"):
             icon_url=message.author.display_avatar,
             url=message.jump_url,
         )
-        embed.description = f"{shorten(message.content, 2048) if message.system_content else ''}\n{shorten(embed.description, 2048) if embed.description else ''}"
+        content = shorten(message.content, 2048) if message.system_content else ''
+        embed_desc = shorten(embed.description, 2048) if embed.description else ''
+        embed.description = f"{content}\n{embed_desc}"
 
         if (
             message.embeds
