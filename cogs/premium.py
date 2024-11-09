@@ -205,29 +205,29 @@ async def donator_check(ctx: Context, member: Optional[Union[Member, User]] = No
 
 def is_donator():
 	async def predicate(ctx: Context):
-		 if ctx.author.id in ctx.bot.owner_ids:
-		     return True
-		 if (
-		     ctx.author
-		     in ctx.bot.get_guild(1301617147964821524)
-		     .get_role(1302817218110820352)
-		     .members
-		 ):
-		     return True
-		 data = await ctx.bot.db.fetchrow(
-		     """SELECT * FROM donators WHERE user_id = $1""", ctx.author.id
-		 )
-		 if not data:
-		     if (
-		         await ctx.bot.glory_cache.ratelimited(
-		             f"rl:donator_message:{ctx.author.id}", 2, 10
-		         )
-		         != 0
-		     ):
-		         return
-		     await ctx.warn(
-		         "[**Greed Premium**](https://discord.gg/pomice) is **required for this command**"
-		     )
+		# if ctx.author.id in ctx.bot.owner_ids:
+		#     return True
+		# if (
+		#     ctx.author
+		#     in ctx.bot.get_guild(1262921792440242286)
+		#     .get_role(1262957377427341383)
+		#     .members
+		# ):
+		#     return True
+		# data = await ctx.bot.db.fetchrow(
+		#     """SELECT * FROM donators WHERE user_id = $1""", ctx.author.id
+		# )
+		# if not data:
+		#     if (
+		#         await ctx.bot.glory_cache.ratelimited(
+		#             f"rl:donator_message:{ctx.author.id}", 2, 10
+		#         )
+		#         != 0
+		#     ):
+		#         return
+		#     await ctx.(
+		#         "[**Greed Premium**](https://discord.gg/pomice) is **required for this command**"
+		#     )
 		#     return False
 		return True
 
