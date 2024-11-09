@@ -355,7 +355,7 @@ class Premium(Cog):
 	# async def make_avatarhistory(self, ctx: Context, user: User):
 	#     message = await ctx.send(
 	#         embed=Embed(
-	#             description=f"<a:greedloading:1262972139498115205> **Generating** {user.mention}'s **avatar history..**",
+	#             description=f"<a:loading:1302351366584270899> **Generating** {user.mention}'s **avatar history..**",
 	#             color=self.bot.color,
 	#         )
 	#     )
@@ -752,7 +752,7 @@ class Premium(Cog):
 				"This user must be in our [**community server**](https://discord.gg/pomice) to view this profile."
 			)
 		x = Embed(
-			description=f"<a:greedloading:1262972139498115205> **Loading {user.mention}'s profile...**",
+			description=f"<a:loading:1302351366584270899> **Loading {user.mention}'s profile...**",
 			color=0x2B2D31,
 		)
 		message = await ctx.send(embed=x)
@@ -1140,7 +1140,7 @@ class Premium(Cog):
 #		safe = True if not ctx.channel.is_nsfw() else False
 #		message = await ctx.send(
 #			embed=discord.Embed(
-#				description=f"<a:greedloading:1262972139498115205> {ctx.author.mention}: **Searching the web..**",
+#				description=f"<a:loading:1302351366584270899> {ctx.author.mention}: **Searching the web..**",
 #				color=self.bot.color,
 #			)
 #		)
@@ -1201,7 +1201,7 @@ class Premium(Cog):
 	# 	safe = True if not ctx.channel.is_nsfw() else False
 	# 	message = await ctx.send(
 	# 		embed=discord.Embed(
-	# 			description=f"<a:greedloading:1262972139498115205> {ctx.author.mention}: **Searching the web..**",
+	# 			description=f"<a:loading:1302351366584270899> {ctx.author.mention}: **Searching the web..**",
 	# 			color=self.bot.color,
 	# 		)
 	# 	)
@@ -1331,7 +1331,7 @@ class Premium(Cog):
 					msg = await ctx.send(
 						embed=discord.Embed(
 							color=self.bot.color,
-							description=f"<a:greedloading:1262972139498115205> {ctx.author.mention}: **transcribing this message...**",
+							description=f"<a:loading:1302351366584270899> {ctx.author.mention}: **transcribing this message...**",
 						)
 					)
 					text = await self.make_transcription(message)
@@ -1344,7 +1344,7 @@ class Premium(Cog):
 				msg = await ctx.send(
 					embed=discord.Embed(
 						color=self.bot.color,
-						description=f"<a:greedloading:1262972139498115205> {ctx.author.mention}: **transcribing this message...**",
+						description=f"<a:loading:1302351366584270899> {ctx.author.mention}: **transcribing this message...**",
 					)
 				)
 
