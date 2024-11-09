@@ -1367,4 +1367,4 @@ class Premium(Cog):
 
 
 async def setup(bot):
-	# await bot.add_cog(Premium(bot))
+	 await bot.add_cog(Premium(bot))
