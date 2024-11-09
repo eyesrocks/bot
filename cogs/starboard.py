@@ -434,8 +434,7 @@ class Starboard(commands.Cog, name="Starboard"):
         self,
         ctx: Context,
         channel: discord.TextChannel | discord.Thread,
-        _brief="",
-        brief="",
+        emoji: str,
     ):
         self.bot.p = ctx
         try:
