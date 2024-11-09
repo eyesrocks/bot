@@ -41,7 +41,9 @@ class AvatarHistory(Cog):
         title = f"{str(user)}'s avatars" if not str(user).endswith("s") else f"{str(user)}' avatars"
         for i, row in enumerate(rows, start = 1):
             embed = Embed(title = title).set_author(name = str(ctx.author), icon_url = ctx.author.display_avatar.url)
-            embed.set_image(url = f"https://cdn.greed.wtf/avatars/{user.id}/{row.id}")
+            url = f"https://cdn.greed.wtf/avatar/{user.id}/{row.id}"
+            embed.set_image(url = url)
+            embed.url = url
             embed.set_footer(text = f"Avatar {i}/{len(rows)}")
             embed.description = f"changed {utils.format_dt(row.ts, style='R')}"
             embeds.append(embed)
