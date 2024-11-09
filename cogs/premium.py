@@ -225,7 +225,7 @@ def is_donator():
 		#         != 0
 		#     ):
 		#         return
-		#     await ctx.(
+		#     await ctx.fail(
 		#         "[**Greed Premium**](https://discord.gg/pomice) is **required for this command**"
 		#     )
 		#     return False
