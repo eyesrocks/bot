@@ -104,30 +104,24 @@ class AntiNuke(Cog):
     async def get_thresholds(
         self, guild: Guild, action: AuditLogAction | str
     ) -> Optional[int]:
-        #        logger.info(type(action))
         if guild.id in self.guilds:
             if isinstance(action, AuditLogAction):
-                #                logger.info(f"action {action} got an action of {get_action(action)}")
                 _ac = get_action(action)
-                if threshold := await self.bot.db.fetchval(
+                threshold = await self.bot.db.fetchval(
                     f"""SELECT {_ac} FROM antinuke_threshold WHERE guild_id = $1""",
                     guild.id,
-                ):
-                    #                   logger.info(f"db pull action {_ac} got a threshold of {int(threshold)}")
+                )
+                if threshold is not None:
+                    return int(threshold) if int(threshold) != 1 else 0  # Check and return 0 if threshold is 1
 
-                    return int(threshold)
-                if get_action(action) in self.thresholds[guild.id]:
-                    ac = get_action(action)
-                    thres = self.thresholds[guild.id].get(ac)
-                    #                  logger.info(f"{ac} got a threshold of {thres}")
-                    if thres is None:
-                        thres = 0
-                    return thres
+                if _ac in self.thresholds[guild.id]:
+                    thres = self.thresholds[guild.id].get(_ac)
+                    return thres if thres != 1 else 0 # Check and return 0 if threshold is 1
+
             else:
-                #             logger.info(f"action {action.action} got an action return of {get_action(action)}")
                 if action in self.thresholds[guild.id]:
-                    return self.thresholds[guild.id].get(action, 0)
-        #    logger.info(f"never got a threshold returning 0")
+                    thres = self.thresholds[guild.id].get(action, 0)
+                    return thres if thres != 1 else 0 # Check and return 0 if threshold is 1
         return 0
 
     async def do_ban(self, guild: Guild, user: User | Member, reason: str):
@@ -137,7 +131,7 @@ class AntiNuke(Cog):
                     raise TypeError("User's role is higher than mine")
                 if user.id == guild.owner_id:
                     raise TypeError("User was the Owner")
-            if await self.bot.glory_cache.ratelimited(f"punishment-{guild.id}-{user.id}", 1, 60) != 0: 
+            if await self.bot.glory_cache.ratelimited(f"punishment-{guild.id}-{user.id}", 1, 60) != 0:
                 return
             await guild.ban(Object(user.id), reason=reason)
         #       logger.info(f"successfully banned {user.name} with ban entry {b}")
@@ -150,7 +144,7 @@ class AntiNuke(Cog):
                     return False
                 if user.id == guild.owner_id:
                     return False
-            if await self.bot.glory_cache.ratelimited(f"punishment-{guild.id}-{user.id}", 1, 60) != 0: 
+            if await self.bot.glory_cache.ratelimited(f"punishment-{guild.id}-{user.id}", 1, 60) != 0:
                 return
             await user.kick(reason=reason)
         return
@@ -162,7 +156,7 @@ class AntiNuke(Cog):
             if user.id == guild.owner_id:
                 return False
             after_roles = [r for r in user.roles if not r.is_assignable()]
-            if await self.bot.glory_cache.ratelimited(f"punishment-{guild.id}-{user.id}", 1, 60) != 0: 
+            if await self.bot.glory_cache.ratelimited(f"punishment-{guild.id}-{user.id}", 1, 60) != 0:
                 return
             await user.edit(roles=after_roles, reason=reason)  # , atomic=False)
         return True
