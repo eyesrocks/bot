@@ -176,71 +176,62 @@ def format_int(n: int) -> str:
 	return m
 
 
-def donator_check(ctx: Context, member: Optional[Union[Member, User]] = None) -> bool:
-    # Default to the author if no member is provided
-    if member is None:
-        member = ctx.author
-    
-    # If the member is a bot owner, they are always considered a donator
-    if member.id in ctx.bot.owner_ids:
-        return True
-    
-    # Check if the member has a specific role in a given guild
-    guild = ctx.bot.get_guild(1301617147964821524)
-    if guild and member in guild.get_role(1302817218110820352).members:
-        return True
-    
-    # Check if the member has donator status in the database
-    data = await ctx.bot.db.fetchrow(
-        """SELECT * FROM donators WHERE user_id = $1""", member.id
-    )
-    
-    if not data:
-        # Rate limit check for messages to prevent spamming
-        if await ctx.bot.glory_cache.ratelimited(f"rl:donator_message:{member.id}", 2, 10):
-            return False
-        
-        # Send failure message to the member if they don't have access
-        if member:
-            m = f"{member.mention} doesn't have [**greed Premium**](https://discord.gg/pomice)"
-        else:
-            m = "[**greed Premium**](https://discord.gg/pomice) is **required for this command**"
-        
-        await ctx.fail(m)  # Assuming 'ctx.fail' sends the error message
-        return False
-    
-    return True
+def donator_check(ctx: Context, member: Optional[Union[Member, User]] = None):
+	if member is None:
+		member = ctx.author
+	if member.id in ctx.bot.owner_ids:
+		return True
+	if (
+		member
+		in ctx.bot.get_guild(1301617147964821524).get_role(1302817218110820352).members
+	):
+		return True
+	data = await ctx.bot.db.fetchrow(
+		"""SELECT * FROM donators WHERE user_id = $1""", member.id
+	)
+	if not data:
+		if await ctx.bot.glory_cache.ratelimited(
+			f"rl:donator_message:{member.id}", 2, 10
+		):
+			return
+		if member:
+			m = f"{member.mention} doesn't have [**greed Premium**](https://discord.gg/pomice)"
+		else:
+			m = "[**greed Premium**](https://discord.gg/pomice) is **required for this command**"
+		await ctx.fail(m)
+		return False
+	return True
 
-# Optionally, you can uncomment and improve the is_donator check as follows:
-def is_donator():
-    async def predicate(ctx: Context) -> bool:
-        # If the author is a bot owner, allow them to bypass the check
-        if ctx.author.id in ctx.bot.owner_ids:
-            return True
-        
-        # Check if the author has a specific role in the guild
-        guild = ctx.bot.get_guild(1301617147964821524)
-        if guild and ctx.author in guild.get_role(1302817218110820352).members:
-            return True
-        
-        # Check if the author is a donator in the database
-        data = await ctx.bot.db.fetchrow(
-            """SELECT * FROM donators WHERE user_id = $1""", ctx.author.id
-        )
-        
-        if not data:
-            # Rate limit check for messages
-            if await ctx.bot.glory_cache.ratelimited(f"rl:donator_message:{ctx.author.id}", 2, 10):
-                return False
-            
-            await ctx.fail(
-                "[**Greed Premium**](https://discord.gg/pomice) is **required for this command**"
-            )
-            return False
-        
-        return True
-    
-    return check(predicate)
+
+#def is_donator():
+	#async def predicate(ctx: Context):
+		# if ctx.author.id in ctx.bot.owner_ids:
+		#     return True
+		# if (
+		#     ctx.author
+		#     in ctx.bot.get_guild(1262921792440242286)
+		#     .get_role(1262957377427341383)
+		#     .members
+		# ):
+		#     return True
+		# data = await ctx.bot.db.fetchrow(
+		#     """SELECT * FROM donators WHERE user_id = $1""", ctx.author.id
+		# )
+		# if not data:
+		#     if (
+		#         await ctx.bot.glory_cache.ratelimited(
+		#             f"rl:donator_message:{ctx.author.id}", 2, 10
+		#         )
+		#         != 0
+		#     ):
+		#         return
+		#     await ctx.(
+		#         "[**Greed Premium**](https://discord.gg/pomice) is **required for this command**"
+		#     )
+		#     return False
+		# return True
+
+	# return check(predicate)
 
 
 async def to_string(self: Asset) -> tuple:
