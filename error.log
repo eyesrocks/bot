@@ -74,3 +74,5 @@ discord.errors.ConnectionClosed: Shard ID 0 WebSocket closed with 1000
 2024-11-09 17:33:58,775 - ERROR - Unexpected error in command None: Command "selfprefix" is not found
 2024-11-09 17:34:07,438 - ERROR - Unexpected error in command None: Command "selfprefix" is not found
 2024-11-09 17:34:15,122 - ERROR - Unexpected error in command None: Command "selfprefix" is not found
+2024-11-09 19:18:31,844 - ERROR - Unexpected error in command None: Command "ui" is not found
+2024-11-09 19:18:47,547 - ERROR - Unexpected error in command None: Command "lf" is not found
