@@ -10,12 +10,12 @@ async def avatar(request: Request, user_id: int, identifier: str):
         return json(content={'message':'Not found'}, status=404)
     return raw(data.avatar, content_type=data.content_type, status=200)
 
-@app.main_process_start
-async def on_start(*_):
+@app.listener("before_server_start")
+async def on_start(app, loop):
     app.ctx.db = Database()
     await app.ctx.db.connect()
 
 app.add_route(avatar, "/avatar/<user_id>/<identifier>", methods = ["GET", "OPTIONS"])
 
 if __name__ == "__main__":
-    app.run(port=5555, workers=10)
+    app.run(port=5555)
