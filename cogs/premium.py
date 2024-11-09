@@ -210,11 +210,11 @@ def is_donator():
 		# if (
 		#     ctx.author
 		#     in ctx.bot.get_guild(1262921792440242286)
-		#     .get_role(1262957377427341383)
-		#     .members
-		# ):
-		#     return True
-		# data = await ctx.bot.db.fetchrow(
+		     .get_role(1262957377427341383)
+		     .members
+		 ):
+		     return True
+		 data = await ctx.bot.db.fetchrow(
 		     """SELECT * FROM donators WHERE user_id = $1""", ctx.author.id
 		 )
 		 if not data:
