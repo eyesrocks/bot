@@ -369,7 +369,7 @@ class Starboard(commands.Cog, name="Starboard"):
                 (".mp4", ".mov", ".webm", "mp3", ".ogg", ".wav")
             ):
                 attachment = await attachment.to_file()
-                if not sys.getsizeof(attachment.fp) > message.guild.filesize_limit:
+                if not attachment.size > message.guild.filesize_limit:
                     files.append(attachment)
 
         if message.reference and (reference := message.reference.resolved):
