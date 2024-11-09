@@ -143,11 +143,11 @@ class starboard(commands.Cog, name="Starboard"):
 
     async def star_message(
         self,
-        starboard: Record,
+        _starboard: Record,
         starboard_channel: discord.TextChannel | discord.Thread,
         guild: discord.Guild,
         channel: discord.TextChannel,
-        member: discord.Member,
+        _member: discord.Member,
         message_id: int,
     ):
         try:
@@ -217,7 +217,7 @@ class starboard(commands.Cog, name="Starboard"):
                 starboard["emoji"],
             )
 
-            content, embed, files = await self.render_starboard_entry(
+            content, _ = await self.render_starboard_entry(
                 starboard, reaction, message
             )
 
@@ -236,6 +236,7 @@ class starboard(commands.Cog, name="Starboard"):
                     pass
 
 
+            starboard_message = await starboard_channel.send(content=content)
             await self.bot.db.execute(
                 "INSERT INTO starboard_entries (guild_id, channel_id, message_id, emoji, starboard_message_id) VALUES ($1, $2, $3, $4, $5) ON"
                 " CONFLICT (guild_id, channel_id, message_id, emoji) DO UPDATE SET starboard_message_id = $5",
@@ -433,7 +434,7 @@ class starboard(commands.Cog, name="Starboard"):
         self,
         ctx: Context,
         channel: discord.TextChannel | discord.Thread,
-        emoji: str,
+        _brief="",
         brief="",
     ):
         self.bot.p = ctx
