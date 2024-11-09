@@ -15,7 +15,7 @@ from discord.ext.commands import Context
 
 def shorten(value: str, length: int = 20):
     if len(value) > length:
-        value = value[: length - 2] + (".." if len(value) > length else "").strip()
+        value = value[: length - 2] + ".."
     return value
 
 
