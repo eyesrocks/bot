@@ -28,6 +28,8 @@ def get_tb(error: Exception):
 class Giveaway(Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.db_connection = await self.bot.db.acquire()
+        self.db_cursor = await self.db_connection.cursor()
         self.giveaway_loop.start()
         self.entry_updating = False
         self.locks = defaultdict(Lock)
