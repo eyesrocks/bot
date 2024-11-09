@@ -243,7 +243,7 @@ class starboard(commands.Cog, name="Starboard"):
                 channel.id,
                 message.id,
                 starboard["emoji"],
-                starboard_message.id,  # Now this is correctly assigned
+                starboard_message.id,
             )
 
     async def unstar_message(
