@@ -573,9 +573,8 @@ class Information(commands.Cog):
         )
 
     async def get_time(self, timezone: str) -> int:
-        # You will need to implement this method to return the correct timestamp
-        # based on the timezone string. This could use libraries like `pytz` or `zoneinfo`.
-        pass
+        tz = pytz.timezone(timezone)
+        return int(datetime.now(tz=tz).timestamp())
 
     @commands.command(
         brief="Check the bot's latency",
