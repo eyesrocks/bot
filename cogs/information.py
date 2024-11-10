@@ -51,10 +51,9 @@ from geopy.geocoders import Nominatim
 from timezonefinder import TimezoneFinder
 
 
-@offloaded
-def get_timezone(location: str) -> str:
+async def get_timezone(location: str) -> str:
     geolocator = Nominatim(user_agent="Greed-Bot")
-    location = geolocator.geocode(location)
+    location = await offloaded(geolocator.geocode)(location)
     if location is None:
         raise ValueError("Location not found")
 
