@@ -540,27 +540,30 @@ class Information(commands.Cog):
                 f"{member.mention} **does not have their time set** with `timezone set`"
             )
 
-    @timezone.command(
+
+    @commands.command(
         name="set",
         brief="set a timezone via location or timezone",
         example=",timezone set New York/et",
     )
     async def timezone_set(self, ctx: Context, *, timezone: str):
         try:
-            data = await get_timezone(timezone)
+            data = await self.get_timezone(timezone)
         except Exception:
             data = await self.find_timezone(city=timezone)
+
         if data:
             await self.bot.db.execute(
                 """INSERT INTO timezone (user_id, tz) VALUES($1, $2) ON CONFLICT(user_id) DO UPDATE SET tz = excluded.tz""",
                 ctx.author.id,
                 data,
             )
+            current_time = await self.get_time(data)
             return await ctx.success(
-                f"set your current time to <t:{await self.get_time(data)}:F>"
+                f"Set your current time to <t:{current_time}:F>"
             )
         else:
-            return await ctx.fail(f"could not find a timezone for `{timezone}`")
+            return await ctx.fail(f"Could not find a timezone for `{timezone}`")
 
     @commands.command(
         brief="Check the bot's latency",
@@ -1062,7 +1065,7 @@ class Information(commands.Cog):
     async def banner(self, ctx, *, user: Member = None):
       member = user or ctx.author
       user = await self.bot.fetch_user(member.id)
-      
+
       if user.banner:
             e = discord.Embed(
                   title=f"{user.name}'s banner", url=user.banner, color=self.bot.color
