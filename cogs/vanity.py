@@ -5,7 +5,7 @@ from typing import Optional
 from discord.ext.commands import Context
 from tool.important.subclasses.command import Role, TextChannel
 from loguru import logger
-from rival_tools import lock, ratelimit
+# from rival_tools import lock, ratelimit
 from tool.important.subclasses.parser import Script
 
 
@@ -80,7 +80,7 @@ class Vanity(commands.Cog):
 
     # @ratelimit("vanity:{member.guild.id}", 5, 5, True)
     async def assign_vanity_role(self, member: discord.Member, role: discord.Role):
-        guild = member.guild
+        # guild = member.guild
         if role in member.roles:
             return
         await self.bot.db.execute(
@@ -113,15 +113,13 @@ class Vanity(commands.Cog):
                         else:
                             await self.assign_vanity_role(member, role)
                             return await self.award_message(member)
-                else:
-                    if role := await self.get_vanity_role(member.guild):
-                        if role in member.roles:
-                            if not await self.bot.db.fetchrow(
-                                """SELECT * FROM vanity_roles WHERE guild_id = $1 AND user_id = $2""",
-                                member.guild.id,
-                                member.id,
-                            ):
-                                return
+                if role := await self.get_vanity_role(member.guild):
+                    if role in member.roles:
+                        if not await self.bot.db.fetchrow(
+                            """SELECT * FROM vanity_roles WHERE guild_id = $1 AND user_id = $2""",
+                            member.guild.id,
+                            member.id,
+                        ):
                             return await self.remove_vanity_role(member, role)
 
     @tasks.loop(seconds=30)
