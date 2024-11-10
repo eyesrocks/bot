@@ -530,7 +530,7 @@ class Information(commands.Cog):
         example=",timezone @lim",
     )
     async def timezone(
-        self, ctx: Context, member: Union[discord.Member, discord.User] = commands.Author
+        self, ctx: Context, member: discord.Member | discord.User = commands.Author
     ):
         if data := await self.bot.db.fetchval(
             """SELECT tz FROM timezone WHERE user_id = $1""", member.id
@@ -549,26 +549,26 @@ class Information(commands.Cog):
         brief="set a timezone via location or timezone",
         example=",timezone set New York/et",
     )
-    async def timezone_set(self, ctx: Context, *, location: str) -> None:
+    async def timezone_set(self, ctx: Context, *, timezone: str):
         try:
-            data = await get_timezone(location)
+            data = await get_timezone(timezone)
         except Exception as e:
-            return await ctx.fail(f"Could not find a timezone for `{location}`: {error}")
+            # data = await self.find_timezone(city=timezone)
+            raise e
 
-        await self.bot.db.execute(
-            """
-            INSERT INTO timezone (user_id, tz)
-            VALUES ($1, $2)
-            ON CONFLICT (user_id)
-            DO UPDATE SET tz = excluded.tz
-            """,
-            ctx.author.id,
-            data,
-        )
-        current_time = await self.get_time(data)
-        return await ctx.success(
-            f"Set your current time to <t:{current_time}:F>"
-        )
+
+        if data:
+            await self.bot.db.execute(
+                """INSERT INTO timezone (user_id, tz) VALUES($1, $2) ON CONFLICT(user_id) DO UPDATE SET tz = excluded.tz""",
+                ctx.author.id,
+                data,
+            )
+            current_time = await self.get_time(data)
+            return await ctx.success(
+                f"Set your current time to <t:{current_time}:F>"
+            )
+        else:
+            return await ctx.fail(f"Could not find a timezone for `{timezone}`")
 
     @commands.command(
         brief="Check the bot's latency",
