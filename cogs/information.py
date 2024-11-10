@@ -560,10 +560,10 @@ class Information(commands.Cog):
             INSERT INTO timezone (user_id, tz)
             VALUES ($1, $2)
             ON CONFLICT (user_id)
-        current_timestamp = await self.get_time(data)
-        return await ctx.success(
-            f"Set your current time to <t:{current_timestamp}:F>"
-        )
+            DO UPDATE SET tz = excluded.tz
+            """,
+            ctx.author.id,
+            data,
         )
         current_time = await self.get_time(data)
         return await ctx.success(
