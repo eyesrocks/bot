@@ -276,21 +276,21 @@ class Events(commands.Cog):
         )
 
 
-    @tasks.loop(minutes=4)
-    async def do_pfp_loop(self):
-        pfps = await self.get_pfps()
-        embeds = [Embed(title="new pfp", url=p).set_image(url=p) for p in pfps]
-        logger.info("sending avatars now")
-        for guild_id, channel_id in await self.bot.db.fetch(
-            """SELECT guild_id,channel_id FROM pfps"""
-        ):
-            if guild := self.bot.get_guild(int(guild_id)):
-                if channel := guild.get_channel(int(channel_id)):
-                    try:
-                        await channel.send(embeds=embeds)
-                    except Exception as e:
-                        logger.info(f"autopfp loop raised an exception: {e}")
-                        pass
+    # @tasks.loop(minutes=4)
+    # async def do_pfp_loop(self):
+    #     pfps = await self.get_pfps()
+    #     embeds = [Embed(title="new pfp", url=p).set_image(url=p) for p in pfps]
+    #     logger.info("sending avatars now")
+    #     for guild_id, channel_id in await self.bot.db.fetch(
+    #         """SELECT guild_id,channel_id FROM pfps"""
+    #     ):
+    #         if guild := self.bot.get_guild(int(guild_id)):
+    #             if channel := guild.get_channel(int(channel_id)):
+    #                 try:
+    #                     await channel.send(embeds=embeds)
+    #                 except Exception as e:
+    #                     logger.info(f"autopfp loop raised an exception: {e}")
+    #                     pass
 
     @commands.Cog.listener("on_member_update")
     async def booster_lost(self, before, after):
@@ -304,7 +304,7 @@ class Events(commands.Cog):
                 before.guild.id,
                 datetime.now(),
             )
-
+    @commands.Cog.listener("on_member_update")
     async def namehistory_event(self, before, after):
         if before.name != after.name:
             name = before.name
