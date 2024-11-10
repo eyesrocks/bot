@@ -536,7 +536,7 @@ class Economy(commands.Cog):
 
         self.format_economy()
         self.chart = EconomyCharts(self.bot)
-        self.clear_earnings.start()
+    #    self.clear_earnings.start()
 
     def format_economy(self):
         new_items = {}
