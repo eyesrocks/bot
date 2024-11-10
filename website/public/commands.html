@@ -185,12 +185,12 @@
     }
 
     .command-cards {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 15px;
-      width: 100%;
-      max-width: 1200px;
-    }
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 15px; /* Adjust the gap between cards if needed */
+  width: 100%;
+  max-width: 1200px;
+}
 
     .command-card {
       background-color: #222;
@@ -206,9 +206,15 @@
     .command-card:hover {
       background-color: #333;
       box-shadow: 0 0 8px rgba(255, 255, 255, 0.5), 0 0 16px rgba(255, 255, 255, 0.3);
-      
     }
-
+    .command-card:hover .usage {
+  color: #86b8ff; /* Adjust this color to your preference */
+  font-weight: bold; /* Optional: makes it stand out more */
+  background-color: rgba(255, 255, 255, 0.1); /* Optional: adds a subtle background */
+  padding: 2px 4px; /* Optional: adds spacing around the usage text */
+  border-radius: 4px; /* Optional: rounds the corners for a highlight effect */
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
     .command-title {
       font-size: 1.2rem;
       font-weight: bold;

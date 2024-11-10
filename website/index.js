@@ -4,9 +4,11 @@ const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch
 app.use(express.static('public'));
 app.get('/statusapi', async(req, res) => {
   resarray = [];
-  const response1 = await fetch('http://localhost:8493/status');
-  if(response1.status !== 200) {
-    res.json("OFFLINE");
+  let response1 = null;
+  try {
+  response1 = await fetch('http://localhost:8493/status')
+  } catch (error) {
+    res.json("OFFLINE")
     return
   }
   const data1 = await response1.json();
@@ -18,6 +20,7 @@ app.get('/statusapi', async(req, res) => {
   const data3 = await response3.json();
   resarray.push(data3);
   res.json(resarray);
+
 });
 app.listen(3008, () => {
   console.log('Server running at http://localhost:3008/');

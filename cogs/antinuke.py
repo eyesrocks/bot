@@ -18,7 +18,7 @@ from typing import Optional, Union
 from contextlib import suppress
 from loguru import logger
 
-
+# h
 def trusted():
     async def predicate(ctx: Context):
         if ctx.author.id in ctx.bot.owner_ids:
@@ -811,7 +811,7 @@ class AntiNuke(Cog):
 
     @antinuke.command(
         name="botadd",
-        aliases=["bot", "ba"]
+        aliases=["bot", "ba"],
         brief="Toggle the anti bot add of antinuke",
         example=",antinuke bot_add true",
     )
@@ -838,7 +838,7 @@ class AntiNuke(Cog):
 
     @antinuke.command(
         name="channel",
-        aliases=["channels"]
+        aliases=["channels"],
         brief="toggle the anti channel update of antinuke",
         example=",antinuke channel true",
         parameters={

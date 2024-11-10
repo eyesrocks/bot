@@ -47,7 +47,14 @@ function setupShards(){
     .then(response => response.json())
     .then(data => {
       if (data === 'OFFLINE') {
-        document.getElementById('status-container').innerHTML = 'All shards are offline.';
+        shards.push({
+          id: 0,
+          status: "offline",
+          uptime: "0",
+          users: "ALL",
+          servers: "ALL"
+        });
+        renderShards(shards);
         return;
       }
       data.forEach(shardsp => {

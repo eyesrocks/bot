@@ -48,6 +48,13 @@ class AvatarHistory(Cog):
             embed.description = f"changed {utils.format_dt(row.ts, style='R')}"
             embeds.append(embed)
         return await ctx.alternative_paginate(embeds)
+        current_avatar_url = user.display_avatar.url
+        current_avatar_embed = Embed(title=f"{str(user)}'s current avatar")
+        current_avatar_embed.set_image(url=current_avatar_url)
+        current_avatar_embed.url = f"https://greed.wtf/{user.id}"
+        current_avatar_embed.description = f"[Link to avatar](https://greed.wtf/{user.id})"
+        current_avatar_embed.set_footer(text="Current Avatar")
+        await ctx.send(embed=current_avatar_embed)
 
     @command(name = "clearavatars", aliases = ["clavs", "clavh", "clearavh"], brief = "clear your avatar history")
     async def clearavatars(self, ctx: Context):

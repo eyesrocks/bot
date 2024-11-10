@@ -27,7 +27,7 @@ window.addEventListener("load", function() {
             <div class="command-title">${command.name}</div>
             <div class="command-description">${command.brief}</div>
             <div class="details">
-            <span>Usage: ${command.example}</span>
+            <span class="usage">Usage: ${command.example}</span>
             <span>Category: ${category}</span>
             </div>
           `;
