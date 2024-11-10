@@ -34,20 +34,20 @@ class AvatarHistory(Cog):
     @command(name = "avatarhistory", aliases = ["avatars", "avh"], brief = "view past avatar changes with a user", example = ",avh @aiohttp")
     async def avatarhistory(self, ctx: Context, *, user: Optional[Union[User, Member]] = None):
         user = user or ctx.author
-        row = await self.bot.db.fetchrow("""SELECT avatar, content_type, ts FROM avatars WHERE user_id = $1 ORDER BY ts DESC LIMIT 1""", user.id)
-        if not row:
+        rows = await self.bot.db.fetch("""SELECT id, avatar, content_type, ts FROM avatars WHERE user_id = $1 ORDER BY ts DESC""", user.id)
+        if not rows:
             raise CommandError(f"no avatars have been **saved** for {user.mention}")
-        
-        count = await self.bot.db.fetchval("""SELECT COUNT(*) FROM avatars WHERE user_id = $1""", user.id)
-        
-        embed = Embed(title=f"{str(user)}'s current avatar" if not str(user).endswith("s") else f"{str(user)}' current avatar")
-        embed.set_author(name=str(ctx.author), icon_url=ctx.author.display_avatar.url)
-        url = f"https://cdn.greed.wtf/avatars/{user.id}"
-        embed.set_image(url=url)
-        embed.url = url
-        embed.description = f"changed {utils.format_dt(row['ts'], style='R')}"
-        
-        return await ctx.send(embed=embed)
+        embeds = []
+        title = f"{str(user)}'s avatars" if not str(user).endswith("s") else f"{str(user)}' avatars"
+        for i, row in enumerate(rows, start = 1):
+            embed = Embed(title = title).set_author(name = str(ctx.author), icon_url = ctx.author.display_avatar.url)
+            url = f"https://cdn.greed.wtf/avatars/{user.id}"
+            embed.set_image(url = url)
+            embed.url = url
+            embed.set_footer(text = f"Avatar {i}/{len(rows)}")
+            embed.description = f"changed {utils.format_dt(row.ts, style='R')}"
+            embeds.append(embed)
+        return await ctx.alternative_paginate(embeds)
 
     @command(name = "clearavatars", aliases = ["clavs", "clavh", "clearavh"], brief = "clear your avatar history")
     async def clearavatars(self, ctx: Context):
