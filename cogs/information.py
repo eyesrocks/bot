@@ -47,20 +47,23 @@ from bs4 import BeautifulSoup
 from humanize import intword
 from cogs.lastfm import shorten
 from tool.down_detector import DiscordStatus
+from geopy.geocoders import Nominatim
+from timezonefinder import TimezoneFinder
 
 
 @offloaded
 def get_timezone(location: str) -> str:
-    from geopy.geocoders import Nominatim
-    from timezonefinder import TimezoneFinder
-
-    obj = TimezoneFinder()
     geolocator = Nominatim(user_agent="Greed-Bot")
-    lad = location
-    location = geolocator.geocode(lad)
-    obj = TimezoneFinder()
-    result = obj.timezone_at(lng=location.longitude, lat=location.latitude)
-    return result
+    location = geolocator.geocode(location)
+    if location is None:
+        raise ValueError("Location not found")
+
+    tf = TimezoneFinder()
+    timezone = tf.timezone_at(lng=location.longitude, lat=location.latitude)
+    if timezone is None:
+        raise ValueError("Timezone not found for the given location")
+
+    return timezone
 
 
 class plural:
