@@ -51,36 +51,35 @@ def has_permissions(**permissions):
         if ctx.author.guild_permissions.administrator:
             return True
 
+        missing_permissions = []
         for permission in permissions:
-            missing_permissions = []
             if getattr(ctx.author.guild_permissions, permission) is not True:
                 missing_permissions.append(permission)
-            if missing_permissions:
-                mroles = [r.id for r in ctx.author.roles if r.is_assignable()]
-                data = await ctx.bot.db.fetch(
-                    """SELECT role_id, perms FROM fakeperms WHERE guild_id = $1""",
-                    ctx.guild.id,
-                )
-                if data:
-                    for role_id, perms in data:
-                        perm = perms
-                        if role_id in mroles:
-                            if "," in perm:
-                                dperm = perm.split(",")
-                                for sperm in dperm:
-                                    try:
-                                        missing_permissions.remove(str(sperm))
-                                    except ValueError:
-                                        continue
-                            else:
-                                for role_id, perm in data:
-                                    if int(role_id) in mroles:
-                                        try:
-                                            missing_permissions.remove(str(perm))
-                                        except ValueError:
-                                            continue
-            if missing_permissions:
-                raise commands.MissingPermissions(missing_permissions)
+
+        if missing_permissions:
+            mroles = [r.id for r in ctx.author.roles if r.is_assignable()]
+            data = await ctx.bot.db.fetch(
+                """SELECT role_id, perms FROM fakeperms WHERE guild_id = $1""",
+                ctx.guild.id,
+            )
+            if data:
+                for role_id, perms in data:
+                    if role_id in mroles:
+                        if "," in perms:
+                            dperm = perms.split(",")
+                            for sperm in dperm:
+                                try:
+                                    missing_permissions.remove(str(sperm))
+                                except ValueError:
+                                    continue
+                        else:
+                            try:
+                                missing_permissions.remove(str(perms))
+                            except ValueError:
+                                continue
+
+        if missing_permissions:
+            raise commands.MissingPermissions(missing_permissions)
         return True
 
     return commands.check(predicate)
