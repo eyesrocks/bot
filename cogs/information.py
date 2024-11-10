@@ -51,9 +51,10 @@ from geopy.geocoders import Nominatim
 from timezonefinder import TimezoneFinder
 
 
-async def get_timezone(location: str) -> str:
+@offloaded
+def get_timezone(location: str) -> str:
     geolocator = Nominatim(user_agent="Greed-Bot")
-    location = await offloaded(geolocator.geocode)(location)
+    location = geolocator.geocode(location)
     if location is None:
         raise ValueError("Location not found")
 
@@ -552,7 +553,7 @@ class Information(commands.Cog):
         try:
             data = await get_timezone(location)
         except Exception as e:
-            return await ctx.fail(f"Could not find a timezone for `{location}`: {e}")
+            return await ctx.fail(f"Could not find a timezone for `{location}`: {error}")
 
         await self.bot.db.execute(
             """
