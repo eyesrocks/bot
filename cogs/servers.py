@@ -4029,30 +4029,30 @@ class Servers(Cog):
         return await ctx.success("**Boost message** was sent")
 
     @commands.group(name="thread", invoke_without_command=True)
-    async def thread(self, ctx):
+    async def _thread(self, ctx):
         return await ctx.send_help(ctx.command.qualified_name)
 
-    @thread.command(name="lock", brief="locks a thread")
+    @_thread.command(name="lock", brief="Locks a thread")
     async def thread_lock(self, ctx, channel: Optional[discord.Thread] = None):
         if not channel:
             channel = ctx.channel
         await channel.edit(
             locked=True,
             archived=True,
-            reason=f"thread locked by moderator {ctx.author.name}"
+            reason=f"Thread locked by moderator {ctx.author.name}"
         )
-        return await ctx.success(f"successfully locked {ctx.channel.name}")
+        return await ctx.success(f"Successfully locked {channel.name}")
 
-    @thread.command(name="unlock", brief="locks a thread")
-    async def thread_lock(self, ctx, channel: Optional[discord.Thread] = None):
+    @_thread.command(name="unlock", brief="Unlocks a thread")
+    async def thread_unlock(self, ctx, channel: Optional[discord.Thread] = None):
         if not channel:
             channel = ctx.channel
         await channel.edit(
-            locked=True,
-            archived=True,
-            reason=f"thread locked by moderator {ctx.author.name}"
+            locked=False,
+            archived=False,
+            reason=f"Thread unlocked by moderator {ctx.author.name}"
         )
-        return await ctx.success(f"successfully locked {ctx.channel.name}")
+        return await ctx.success(f"Successfully unlocked {channel.name}")
 
 
 async def setup(bot: "Greed") -> None:
