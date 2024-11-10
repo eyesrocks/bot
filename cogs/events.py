@@ -445,8 +445,11 @@ class Events(commands.Cog):
         if await self.forcenick_check(after.guild, after) is True:
             if has_data := self.bot.cache.forcenick.get(before.guild.id):
                 if name := has_data.get(before.id):
-                    if after.nick != name:
-                        await after.edit(nick=name[:32])
+                    try:
+                        if after.nick != name:
+                            await after.edit(nick=name[:32])
+                    except discord.Forbidden:
+                        self.bot.cache.forcenick[before.guild.id].pop(before.id, None)
         else:
             if before.nick != after.nick:
                 return await self.bot.db.execute(
