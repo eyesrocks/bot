@@ -4032,28 +4032,41 @@ class Servers(Cog):
     async def _thread(self, ctx):
         return await ctx.send_help(ctx.command.qualified_name)
 
-    @_thread.command(name="lock", brief="Locks a thread")
-    async def thread_lock(self, ctx, channel: Optional[discord.Thread] = None):
-        if not channel:
-            channel = ctx.channel
-        await channel.edit(
+    @_thread.command(
+        name="lock", 
+        brief="Locks a thread",
+        example=",thread lock #channel"
+    )
+    async def thread_lock(self, ctx, thread: Optional[discord.Thread] = None):
+        if not thread:
+            thread = ctx.channel
+        if not isinstance(thread, discord.Thread):
+            return await ctx.fail("This channel is not a thread.")
+
+        await thread.edit(
             locked=True,
             archived=True,
             reason=f"Thread locked by moderator {ctx.author.name}"
         )
-        return await ctx.success(f"Successfully locked {channel.name}")
+        return await ctx.success(f"Successfully locked {thread.name}")
 
-    @_thread.command(name="unlock", brief="Unlocks a thread")
-    async def thread_unlock(self, ctx, channel: Optional[discord.Thread] = None):
-        if not channel:
-            channel = ctx.channel
-        await channel.edit(
+    @_thread.command(
+        name="unlock", 
+        brief="Unlocks a thread",
+        example=",thread unlock #channel"
+    )
+    async def thread_unlock(self, ctx, thread: Optional[discord.Thread] = None):
+        if not thread:
+            thread = ctx.channel
+        if not isinstance(thread, discord.Thread):
+            return await ctx.fail("This channel is not a thread.")
+        
+        await thread.edit(
             locked=False,
             archived=False,
             reason=f"Thread unlocked by moderator {ctx.author.name}"
         )
-        return await ctx.success(f"Successfully unlocked {channel.name}")
-
+        return await ctx.success(f"Successfully unlocked {thread.name}")
 
 async def setup(bot: "Greed") -> None:
     await bot.add_cog(Servers(bot))
