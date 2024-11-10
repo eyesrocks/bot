@@ -548,7 +548,7 @@ class Information(commands.Cog):
     )
     async def timezone_set(self, ctx: Context, *, timezone: str):
         try:
-            data = await self.get_timezone(timezone)
+            data = await get_timezone(timezone)
         except Exception as e:
             # data = await self.find_timezone(city=timezone)
             raise e
