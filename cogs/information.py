@@ -549,26 +549,21 @@ class Information(commands.Cog):
         brief="set a timezone via location or timezone",
         example=",timezone set New York/et",
     )
-    async def timezone_set(self, ctx: Context, *, timezone: str):
+    async def timezone_set(self, ctx: Context, *, location: str):
         try:
-            data = await get_timezone(timezone)
+            data = await get_timezone(location)
         except Exception as e:
-            # data = await self.find_timezone(city=timezone)
-            raise e
+            return await ctx.fail(f"Could not find a timezone for `{location}`: {e}")
 
-
-        if data:
-            await self.bot.db.execute(
-                """INSERT INTO timezone (user_id, tz) VALUES($1, $2) ON CONFLICT(user_id) DO UPDATE SET tz = excluded.tz""",
-                ctx.author.id,
-                data,
-            )
-            current_time = await self.get_time(data)
-            return await ctx.success(
-                f"Set your current time to <t:{current_time}:F>"
-            )
-        else:
-            return await ctx.fail(f"Could not find a timezone for `{timezone}`")
+        await self.bot.db.execute(
+            """INSERT INTO timezone (user_id, tz) VALUES($1, $2) ON CONFLICT(user_id) DO UPDATE SET tz = excluded.tz""",
+            ctx.author.id,
+            data,
+        )
+        current_time = await self.get_time(data)
+        return await ctx.success(
+            f"Set your current time to <t:{current_time}:F>"
+        )
 
     @commands.command(
         brief="Check the bot's latency",
