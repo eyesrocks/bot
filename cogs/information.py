@@ -556,7 +556,12 @@ class Information(commands.Cog):
             return await ctx.fail(f"Could not find a timezone for `{location}`: {error}")
 
         await self.bot.db.execute(
-            """INSERT INTO timezone (user_id, tz) VALUES($1, $2) ON CONFLICT(user_id) DO UPDATE SET tz = excluded.tz""",
+            """
+            INSERT INTO timezone (user_id, tz)
+            VALUES ($1, $2)
+            ON CONFLICT (user_id)
+            DO UPDATE SET tz = excluded.tz
+            """,
             ctx.author.id,
             data,
         )
