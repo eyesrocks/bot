@@ -462,7 +462,7 @@ class Servers(Cog):
     @commands.has_permissions(manage_guild = True)
     async def levels_disable(self, ctx: Context):
         await self.bot.db.execute("""DELETE FROM text_level_settings WHERE guild_id = $1""", ctx.guild.id)
-        return await ctx.success("successfully disabled leveling")    
+        return await ctx.success("successfully disabled leveling")
 
     @levels.group(name = "message", brief = "set a message for leveling up", example = ",levels message {embed}{description: congrats {user.mention} for hitting level {level}}", usage = ",levels message <message>", invoke_without_command = True, aliases = ['msg', 'm'])
     @commands.has_permissions(manage_guild = True)
@@ -547,7 +547,7 @@ class Servers(Cog):
         data = [channel.id, message.id]
         await self.bot.db.execute("""INSERT INTO text_level_settings (guild_id, autoboard_channel) VALUES($1, $2) ON CONFLICT(guild_id) DO UPDATE SET autoboard_channel = excluded.autoboard_channel""", ctx.guild.id, json.dumps(data))
         return await ctx.success(f"The **autoboard has been set** to {channel.mention}")
-    
+
     @levels.command(name = "setup", brief = "setup leveling")
     @commands.has_permissions(manage_guild = True)
     async def levels_setup(self, ctx: Context):
@@ -571,7 +571,7 @@ class Servers(Cog):
             role = ctx.guild.get_role(data.role_id)
         else:
             return await ctx.fail("there is no current notification channel setup")
-        
+
         if role:
             await role.delete(reason=f"notification channel reset by {str(ctx.author)}")
         await self.bot.db.execute("""DELETE FROM notifications WHERE guild_id = $1""", ctx.guild.id)
@@ -592,7 +592,7 @@ class Servers(Cog):
         else:
             new_data = []
             role = None
-        
+
         new_data.append(channel.id)
         await self.bot.db.execute("""INSERT INTO notifications (guild_id, channels) VALUES($1, $2) ON CONFLICT(guild_id) DO UPDATE SET channels = excluded.channels""", ctx.guild.id, json.dumps(new_data))
         await self.check_notification_channel(ctx)
@@ -608,7 +608,7 @@ class Servers(Cog):
             role = ctx.guild.get_role(data.role_id)
         else:
             return await ctx.fail("there are no notifications channel setup")
-        
+
         if role:
             await channel.set_permissions(role, overwrite=None, reason="Disabled notifications role for this channel")
         new_data.remove(channel.id)
@@ -623,7 +623,7 @@ class Servers(Cog):
         data = await self.bot.db.fetchval("""SELECT channels FROM notifications WHERE guild_id = $1""", ctx.guild.id)
         if not data:
             return await ctx.fail("**Notification channels** are **not** setup")
-        
+
         channels = json.loads(data) if data else []
         channels = [ctx.guild.get_channel(d) for d in channels if ctx.guild.get_channel(d)]
         rows = [f"`{i}` {channel.mention}" for i, channel in enumerate(channels, start=1)]
@@ -637,13 +637,13 @@ class Servers(Cog):
         await self.bot.db.execute("""INSERT INTO notifications (guild_id, role_id) VALUES($1, $2) ON CONFLICT(guild_id) DO UPDATE SET role_id = excluded.role_id""", ctx.guild.id, role.id)
         await self.check_notification_channel(ctx, role)
         return await ctx.success(f"**Notification role** has been **created**")
-    
+
     @notification.command(name = "responder", brief = "set a responder message when an @everyone is sent into a notification channel", example = ",notifications responder ,dis to disable pings")
     @commands.has_permissions(manage_guild = True)
     async def notification_responder(self, ctx: Context, *, embed_code: str):
         await self.bot.db.execute("""INSERT INTO notifications (guild_id, message) VALUES($1, $2) ON CONFLICT(guild_id) DO UPDATE SET message = excluded.message""", ctx.guild.id, embed_code)
         return await ctx.success(f"**Response message** has been set")
-        
+
     @notification.command(name = "command", brief = "enable or disable the ping disable command", example = ",notifications command true")
     @commands.has_permissions(manage_guild = True)
     async def notification_command(self, ctx: Context, state: bool):
@@ -668,7 +668,7 @@ class Servers(Cog):
             state = True
         msg = "**Disabled**" if state else "**Enabled**"
         return await ctx.success(f"{msg} notifications")
-    
+
 
     @commands.group(
         name="paginator",
@@ -2676,7 +2676,7 @@ class Servers(Cog):
                 return await ctx.fail("your booster role **doesn't exist**")
         else:
             return await ctx.fail("your booster role **doesn't exist**")
-        
+
         return await ctx.success(
             f"**Booster role** has been **{action}** {member.mention}"
         )
@@ -4027,6 +4027,32 @@ class Servers(Cog):
         msg.content = ctx.message.content.strip(ctx.prefix)
         self.bot.dispatch("message", msg)
         return await ctx.success("**Boost message** was sent")
+
+    @commands.group(name="thread", invoke_without_command=True)
+    async def thread(self, ctx):
+        return await ctx.send_help(ctx.command.qualified_name)
+
+    @thread.command(name="lock", brief="locks a thread")
+    async def thread_lock(self, ctx, channel: Optional[discord.Thread] = None):
+        if not channel:
+            channel = ctx.channel
+        await channel.edit(
+            locked=True,
+            archived=True,
+            reason=f"thread locked by moderator {ctx.author.name}"
+        )
+        return await ctx.success(f"successfully locked {ctx.channel.name}")
+
+    @thread.command(name="unlock", brief="locks a thread")
+    async def thread_lock(self, ctx, channel: Optional[discord.Thread] = None):
+        if not channel:
+            channel = ctx.channel
+        await channel.edit(
+            locked=True,
+            archived=True,
+            reason=f"thread locked by moderator {ctx.author.name}"
+        )
+        return await ctx.success(f"successfully locked {ctx.channel.name}")
 
 
 async def setup(bot: "Greed") -> None:
