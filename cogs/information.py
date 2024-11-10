@@ -549,7 +549,7 @@ class Information(commands.Cog):
         brief="set a timezone via location or timezone",
         example=",timezone set New York/et",
     )
-    async def timezone_set(self, ctx: Context, *, location: str):
+    async def timezone_set(self, ctx: Context, *, location: str) -> None:
         try:
             data = await get_timezone(location)
         except Exception as e:
