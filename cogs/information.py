@@ -31,7 +31,7 @@ from tool.greed import Greed  # type: ignore
 # from tool.shazam import Recognizer  # type: ignore
 #from weather import WeatherClient  # type: ignore
 #from weather.weathertypes import Kind  # type: ignore
-#from GeoPython import Client
+# ` 1from geopy import geocoders
 from typing_extensions import Type, NotRequired
 import re
 from discord import Embed
@@ -430,16 +430,16 @@ class Information(commands.Cog):
         ctx = await self.bot.get_context(interaction)
         return await ctx.send_help()
 
-        self.client = Client()  # type: ignore
+    #    self.client = Client()  # type: ignore
 
-    async def find_timezone(self, city: str, country: Optional[str] = None):  # type: ignore
-        if data := await self.client.lookup(city=city):
-            return data.timezone
-        else:
-            if pytz.timezone(city):  # type: ignore
-                return city
-            else:
-                return None
+    async def find_timezone(self, city: str, country: Optional[str] = None): ...  # type: ignore
+        # if data := await self.client.lookup(city=city):
+        #     return data.timezone
+        # else:
+        #     if pytz.timezone(city):  # type: ignore
+        #         return city
+        #     else:
+        #         return None
 
     def try_escape(self, ban: discord.BanEntry):
         try:
@@ -544,13 +544,15 @@ class Information(commands.Cog):
     @timezone.command(
         name="set",
         brief="set a timezone via location or timezone",
-        example=",timezone set New York/est",
+        example=",timezone set New York/et",
     )
     async def timezone_set(self, ctx: Context, *, timezone: str):
         try:
             data = await self.get_timezone(timezone)
-        except Exception:
-            data = await self.find_timezone(city=timezone)
+        except Exception as e:
+            # data = await self.find_timezone(city=timezone)
+            raise e
+
 
         if data:
             await self.bot.db.execute(
