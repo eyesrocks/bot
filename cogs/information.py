@@ -530,7 +530,7 @@ class Information(commands.Cog):
         example=",timezone @lim",
     )
     async def timezone(
-        self, ctx: Context, member: discord.Member | discord.User = commands.Author
+        self, ctx: Context, member: Union[discord.Member, discord.User] = commands.Author
     ):
         if data := await self.bot.db.fetchval(
             """SELECT tz FROM timezone WHERE user_id = $1""", member.id
