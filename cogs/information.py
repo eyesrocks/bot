@@ -526,36 +526,34 @@ class Information(commands.Cog):
         name="timezone",
         aliases=["tz", "time"],
         invoke_without_command=True,
-        brief="Get the local time of a user if set.",
-        example=",timezone @user",
+        brief="get the local time of a user if set",
+        example=",timezone @lim",
     )
     async def timezone(
-        self, ctx: Context, member: Union[discord.Member, discord.User] = None
+        self, ctx: Context, member: Union[discord.Member, discord.User] = commands.Author
     ):
-        member = member or ctx.author
-        data = await self.bot.db.fetchval(
+        if data := await self.bot.db.fetchval(
             """SELECT tz FROM timezone WHERE user_id = $1""", member.id
-        )
-        if data:
-            current_time = await self.get_time(data)
-            await ctx.send(
-                f"{member.mention}'s **current time** is <t:{current_time}:F>"
+        ):
+            return await ctx.success(
+                f"{member.mention}'s **current time** is <t:{await self.get_time(data)}:F>"
             )
         else:
-            await ctx.send(
-                f"{member.mention} **does not have their time set**. Use `timezone set` to set it."
+            return await ctx.fail(
+                f"{member.mention} **does not have their time set** with `timezone set`"
             )
+
 
     @timezone.command(
         name="set",
-        brief="Set a timezone using a location or timezone name.",
-        example=",timezone set New York",
+        brief="set a timezone via location or timezone",
+        example=",timezone set New York/et",
     )
     async def timezone_set(self, ctx: Context, *, location: str) -> None:
         try:
             data = await get_timezone(location)
         except Exception as e:
-            return await ctx.send(f"Could not find a timezone for `{location}`: {e}")
+            return await ctx.fail(f"Could not find a timezone for `{location}`: {error}")
 
         await self.bot.db.execute(
             """
@@ -568,14 +566,9 @@ class Information(commands.Cog):
             data,
         )
         current_time = await self.get_time(data)
-        await ctx.send(
-            f"Set your timezone to <t:{current_time}:F>"
+        return await ctx.success(
+            f"Set your current time to <t:{current_time}:F>"
         )
-
-    async def get_time(self, timezone: str) -> int:
-        # You will need to implement this method to return the correct timestamp
-        # based on the timezone string. This could use libraries like `pytz` or `zoneinfo`.
-        pass
 
     @commands.command(
         brief="Check the bot's latency",
