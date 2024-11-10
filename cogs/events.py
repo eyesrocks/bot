@@ -441,10 +441,6 @@ class Events(commands.Cog):
             return
         if after.guild.me.top_role < after.top_role:
             return
-        #        if rl_check := await self.bot.glory_cache.ratelimited(
-        #            f"forcenick{after.guild.id}", 4, 20
-        #        ):
-        #            await asyncio.sleep(rl_check)
 
         if await self.forcenick_check(after.guild, after) is True:
             if has_data := self.bot.cache.forcenick.get(before.guild.id):
@@ -452,12 +448,12 @@ class Events(commands.Cog):
                     if after.nick != name:
                         await after.edit(nick=name[:32])
         else:
-            if before.display_name != after.display_name:
+            if before.nick != after.nick:
                 return await self.bot.db.execute(
                     """INSERT INTO names (user_id,type,username,ts) VALUES($1,$2,$3,$4) ON CONFLICT(user_id,username,ts) DO NOTHING""",
                     before.id,
                     "nickname",
-                    before.display_name,
+                    before.nick,
                     datetime.now(),
                 )
 
