@@ -45,7 +45,7 @@ class AvatarHistory(Cog):
         url = f"https://cdn.greed.wtf/avatars/{user.id}"
         embed.set_image(url=url)
         embed.url = url
-        embed.set_footer(text=f"[View all avatars](https://greed.wtf/{user.id}) | Total avatars: {count} | [Avatar history](https://greed.wtf/{user.id}")
+        embed.set_footer(text=f"Total avatars: {count} | [Avatar history](https://greed.wtf/{user.id}")
         embed.description = f"changed {utils.format_dt(row['ts'], style='R')}"
         
         return await ctx.send(embed=embed)
