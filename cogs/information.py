@@ -575,6 +575,7 @@ class Information(commands.Cog):
     async def get_time(self, timezone: str) -> int:
         tz = pytz.timezone(timezone)
         return int(datetime.now(tz=tz).timestamp())
+    
 
     @commands.command(
         brief="Check the bot's latency",
