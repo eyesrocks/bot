@@ -304,20 +304,19 @@ class Events(commands.Cog):
                 before.guild.id,
                 datetime.now(),
             )
-    @commands.Cog.listener("on_member_update")
+
+    @commands.Cog.listener("on_user_update")
     async def namehistory_event(self, before, after):
-        if before.name != after.name:
+        if before.name != after.name and before.name is not None:
             name = before.name
             nt = "username"
-        elif before.global_name != after.global_name:
+        elif before.global_name != after.global_name and before.global_name is not None:
             name = before.global_name
             nt = "globalname"
-        elif before.display_name != after.display_name:
+        elif before.display_name != after.display_name and before.display_name is not None:
             name = before.display_name
             nt = "display"
         else:
-            return
-        if name is None:
             return
         await self.bot.db.execute(
             """INSERT INTO names (user_id, type, username, ts) VALUES($1,$2,$3,$4) ON CONFLICT(user_id,username,ts) DO NOTHING""",

@@ -403,7 +403,7 @@ class Economy(commands.Cog):
             9: ":nine:",
         }
         self.chances = get_chances()
-        self.clear_items.start()
+    #    self.clear_items.start()
         self.items = {
             "purple devil": {
                 "price": 1000000,
@@ -552,13 +552,13 @@ class Economy(commands.Cog):
         values = self.chances[ctx.command.qualified_name]
         return calculate(values.percentage, values.total)  # type: ignore # noqa: F821
 
-    @tasks.loop(hours=24)
-    async def clear_earnings(self):
-        time = get_time_next_day()
-        if guild := self.bot.get_guild(1259918254344896595):
-            await guild.leave()
-        await asyncio.sleep(time)
-        await self.bot.db.execute("""DELETE FROM earnings""")
+    # @tasks.loop(hours=24)
+    # async def clear_earnings(self):
+    #     time = get_time_next_day()
+    #     if guild := self.bot.get_guild(1259918254344896595):
+    #         await guild.leave()
+    #     await asyncio.sleep(time)
+    #     await self.bot.db.execute("""DELETE FROM earnings""")
 
     @thread
     def generate_cards(self):
