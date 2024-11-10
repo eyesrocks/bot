@@ -553,7 +553,7 @@ class Information(commands.Cog):
         try:
             data = await get_timezone(location)
         except Exception as e:
-            return await ctx.fail(f"Could not find a timezone for `{location}`: {e}")
+            return await ctx.fail(f"Could not find a timezone for `{location}`: {error}")
 
         await self.bot.db.execute(
             """INSERT INTO timezone (user_id, tz) VALUES($1, $2) ON CONFLICT(user_id) DO UPDATE SET tz = excluded.tz""",
