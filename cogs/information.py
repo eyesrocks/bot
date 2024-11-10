@@ -544,7 +544,7 @@ class Information(commands.Cog):
     @timezone.command(
         name="set",
         brief="set a timezone via location or timezone",
-        example=",timezone set New York/et",
+        example=",timezone set New York/est",
     )
     async def timezone_set(self, ctx: Context, *, timezone: str):
         try:
