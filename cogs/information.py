@@ -553,7 +553,7 @@ class Information(commands.Cog):
         try:
             data = await get_timezone(location)
         except Exception as e:
-            return await ctx.fail(f"Could not find a timezone for `{location}`: {error}")
+            return await ctx.fail(f"Could not find a timezone for `{location}`: {e}")
 
         await self.bot.db.execute(
             """
