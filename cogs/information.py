@@ -541,7 +541,7 @@ class Information(commands.Cog):
             )
 
 
-    @commands.command(
+    @timezone.command(
         name="set",
         brief="set a timezone via location or timezone",
         example=",timezone set New York/et",
