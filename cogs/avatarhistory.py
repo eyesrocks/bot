@@ -38,12 +38,14 @@ class AvatarHistory(Cog):
         if not row:
             raise CommandError(f"no avatars have been **saved** for {user.mention}")
         
+        count = await self.bot.db.fetchval("""SELECT COUNT(*) FROM avatars WHERE user_id = $1""", user.id)
+        
         embed = Embed(title=f"{str(user)}'s current avatar" if not str(user).endswith("s") else f"{str(user)}' current avatar")
         embed.set_author(name=str(ctx.author), icon_url=ctx.author.display_avatar.url)
         url = f"https://cdn.greed.wtf/avatars/{user.id}"
         embed.set_image(url=url)
         embed.url = url
-        embed.set_footer(text=f"[View all avatars](https://greed.wtf/{user.id})")
+        embed.set_footer(text=f"[View all avatars](https://greed.wtf/{user.id}) | Total avatars: {count} | [Avatar history](https://greed.wtf/{user.id}")
         embed.description = f"changed {utils.format_dt(row['ts'], style='R')}"
         
         return await ctx.send(embed=embed)
