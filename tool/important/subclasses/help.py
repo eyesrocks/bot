@@ -505,13 +505,13 @@ class MyHelpCommand(commands.HelpCommand):
         )
         ctx = self.context
         perms = command.perms
-        if command.cog_name.lower() == "premium":
-            if command.perms:
-                perms = command.perms
-                perms.append("Donator")
-            else:
-                perms = ["Donator"]
-        embed.set_footer(text=command.cog_name)
+   #     if command.cog_name.lower() == "premium":
+   #         if command.perms:
+   #             perms = command.perms
+   #             perms.append("Donator")
+   #         else:
+   #             perms = ["Donator"]
+   #     embed.set_footer(text=command.cog_name)
         if command.perms is None or len(command.perms) == 0:
             try:
                 await command.can_run(ctx)
