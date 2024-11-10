@@ -4041,7 +4041,7 @@ class Servers(Cog):
         if not thread:
             thread = ctx.channel
         if not isinstance(thread, discord.Thread):
-            return await ctx.fail("This channel is not a thread.")
+            return await ctx.fail("> This channel is not a thread!")
 
         await thread.edit(
             locked=True,
@@ -4059,7 +4059,7 @@ class Servers(Cog):
         if not thread:
             thread = ctx.channel
         if not isinstance(thread, discord.Thread):
-            return await ctx.fail("This channel is not a thread.")
+            return await ctx.fail("> This channel is not a thread!")
         
         await thread.edit(
             locked=False,
