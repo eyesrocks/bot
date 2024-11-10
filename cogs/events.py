@@ -432,12 +432,13 @@ class Events(commands.Cog):
 
     @commands.Cog.listener("on_member_update")
     async def forcenick_event(self, before: discord.Member, after: discord.Member):
+        if before.nick == after.nick:
+            return
+
         if not (data := self.bot.cache.forcenick.get(before.guild.id)):
             return
 
         if not data.get(before.id):
-            return
-        if after.guild.me.guild_permissions.administrator is not True:
             return
         if after.guild.me.top_role < after.top_role:
             return
