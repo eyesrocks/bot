@@ -182,7 +182,6 @@ class AntiNuke(Cog):
         if entry.user is not None:
             try:
                 threshold = await self.get_thresholds(guild, entry.action)
-            #                if threshold != 0: threshold = threshold + 1
             except Exception:
                 threshold = 0
             if await self.bot.db.fetchval(
@@ -195,6 +194,7 @@ class AntiNuke(Cog):
                 entry.user.id == guild.owner_id
                 or entry.user.id == self.bot.user.id
                 or entry.user.id in self.bot.owner_ids
+                or (hasattr(entry.user, "top_role") and entry.user.top_role >= guild.me.top_role)
             ):
                 return True
             rl = await self.bot.glory_cache.ratelimited(

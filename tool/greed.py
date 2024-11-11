@@ -711,7 +711,7 @@ class Greed(Bot):
         os.environ["JISHAKU_NO_UNDERSCORE"] = "True"
         os.environ["JISHAKU_RETAIN"] = "True"
         await self.load_extension("jishaku")
-        # await self.load_extension("tool.important.subclasses.web")
+        await self.load_extension("tool.important.subclasses.web")
 
     async def create_embed(self, code: str, **kwargs):
         builder = Script(code, **kwargs)
