@@ -117,3 +117,121 @@ class AutoPFP(Cog):
         self.banner_categories = ['random', 'anime', 'imsg', 'mix']
 
     async def cog_load(self):
+        await self.bot.db.execute("""CREATE TABLE IF NOT EXISTS autopfp (guild_id BIGINT NOT NULL, channel_id BIGINT NOT NULL, categories TEXT[] NOT NULL, PRIMARY KEY(guild_id, channel_id));""")
+        self.auto_assets.start()
+
+    async def cog_unload(self):
+        self.auto_assets.stop()
+
+    async def get_avatar(self, category: str, return_category: Optional[bool] = False) -> Union[Dict[str, AssetResponse], AssetResponse]:
+        response = await AssetResponse.from_category("autopfp", category)
+        if return_category is True:
+            return {f"{category}": response}
+        else:
+            return response
+
+
+    async def get_banners(self) -> Dict[str, AssetResponse]:
+        banners = await gather(*[AssetResponse.from_category("autobanner", c) for c in self.banner_categories])
+        return {b.category.lower(): b for b in banners}
+
+    async def get_avatars(self) -> Dict[str, AssetResponse]:
+        avatars = await gather(*[AssetResponse.from_category("autopfp", c) for c in self.avatar_categories])
+        data = {a.category.lower(): a for a in avatars}
+        if not self.last_posted:
+            self.last_posted = {k: v.url for k, v in data.items()}
+        else:
+            for key, value in data.items():
+                while True:
+                    if self.last_posted.get(key, "") == value:
+                        new = await AssetResponse.from_category("autopfp", key)
+                        if new.url == self.last_posted.get(key):
+                            continue
+                        else:
+                            data[key] = new
+            self.last_posted = {k: v.url for k, v in data.items()}
+            return data
+            
+
+
+
+
+
+    async def send_avatars(self, channel: TextChannel, categories: List[str], avatars: Dict[str, AssetResponse]):
+        message = None
+        for category in categories:
+            embeds = [avatars[c].to_embed(channel.guild) for c in categories]
+            if channel.permissions_for(channel.guild.me).send_messages:
+                message = await channel.send(embeds = embeds[:10])
+        return message
+    
+    @tasks.loop(minutes = 1)
+    async def auto_assets(self):
+        try:
+            avatars = await self.get_avatars()
+            logger.info(f"avatars: {avatars}\nlast_posted: {LAST_POSTED}")
+            rows = await self.bot.db.fetch("""SELECT guild_id, channel_id, categories FROM autopfp""")
+            for row in rows:
+                if not (guild := self.bot.get_guild(row.guild_id)):
+                    continue
+                if not (channel := guild.get_channel(row.channel_id)):
+                    continue
+                await self.send_avatars(channel, row.categories, avatars)
+        except Exception as e:
+            logger.info(f"error in auto_assets: {get_error(e)}")
+
+
+    @group(name = "autopfp", brief = "setup automatic profile pictures being sent into channels", invoke_without_command = True)
+    async def autopfp(self, ctx: Context):
+        return await ctx.send_help(ctx.command)
+    
+    @autopfp.command(name = "add", aliases = ["create", "set", "a", "c", "s"], brief = "add a channel for profile pictures to be sent into", example = ",autopfp add #nigga")
+    @has_permissions(manage_guild = True)
+    async def autopfp_add(self, ctx: Context, *, channel: TextChannel):
+        state = {}
+        view = CategoryView(self.avatar_categories, state, ctx.author)
+        message = await ctx.send(embed = Embed(color = self.bot.color, description = f"set the categories for {channel.mention}"), view = view)
+        await view.wait()
+        if categories := state.get("categories"):
+            await self.bot.db.execute("""INSERT INTO autopfp (guild_id, channel_id, categories) VALUES($1, $2, $3) ON CONFLICT(guild_id, channel_id) DO UPDATE SET categories = excluded.categories""", ctx.guild.id, channel.id, categories)
+            return await message.edit(embed = Embed(color = self.bot.color, description = f"set the categories of {channel.mention} to {', '.join(c for c in categories)}"), view = None)
+        else:
+            return await message.edit(embed = Embed(color = self.bot.color, description = "you did not select any **categories**"), View = None)
+        
+    @autopfp.command(name = "remove", aliases = ["delete", "del", "d", "rem", "r"], brief = "remove an autopfp channel", example = ",autopfp remove #nigga")
+    @has_permissions(manage_guild = True)
+    async def autopfp_remove(self, ctx: Context, *, channel: TextChannel):
+        await self.bot.db.execute("""DELETE FROM autopfp WHERE guild_id = $1 AND channel_id = $2""", ctx.guild.id, channel.id)
+        return await ctx.success(f"successfully removed the autopfp channel {channel.mention}")
+    
+    @autopfp.command(name = "clear", aliases = ["reset", "cl"], brief = "reset all auto pfp configurations")
+    @has_permissions(manage_guild = True)
+    async def autopfp_clear(self, ctx: Context):
+        await self.bot.db.execute("""DELETE FROM autopfp WHERE guild_id = $1""", ctx.guild.id)
+        return await ctx.success("successfully reset all auto pfp configurations")
+    
+    @autopfp.command(name = "list", aliases = ["view", "show", "ls"], brief = "get a list of all auto pfp channels")
+    @has_permissions(manage_guild = True)
+    async def autopfp_list(self, ctx: Context):
+        embed = Embed(title = "Auto PFP Channels")
+        data = await self.bot.db.fetch("""SELECT channel_id, categories FROM autopfp WHERE guild_id = $1""", ctx.guild.id)
+        def get_row(record: Record) -> str:
+            if not (channel := ctx.guild.get_channel(record.channel_id)):
+                return f"`{record.channel_id}` (deleted channel)"
+            categories = [f"`{c}`" for c in record.categories]
+            return f"{channel.mention} ({', '.join(categories)})"
+        rows = [get_row(row) for row in data]
+        return await self.bot.dummy_paginator(ctx, embed, rows)
+    
+
+async def setup(bot: Client):
+    await bot.add_cog(AutoPFP(bot))
+
+    
+    
+
+
+
+
+
+
