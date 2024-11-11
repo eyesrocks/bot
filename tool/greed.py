@@ -265,16 +265,16 @@ class Greed(Bot):
         ctx.timer = datetime.datetime.now().timestamp()
         if ctx.command is not None:
 #            if not await self.db.fetchrow("""SELECT * FROM reskin.server WHERE guild_id = $1""", ctx.guild.id):
-                if "purge" not in ctx.command.qualified_name:
-                    if (
-                        ctx.channel.permissions_for(ctx.guild.me).send_messages
-                        and ctx.channel.permissions_for(ctx.guild.me).embed_links
-                        and ctx.channel.permissions_for(ctx.guild.me).attach_files
-                    ):
-                        try:
-                            await ctx.typing()
-                        except Exception:
-                            pass
+            if "purge" not in ctx.command.qualified_name:
+                if (
+                    ctx.channel.permissions_for(ctx.guild.me).send_messages
+                    and ctx.channel.permissions_for(ctx.guild.me).embed_links
+                    and ctx.channel.permissions_for(ctx.guild.me).attach_files
+                ):
+                    try:
+                        await ctx.typing()
+                    except Exception:
+                        pass
 
     async def get_image(self, ctx: Context, *args):
         if len(ctx.message.attachments) > 0:
@@ -393,19 +393,19 @@ class Greed(Bot):
         if not message.guild:
             return
 
-        check = await self.db.fetchrow(
-            """
-            SELECT * FROM blacklisted
-            WHERE (object_id = $1 AND object_type = $2)
-            OR (object_id = $3 AND object_type = $4)
-        """,
-            message.author.id,
-            "user_id",
-            message.guild.id,
-            "guild_id",
-        )
-        if check:
-            return
+        # check = await self.db.fetchrow(
+        #     """
+        #     SELECT * FROM blacklisted
+        #     WHERE (object_id = $1 AND object_type = $2)
+        #     OR (object_id = $3 AND object_type = $4)
+        # """,
+        #     message.author.id,
+        #     "user_id",
+        #     message.guild.id,
+        #     "guild_id",
+        # )
+        # if check:
+        #     return
         if not self.is_ready():
             return
 
@@ -450,23 +450,23 @@ class Greed(Bot):
             await fill_commands(ctx)
         if await ctx.bot.is_owner(ctx.author):
             return True
-        missing_perms = []
-        if not ctx.channel:
+
+        if not ctx.channel or not ctx.guild:
             return False
-        if not ctx.channel.permissions_for(ctx.guild.me).send_messages:
-            missing_perms.append("send_messages")
-        if not ctx.channel.permissions_for(ctx.guild.me).embed_links:
-            missing_perms.append("embed_links")
-        if not ctx.channel.permissions_for(ctx.guild.me).attach_files:
-            missing_perms.append("attach_files")
-        if len(missing_perms) > 0:
+
+        missing_perms = [
+            perm for perm in ["send_messages", "embed_links", "attach_files"]
+            if not getattr(ctx.channel.permissions_for(ctx.guild.me), perm)
+        ]
+        if missing_perms:
             raise BotMissingPermissions(missing_perms)
+
         check = await self.db.fetchrow(
             """
             SELECT * FROM blacklisted
             WHERE (object_id = $1 AND object_type = $2)
             OR (object_id = $3 AND object_type = $4)
-        """,
+            """,
             ctx.author.id,
             "user_id",
             ctx.guild.id,
@@ -474,69 +474,44 @@ class Greed(Bot):
         )
         if check:
             return False
-        if restrictions := await self.db.fetch(
+
+        restrictions = await self.db.fetch(
             """SELECT role_id FROM command_restriction WHERE guild_id = $1 AND command_name = $2""",
             ctx.guild.id,
             ctx.command.qualified_name,
-        ):
-            can_use = True
-            for role_id in restrictions:
-                if role := ctx.guild.get_role(role_id):
-                    if role in ctx.author.roles:
-                        can_use = False
-                        break
-            if can_use is False:
-                roles = [
-                    ctx.guild.get_role(role_id.role_id)
-                    for role_id in restrictions
-                    if ctx.guild.get_role(role_id.role_id) is not None
-                ]
-                mention = ", ".join(r.mention for r in roles)
+        )
+        if restrictions:
+            roles = [ctx.guild.get_role(role_id) for role_id in restrictions]
+            if any(role in ctx.author.roles for role in roles):
+                mention = ", ".join(role.mention for role in roles if role)
                 await ctx.fail(f"you have one of the following roles {mention} and cannot use this command")
                 return False
+
+        retry_after = None
         if ctx.command.qualified_name == "reset":
             if retry_after := await ctx.bot.glory_cache.ratelimited(
                 f"rl:user_commands{ctx.author.id}", 2, 4
             ):
                 raise commands.CommandOnCooldown(None, retry_after, None)
-            else:
-                return True
-        if (
-            nodata := await self.db.fetchval(  # type: ignore  # noqa: F841
-                """SELECT state FROM terms_agreement WHERE user_id = $1""",
-                ctx.author.id,
-            )
-        ) is False:
-            return False
+            return True
 
-        if not await self.db.fetch(
+        if not await self.db.fetchval(
             """SELECT state FROM terms_agreement WHERE user_id = $1""", ctx.author.id
         ):
             message = await ctx.normal(
                 f"Greed bot will store your data. **By continuing to use our services**, you agree to our **[policy]({self.domain}/terms)**"
             )
-            await message.edit(
-                view=(
-                    view := PrivacyConfirmation(
-                        bot=self, message=message, invoker=ctx.author
-                    )
-                )
-            )
-
+            view = PrivacyConfirmation(bot=self, message=message, invoker=ctx.author)
+            await message.edit(view=view)
             await view.wait()
-            if view.value is None:
-                await self.db.execute(
-                    """INSERT INTO terms_agreement (user_id, state) VALUES ($1, $2) ON CONFLICT DO NOTHING;""",
-                    ctx.author.id,
-                    False,
-                )
-                return False
-            elif view.value is False:
-                await self.db.execute(
-                    """INSERT INTO terms_agreement (user_id, state) VALUES ($1, $2) ON CONFLICT DO NOTHING;""",
-                    ctx.author.id,
-                    False,
-                )
+
+            state = view.value if view.value is not None else False
+            await self.db.execute(
+                """INSERT INTO terms_agreement (user_id, state) VALUES ($1, $2) ON CONFLICT DO NOTHING;""",
+                ctx.author.id,
+                state,
+            )
+            if not state:
                 await message.edit(
                     embed=discord.Embed(
                         description=f"> {ctx.author.mention} has **declined our privacy policy** and as a result you have been **blacklisted from using any greed command or feature**. Feel free to accept our [**policy**](https://greed.bot/terms) using `{ctx.prefix}reset`",
@@ -544,80 +519,37 @@ class Greed(Bot):
                     )
                 )
                 return False
-            else:
-                await self.db.execute(
-                    """INSERT INTO terms_agreement (user_id, state) VALUES ($1, $2) ON CONFLICT DO NOTHING;""",
-                    ctx.author.id,
-                    True,
-                )
-                await message.delete()
+            await message.delete()
 
-        if data := await self.db.fetchrow(  # type: ignore  # noqa: F841
+        data = await self.db.fetchrow(
             """SELECT command, channels FROM disabled_commands WHERE guild_id = $1 AND command = $2""",
             ctx.guild.id,
             ctx.command.qualified_name.lower(),
-        ):
-            if channels := json.loads(data.channels):
-                if len(channels) > 0:
-                    if ctx.channel.id in channels:
-                        raise discord.ext.commands.errors.CommandError(
-                            f"`{ctx.command.qualified_name.lower()}` has been **disabled by moderators**"
-                        )
-                else:
-                    raise discord.ext.commands.errors.CommandError(
-                        f"`{ctx.command.qualified_name.lower()}` has been **disabled by moderators**"
-                    )
-            else:
+        )
+        if data:
+            channels = json.loads(data["channels"])
+            if not channels or ctx.channel.id in channels:
                 raise discord.ext.commands.errors.CommandError(
                     f"`{ctx.command.qualified_name.lower()}` has been **disabled by moderators**"
                 )
+
         if str(ctx.invoked_with).lower() == "help":
             if retry_after := await ctx.bot.glory_cache.ratelimited(
                 f"rl:user_commands{ctx.author.id}", 5, 5
             ):
                 raise commands.CommandOnCooldown(None, retry_after, None)
         else:
-            if cooldown_args := ctx.command.cooldown_args:
-                bucket_type = cooldown_args.get("type", "user")
-                limit, interval = cooldown_args.get("limit", (1, 5))
+            cooldown_args = ctx.command.cooldown_args or {}
+            bucket_type = cooldown_args.get("type", "user")
+            limit, interval = cooldown_args.get("limit", (3, 5))
 
-                if bucket_type.lower() == "guild":
-                    key = (
-                        f"rl:user_commands:{ctx.guild.id}:{ctx.command.qualified_name}"
-                    )
-                else:
-                    key = (
-                        f"rl:user_commands:{ctx.author.id}:{ctx.command.qualified_name}"
-                    )
-                rl = await ctx.bot.glory_cache.ratelimited(key, limit, interval)
-                if rl != 0:
-                    raise commands.CommandOnCooldown(None, rl, None)
-            else:
-                if cog_name := ctx.command.cog_name:
-                    if cog_name.lower() == "premium":
-                        rl = await ctx.bot.glory_cache.ratelimited(
-                            f"rl:user_commands:{ctx.author.id}:{ctx.command.qualified_name}",
-                            3,
-                            5,
-                        )
-                        if rl != 0:
-                            raise commands.CommandOnCooldown(None, rl, None)
-                    else:
-                        rl = await ctx.bot.glory_cache.ratelimited(
-                            f"rl:user_commands:{ctx.author.id}:{ctx.command.qualified_name}",
-                            3,
-                            5,
-                        )
-                        if rl != 0:
-                            raise commands.CommandOnCooldown(None, rl, None)
-                else:
-                    rl = await ctx.bot.glory_cache.ratelimited(
-                        f"rl:user_commands:{ctx.author.id}:{ctx.command.qualified_name}",
-                        3,
-                        5,
-                    )
-                    if rl != 0:
-                        raise commands.CommandOnCooldown(None, rl, None)
+            key = (
+                f"rl:user_commands:{ctx.guild.id}:{ctx.command.qualified_name}"
+                if bucket_type.lower() == "guild"
+                else f"rl:user_commands:{ctx.author.id}:{ctx.command.qualified_name}"
+            )
+            if await ctx.bot.glory_cache.ratelimited(key, limit, interval):
+                raise commands.CommandOnCooldown(None, retry_after, None)
 
         return True
 
@@ -779,7 +711,7 @@ class Greed(Bot):
         os.environ["JISHAKU_NO_UNDERSCORE"] = "True"
         os.environ["JISHAKU_RETAIN"] = "True"
         await self.load_extension("jishaku")
-        await self.load_extension("tool.important.subclasses.web")
+        # await self.load_extension("tool.important.subclasses.web")
 
     async def create_embed(self, code: str, **kwargs):
         builder = Script(code, **kwargs)
@@ -847,52 +779,52 @@ class Greed(Bot):
     #            self.dispatch('message',after)
     #        await self.process_commands(after)
 
-    async def dump_commandsXD(self):
-        commands = {}
-        def get_usage(command):
-            if not command.clean_params:
-                return "None"
-            return ", ".join(m for m in [str(c) for c in command.clean_params.keys()])
+    # async def dump_commandsXD(self):
+    #     commands = {}
+    #     def get_usage(command):
+    #         if not command.clean_params:
+    #             return "None"
+    #         return ", ".join(m for m in [str(c) for c in command.clean_params.keys()])
 
-        def get_aliases(command):
-            if len(command.aliases) == 0:
-                return ["None"]
-            return command.aliases
+    #     def get_aliases(command):
+    #         if len(command.aliases) == 0:
+    #             return ["None"]
+    #         return command.aliases
 
-        def get_category(command):
-            if "settings" not in command.qualified_name:
-                return command.cog_name
-            else:
-                return "settings"
+    #     def get_category(command):
+    #         if "settings" not in command.qualified_name:
+    #             return command.cog_name
+    #         else:
+    #             return "settings"
 
-        excluded = ["owner", "errors", "webserver", "jishaku"]
-        for command in self.walk_commands():
-            if cog := command.cog_name:
-                if cog.lower() in excluded:
-                    continue
-                if command.hidden or not command.brief:
-                    continue
-                if not commands.get(command.cog_name):
-                    commands[command.cog_name] = []
-                if not command.permissions:
-                    permissions = ["send_messages"]
-                else:
-                    permissions = command.permissions
-                commands[command.cog_name].append(
-                    {
-                        "name": command.qualified_name,
-                        "help": command.brief or "",
-                        "brief": [permissions.replace("_", " ").title()]
-                        if not isinstance(permissions, list)
-                        else [_.replace("_", " ").title() for _ in permissions],
-                        "usage": get_usage(command),
-                        "example": command.example or ""
-                    }
-                )
-        with open(
-            "/root/commands.json", "wb"
-        ) as file:
-            file.write(orjson.dumps(commands))
+    #     excluded = ["owner", "errors", "jishaku"]
+    #     for command in self.walk_commands():
+    #         if cog := command.cog_name:
+    #             if cog.lower() in excluded:
+    #                 continue
+    #             if command.hidden or not command.brief:
+    #                 continue
+    #             if not commands.get(command.cog_name):
+    #                 commands[command.cog_name] = []
+    #             if not command.permissions:
+    #                 permissions = ["send_messages"]
+    #             else:
+    #                 permissions = command.permissions
+    #             commands[command.cog_name].append(
+    #                 {
+    #                     "name": command.qualified_name,
+    #                     "help": command.brief or "",
+    #                     "brief": [permissions.replace("_", " ").title()]
+    #                     if not isinstance(permissions, list)
+    #                     else [_.replace("_", " ").title() for _ in permissions],
+    #                     "usage": get_usage(command),
+    #                     "example": command.example or ""
+    #                 }
+    #             )
+    #     with open(
+    #         "/root/commands.json", "wb"
+    #     ) as file:
+    #         file.write(orjson.dumps(commands))
 
     async def on_message(self, message: discord.Message) -> None:
         if not self.is_ready():
@@ -955,7 +887,7 @@ class Greed(Bot):
         if len(channels) == 0:
             try:
                 return await guild.owner.send(embed = discord.Embed(
-                    description=f"> Left due to the guild not having over **10 members**",
+                    description=f"> Left due to the guild not having over **30 members**",
                     color=self.color,
                 ))
             except Exception:
@@ -987,7 +919,7 @@ class Greed(Bot):
         if check:
             await guild.leave()
             return
-        if len(guild.members) < 10:
+        if len(guild.members) < 30:
             # if len(guild.members) < 75:
             #     if owner := guild.owner:
             #         try:
