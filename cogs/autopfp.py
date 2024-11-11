@@ -108,3 +108,12 @@ class AssetResponse(BaseModel):
         category = self.category.replace("Roadmen", "Gangster").replace("Egirl", "E-Girl")
         embed.set_footer(text = f"New {self.category} Avatar • ID: {self.id}{server}")
         return embed
+    
+class AutoPFP(Cog):
+    def __init__(self, bot: Client):
+        self.bot = bot
+        self.last_posted = {}
+        self.avatar_categories = ['girl', 'smoking', 'besties', 'animals', 'egirl', 'cars', 'edgy', 'random', 'anime', 'nike', 'female', 'aesthetic', 'hellokitty', 'roadmen', 'faceless', 'guns', 'cartoon', 'jewellry', 'shoes', 'male', 'money', 'body', 'drill', 'food', 'soft']
+        self.banner_categories = ['random', 'anime', 'imsg', 'mix']
+
+    async def cog_load(self):
