@@ -3,7 +3,6 @@ import re
 from dataclasses import dataclass
 from discord.ext import commands
 from discord.ext.commands import Context
-import typing
 from contextlib import suppress
 from aiohttp import ClientSession as Session
 from discord import GuildSticker
@@ -13,12 +12,10 @@ import unicodedata
 from loguru import logger
 from fast_string_match import closest_match
 
-
 @dataclass
 class MultipleArguments:
     first: str
     second: str
-
 
 DISCORD_ROLE_MENTION = re.compile(r"<@&(\d+)>")
 DISCORD_ID = re.compile(r"(\d+)")
@@ -28,17 +25,13 @@ DISCORD_MESSAGE = re.compile(
     r"(?:https?://)?(?:canary\.|ptb\.|www\.)?discord(?:app)?.(?:com/channels|gg)/(?P<guild_id>[0-9]{17,22})/(?P<channel_id>[0-9]{17,22})/(?P<message_id>[0-9]{17,22})"
 )
 
-
 class NonStrictMessage(commands.Converter):
     async def convert(self, ctx: Context, argument: str):
         if match := DISCORD_MESSAGE.match(argument):
             return match.group(3)
         return argument
 
-
 def has_permissions(**permissions):
-    """Check if the user has permissions to execute the command (fake permissions included)"""
-
     async def predicate(ctx: commands.Context):
         if isinstance(ctx, int):
             return [permission for permission, value in permissions.items() if value]
@@ -69,7 +62,6 @@ def has_permissions(**permissions):
 
     return commands.check(predicate)
 
-
 permissions = [
     "create_instant_invite", "kick_members", "ban_members", "administrator",
     "manage_channels", "manage_guild", "add_reactions", "view_audit_log",
@@ -87,12 +79,10 @@ permissions = [
 
 commands.has_permissions = has_permissions
 
-
 @dataclass
 class FakePermissionEntry:
     role: discord.Role
     permissions: Union[str, List[str]]
-
 
 def validate_permissions(perms: Union[str, List[str]]):
     if isinstance(perms, str):
@@ -101,7 +91,6 @@ def validate_permissions(perms: Union[str, List[str]]):
         if p not in permissions:
             raise commands.CommandError(f"`{p}` is not a valid permission")
     return True
-
 
 class FakePermissionConverter(commands.Converter):
     async def convert(self, ctx: Context, argument: str) -> Optional[FakePermissionEntry]:
@@ -113,14 +102,12 @@ class FakePermissionConverter(commands.Converter):
         validate_permissions(perms)
         return FakePermissionEntry(role=args[0], permissions=perms)
 
-
 class Argument(commands.Converter):
     async def convert(self, ctx: Context, argument: str) -> Optional[MultipleArguments]:
         args = [arg.strip() for arg in re.split(r'[ ,]', argument, 1)]
         if len(args) != 2:
             raise commands.CommandError("please include a `,` between arguments")
         return MultipleArguments(first=args[0], second=args[1])
-
 
 class Location(commands.Converter):
     async def convert(self, ctx: Context, argument: str):
@@ -133,7 +120,6 @@ class Location(commands.Converter):
                 data = await response.json()
                 return data.get("location")
             raise commands.CommandError(f"Location **{argument}** not found")
-
 
 class Emoji(commands.EmojiConverter):
     async def convert(self, ctx: "Context", argument: str) -> Optional[Union[discord.Emoji, discord.PartialEmoji]]:
@@ -149,7 +135,6 @@ class Emoji(commands.EmojiConverter):
                     raise commands.EmojiNotFound(argument)
             return argument
 
-
 class Sticker(GuildStickerConverter):
     async def convert(self, ctx: "Context", argument: str) -> Optional[GuildSticker]:
         if argument.isnumeric():
@@ -158,7 +143,6 @@ class Sticker(GuildStickerConverter):
             except GuildStickerNotFound:
                 raise
         return await super().convert(ctx, argument)
-
 
 class TextChannel(commands.TextChannelConverter):
     async def convert(self, ctx: Context, argument: str):
@@ -179,7 +163,6 @@ class TextChannel(commands.TextChannelConverter):
             return channel
         raise discord.ext.commands.errors.ChannelNotFound(f"channel `{argument}` not found")
 
-
 class CategoryChannel(commands.TextChannelConverter):
     async def convert(self, ctx: Context, argument: str):
         try:
@@ -197,7 +180,6 @@ class CategoryChannel(commands.TextChannelConverter):
         if channel:
             return channel
         raise discord.ext.commands.errors.ChannelNotFound(f"channel `{argument}` not found")
-
 
 class VoiceChannel(commands.TextChannelConverter):
     async def convert(self, ctx: Context, argument: str):
@@ -217,7 +199,6 @@ class VoiceChannel(commands.TextChannelConverter):
             return channel
         raise discord.ext.commands.errors.ChannelNotFound(f"channel `{argument}` not found")
 
-
 class User(commands.UserConverter):
     async def convert(self, ctx: Context, argument: str):
         argument = str(argument)
@@ -234,7 +215,6 @@ class User(commands.UserConverter):
             raise commands.UserNotFound(argument)
         return member
 
-
 class Member(commands.MemberConverter):
     async def convert(self, ctx: Context, argument: str):
         argument = str(argument)
@@ -248,23 +228,19 @@ class Member(commands.MemberConverter):
             raise commands.MemberNotFound(argument)
         return member
 
-
 class RolePosition(commands.CommandError):
     def __init__(self, message, **kwargs):
         self.message = message
         self.kwargs = kwargs
         super().__init__(self.message)
 
-
 link = re.compile(
     r"https?:\/\/(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&\/\/=]*(?:\.png|\.jpe?g|\.gif|\.jpg|))"
 )
 
-
 async def get_file_ext(url: str) -> str:
     file_ext1 = url.split("/")[-1].split(".")[1]
     return file_ext1.split("?")[0] if "?" in file_ext1 else file_ext1[:3]
-
 
 class Image(commands.Converter):
     async def convert(self, ctx: Context, argument: str = None) -> Optional[bytes]:
@@ -279,9 +255,8 @@ class Image(commands.Converter):
             raise commands.BadArgument("No image was provided.")
         return data
 
-
 class VoiceMessage(commands.Converter):
-    async def convert(self, ctx: "Context", argument: str = None, fail: bool = True) -> typing.Optional[str]:
+    async def convert(self, ctx: "Context", argument: str = None, fail: bool = True) -> Optional[str]:
         if match := link.match(argument):
             return match.group()
         if fail:
@@ -290,7 +265,7 @@ class VoiceMessage(commands.Converter):
             assert False
 
     @staticmethod
-    async def search(ctx: "Context", fail: bool = True) -> typing.Optional[str]:
+    async def search(ctx: "Context", fail: bool = True) -> Optional[str]:
         async for message in ctx.channel.history(limit=50):
             if message.attachments:
                 return message.attachments[0].url
@@ -299,9 +274,8 @@ class VoiceMessage(commands.Converter):
                 await ctx.send_help(ctx.command.qualified_name)
             assert False
 
-
 class Stickers(commands.Converter):
-    async def convert(self, ctx: "Context", argument: str, fail: bool = True) -> typing.Optional[str]:
+    async def convert(self, ctx: "Context", argument: str, fail: bool = True) -> Optional[str]:
         if match := link.match(argument):
             return match.group()
         if fail:
@@ -310,7 +284,7 @@ class Stickers(commands.Converter):
             assert False
 
     @staticmethod
-    async def search(ctx: "Context", fail: bool = True) -> typing.Optional[str]:
+    async def search(ctx: "Context", fail: bool = True) -> Optional[str]:
         if ctx.message.reference:
             return ctx.message.reference.resolved.stickers[0].url
         async for message in ctx.channel.history(limit=50):
@@ -321,9 +295,8 @@ class Stickers(commands.Converter):
                 await ctx.send_help(ctx.command.qualified_name)
             assert False
 
-
 class Attachment(commands.Converter):
-    async def convert(self, ctx: "Context", argument: str, fail: bool = True) -> typing.Optional[str]:
+    async def convert(self, ctx: "Context", argument: str, fail: bool = True) -> Optional[str]:
         if match := link.match(argument):
             return match.group()
         if fail:
@@ -332,7 +305,7 @@ class Attachment(commands.Converter):
             assert False
 
     @staticmethod
-    async def search(ctx: "Context", fail: bool = False) -> typing.Optional[str]:
+    async def search(ctx: "Context", fail: bool = False) -> Optional[str]:
         if ref := ctx.message.reference:
             logger.info(f"attachment search has a reference")
             if channel := ctx.guild.get_channel(ref.channel_id):
@@ -350,7 +323,6 @@ class Attachment(commands.Converter):
             assert False
         return None
 
-
 class Message(commands.MessageConverter):
     async def convert(self, ctx: Context, argument: str):
         if "discord.com/channels/" in argument:
@@ -359,7 +331,6 @@ class Message(commands.MessageConverter):
                 if channel := guild.get_channel(channel_id):
                     return await channel.fetch_message(message_id)
         return await ctx.channel.fetch_message(argument)
-
 
 class NonAssignedRole(commands.RoleConverter):
     async def convert(self, ctx: Context, arg: str):
@@ -379,7 +350,6 @@ class NonAssignedRole(commands.RoleConverter):
                 raise commands.RoleNotFound(argument)
             roles.append(role)
         return roles
-
 
 class Role(commands.RoleConverter):
     def __init__(self, assign: bool = True):
@@ -419,7 +389,6 @@ class Role(commands.RoleConverter):
                 roles.append(role)
         return roles
 
-
 class Command(commands.Command):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -438,7 +407,6 @@ class Command(commands.Command):
         elif data and data.status:
             return await ctx.reply("This command is disabled in this server.")
         return await self.invoke_command(ctx)
-
 
 def Feature(*args, **kwargs):
     return commands.command(cls=Command, *args, **kwargs)
