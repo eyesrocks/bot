@@ -1607,7 +1607,7 @@ class Economy(commands.Cog):
                     f"> `{user_position}.` {ctx.author.mention} - **{user_balance}**"
                 )
 
-            embed = Embed(title=f"{type.title()} Leaderboard", color=self.bot.color)
+            embed = Embed(title=f"{type.title()} Leaderboard (resets every week)", color=self.bot.color)
             embed.set_thumbnail(url="")
             embed.description = "\n".join(rows)
             return await ctx.send(embed=embed)
