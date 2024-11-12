@@ -6,19 +6,13 @@ app.get('/statusapi', async(req, res) => {
   resarray = [];
   let response1 = null;
   try {
-  response1 = await fetch('http://localhost:8493/status')
+  response1 = await fetch('http://localhost:8494/status')
   } catch (error) {
     res.json("OFFLINE")
     return
   }
   const data1 = await response1.json();
   resarray.push(data1);
-  const response2 = await fetch('http://localhost:8494/status');
-  const data2 = await response2.json();
-  resarray.push(data2);
-  const response3 = await fetch('http://localhost:8495/status');
-  const data3 = await response3.json();
-  resarray.push(data3);
   res.json(resarray);
 
 });

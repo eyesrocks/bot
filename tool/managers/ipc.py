@@ -52,10 +52,33 @@ class IPC:
         coro = getattr(self, method)
         tasks = [self.bot.connection.request(method, s, *args, **kwargs) for s in self.sources if s != self.bot.connection.local_name]
         tasks.append(coro(self.bot.connection.local_name, *args, **kwargs))
-        if method not in EXCLUDED_METHODS:
+        if method == "get_shards":
+            data = await gather(*tasks)
+            d = []
+            for i in data: d.extend(i)
+            return d
+        elif method not in EXCLUDED_METHODS:
             data = chain(await gather(*tasks))
         else:
             return await gather(*tasks)
+            
+    async def get_shards(self, source: str, *args, **kwargs):
+        data = []
+        for shard_id, shard in self.bot.shards.items():
+            guilds = [g for g in self.bot.guilds if g.shard_id == shard_id]
+            users = sum([len(g.members) for g in guilds])
+            data.append(
+                {
+                    "uptime": self.bot.startup_time.timestamp(),
+                    "latency": round(shard.latency * 1000),
+                    "servers": len(
+                        [g for g in self.bot.guilds if g.shard_id == shard_id]
+                    ),
+                    "users": users,
+                    "shard": shard_id,
+                }
+            )
+        return data
 
     async def get_guild_count(self, source: str):
         return len(self.bot.guilds)

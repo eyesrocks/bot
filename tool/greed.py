@@ -347,6 +347,9 @@ class Greed(Bot):
 
     async def guild_count(self) -> int:
         return sum(i for i in await self.ipc.roundtrip("get_guild_count"))
+        
+    async def shard_statistics(self):
+        return await self.ipc.roundtrip("get_shards")
 
     async def user_count(self) -> int:
         return sum(i for i in await self.ipc.roundtrip("get_user_count"))

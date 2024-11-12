@@ -15,7 +15,7 @@ def find_available_port(start_port=8493):
         port += 1
 ADDRESS = {
     "host": "0.0.0.0",
-    "port": find_available_port(),
+    "port": 8494,
 }
 
 
@@ -39,6 +39,8 @@ class WebServer(Cog):
         await self.app.shutdown()
 
     async def run(self):
+        if ADDRESS['port'] != 8494:
+            return
         await _run_app(self.app, **ADDRESS, print=None)  # type: ignore
 
     @staticmethod
@@ -46,21 +48,7 @@ class WebServer(Cog):
         return Response(text="hey this site belongs to icy.com kid", status=200)
 
     async def status(self, request: Request) -> Response:
-        data = []
-        for shard_id, shard in self.bot.shards.items():
-            guilds = [g for g in self.bot.guilds if g.shard_id == shard_id]
-            users = sum([len(g.members) for g in guilds])
-            data.append(
-                {
-                    "uptime": self.bot.startup_time.timestamp(),
-                    "latency": round(shard.latency * 1000),
-                    "servers": len(
-                        [g for g in self.bot.guilds if g.shard_id == shard_id]
-                    ),
-                    "users": users,
-                    "shard": shard_id,
-                }
-            )
+        data = await self.bot.shard_statistics()
         return json_response(data)
 
     async def avatars(self, request: Request) -> Response:
