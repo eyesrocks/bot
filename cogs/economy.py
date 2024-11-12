@@ -1591,7 +1591,7 @@ class Economy(commands.Cog):
                 if i <= 10:
                     formatted = self.chart.format_int(float(str(row['bal']).split(".")[0]), False)
                     rows.append(
-                        f"`{i}.` [**{await self.get_or_fetch(row['user_id'])}**](https://greed) - **{formatted}**"
+                        f"`{i}.` [**{await self.get_or_fetch(row['user_id'])}**](https://greed.my) - **{formatted}**"
                     )
                     if row["user_id"] == ctx.author.id:
                         user_in_top_10 = True
