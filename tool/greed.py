@@ -347,9 +347,6 @@ class Greed(Bot):
 
     async def guild_count(self) -> int:
         return sum(i for i in await self.ipc.roundtrip("get_guild_count"))
-        
-    async def shard_statistics(self):
-        return await self.ipc.roundtrip("get_shards")
 
     async def user_count(self) -> int:
         return sum(i for i in await self.ipc.roundtrip("get_user_count"))
@@ -495,7 +492,8 @@ class Greed(Bot):
             if retry_after := await ctx.bot.glory_cache.ratelimited(
                 f"rl:user_commands{ctx.author.id}", 2, 4
             ):
-                raise commands.CommandOnCooldown(None, retry_after, None)
+                if retry_after is not None:
+                    raise commands.CommandOnCooldown(None, retry_after, None)
             return True
 
         if not await self.db.fetchval(
