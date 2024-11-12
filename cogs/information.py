@@ -934,7 +934,7 @@ class Information(commands.Cog):
             status = "N/A"
         embed = discord.Embed(
             color=self.bot.color,
-            description=f"{user.name} {badges} \n{status_emoji}{status}",
+            title=f"{user.name} {badges} \n{status_emoji}{status}",
         )
 
         embed.add_field(
