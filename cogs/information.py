@@ -934,10 +934,10 @@ class Information(commands.Cog):
             status = "N/A"
         embed = discord.Embed(
             color=self.bot.color,
-            title=f"   ",
+            title=f"",
             description=f"{user.name} {badges} \n{status_emoji}{status}",
         )
-
+‎ 
         embed.add_field(
             name="**Created**",
             value=f"""**<t:{round(user.created_at.timestamp())}:D>**""",
