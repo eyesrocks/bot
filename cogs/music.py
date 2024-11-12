@@ -398,7 +398,7 @@ class Player(pomice.Player):
         # Calculate the number of filled and empty slots
         filled_slots = percentage // 10
         empty_slots = 10 - filled_slots
-        filled = "<:greedgreen:1262967760024244224>"
+        filled = "<a:CatJam:1304239102257922148>"
         white = "<:greedgray:1262967760741335102>"
         faded = "<:greeddark:1262967761941041315>"
         # Construct the bar
