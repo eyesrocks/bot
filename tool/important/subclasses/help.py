@@ -117,7 +117,9 @@ class BotHelpView(View):
             return await interaction.response.send_message(embed=embed, ephemeral=True)
         return await interaction.response.send_modal(HelpModal(self.bot, self.ctx))
 
-def shorten(text: str, limit: int) -> str:
+def shorten(text: Optional[str], limit: int) -> str:
+    if text is None:
+        return ""
     return text[: limit - 3] + "..." if len(text) >= limit else text
 
 class HelpInterface(View):

@@ -3,43 +3,6 @@ const shards = [
 
 ];
 
-const SECOND = 1000;
-const MINUTE = SECOND * 60;
-const HOUR = MINUTE * 60;
-const DAY = HOUR * 24;
-
-function formatUptime(uptime) {
-    // Get the current time in seconds
-    let now = Math.floor(Date.now() / 1000);
-    
-    // Calculate the actual uptime in seconds
-    let totalUptime = now - uptime;
-    
-    // If uptime is negative, return "0d 0h 0m 0s"
-    if (totalUptime < 0) {
-        return "0d 0h 0m 0s";
-    }
-
-    // Calculate days, hours, minutes, and seconds
-    let days = Math.floor(totalUptime / (DAY / 1000));
-    totalUptime %= (DAY / 1000);
-    let hours = Math.floor(totalUptime / (HOUR / 1000));
-    totalUptime %= (HOUR / 1000);
-    let minutes = Math.floor(totalUptime / (MINUTE / 1000));
-    totalUptime %= (MINUTE / 1000);
-    let seconds = Math.floor(totalUptime / 1000);
-
-    // Build the result string
-    let parts = [];
-    if (days > 0) parts.push(`${days}d`);
-    if (hours > 0) parts.push(`${hours}h`);
-    if (minutes > 0) parts.push(`${minutes}m`);
-    if (seconds > 0) parts.push(`${seconds}s`);
-
-    // Join the parts with a space and return the result
-    return parts.length > 0 ? parts.join(' ') : "0s"; // Return "0s" if all are zero
-}
-
 // Function to create a shard box element
 function createShardBox(shard) {
   const shardBox = document.createElement('div');
@@ -62,13 +25,7 @@ function createShardBox(shard) {
 
   // Create content for uptime, users, and servers
   const uptime = document.createElement('p');
-    // Convert milliseconds to a duration
-
-  // Humanize the duration
-  const humanizedUptime = `${formatUptime(shard.uptime)}`;
-
-  // Update the inner HTML
-  uptime.innerHTML = `Uptime: <span class="uptime">${humanizedUptime}</span>`;
+  uptime.innerHTML = `Uptime: <span class="uptime">${shard.uptime}</span>`;
 
   const users = document.createElement('p');
   users.innerHTML = `Users: <span class="users">${shard.users}</span>`;
@@ -143,11 +100,8 @@ function renderShards(shardData) {
     // Shard info
     const shardInfo = document.createElement('div');
     shardInfo.classList.add('shard-info');
-
-    // Humanize the duration
-    const humanizedUptime = `${formatUptime(shard.uptime)}`;
     shardInfo.innerHTML = `
-      <p><strong>Uptime:</strong> ${humanizedUptime}</p>
+      <p><strong>Uptime:</strong> ${shard.uptime}</p>
       <p><strong>Users:</strong> ${shard.users}</p>
       <p><strong>Servers:</strong> ${shard.servers}</p>
     `;

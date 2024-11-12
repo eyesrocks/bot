@@ -972,7 +972,7 @@ class Information(commands.Cog):
 
             embed.add_field(name="**__Roles__**", value=f"{roles}", inline=False)
 
-        embed.set_author(name=f"{user.name}", icon_url=user.display_avatar)
+
 
         embed.set_thumbnail(url=user.display_avatar)
 

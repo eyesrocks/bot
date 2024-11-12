@@ -1,5 +1,5 @@
 from gpt4all import GPT4All as GPT
-from asyncio import to_thread as run_safe, run
+from asyncio import run
 from typing import Optional, List
 from datetime import datetime
 from pydantic import BaseModel
@@ -36,21 +36,16 @@ class ModelType:
                 async with session.get(
                     "https://raw.githubusercontent.com/nomic-ai/gpt4all/main/gpt4all-chat/metadata/models2.json"
                 ) as f:
-                    models = [Model(**model) for model in loads(await f.read())]
-                    self.models = models
+                    self.models = [Model(**model) for model in loads(await f.read())]
         if not return_raw:
             return {model.name: model.filename for model in self.models}
-        return models
+        return self.models
 
     async def get_model(self, name: str):
         models = await self.get_all_models()
         if name not in models.keys() and name not in models.values():
             raise ValueError("Invalid model name.")
-        else:
-            if "." not in name:
-                return models[name]
-            else:
-                return name
+        return models[name] if "." not in name else name
 
 
 def get_timestamp() -> float:
@@ -71,7 +66,7 @@ class AIResponse(BaseModel):
 
 async def get_extension(url: str) -> str:
     async with ClientSession() as session:
-        async with session.request("HEAD", url) as request:
+        async with session.head(url) as request:
             return request.headers["Content-Type"].split("/")[-1]
 
 
@@ -91,10 +86,10 @@ class AI:
     ) -> Optional[AIResponse]:
         time_started = get_timestamp()
         model_name = await ModelType().get_model(model_name)
-        if model_name not in self.models.keys():
+        if model_name not in self.models:
             self.models[model_name] = GPT(n_threads=50, model_name=model_name)
-        self.gpt = self.models[model_name]
-        text = await run_safe(self.gpt.generate, input)
+        gpt = self.models[model_name]
+        text = await run(gpt.generate, input)
         return AIResponse(text=text, time_elapsed=get_timestamp() - time_started)
 
 
