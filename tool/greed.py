@@ -492,7 +492,7 @@ class Greed(Bot):
             if retry_after := await ctx.bot.glory_cache.ratelimited(
                 f"rl:user_commands{ctx.author.id}", 2, 4
             ):
-                if retry_after is not None:
+                if retry_after:
                     raise commands.CommandOnCooldown(None, retry_after, None)
             return True
 
@@ -549,7 +549,8 @@ class Greed(Bot):
                 if bucket_type.lower() == "guild"
                 else f"rl:user_commands:{ctx.author.id}:{ctx.command.qualified_name}"
             )
-            if await ctx.bot.glory_cache.ratelimited(key, limit, interval):
+            retry_after = await ctx.bot.glory_cache.ratelimited(key, limit, interval)
+            if retry_after:
                 raise commands.CommandOnCooldown(None, retry_after, None)
 
         return True

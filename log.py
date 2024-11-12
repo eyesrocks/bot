@@ -1,45 +1,30 @@
 from __future__ import annotations
 import logging
-from time import time
-
-import asyncio
-import logging
 import os
 import queue
 import sys
 import threading
-import time
+from time import sleep
 
-from limits import parse, strategies
+from limits import parse, strategies, storage
 from loguru import logger
+import coloredlogs
 
 LOG_LEVEL = os.getenv("LOG_LEVEL") or "INFO"
-
 LOG_LOCK = threading.Lock()
-from limits import storage
-
-import coloredlogs, asyncio
-
-
-
 
 def hook():
     pass
 
-
 def print_chunk(msg):
     print(msg, file=sys.stderr, end="", flush=True)
 
-
 class InterceptHandler(logging.Handler):
     def emit(self, record):
-        from loguru import logger
-
         try:
             level = logger.level(record.levelname).name
         except ValueError:
             level = record.levelno
-        # Find caller from where originated the logged message
         frame, depth = logging.currentframe(), 2
         while frame.f_code.co_filename == logging.__file__:
             frame = frame.f_back
@@ -48,10 +33,8 @@ class InterceptHandler(logging.Handler):
             level, record.getMessage()
         )
 
-
-class AsyncLogEmitter(object):
+class AsyncLogEmitter:
     def __init__(self, name=None) -> None:
-
         self.name = name
         self.queue = queue.SimpleQueue()
         self.thread = threading.Thread(target=self.runner)
@@ -60,7 +43,7 @@ class AsyncLogEmitter(object):
 
     def test(self):
         while not self.window.test(self.per_sec, "global", "log"):
-            time.sleep(0.01)
+            sleep(0.01)
         self.window.hit(self.per_sec, "global", "log")
 
     def runner(self):
@@ -76,7 +59,7 @@ class AsyncLogEmitter(object):
             while self.queue.qsize() > 250:
                 if not discards:
                     logger.warning(
-                        "Queue is at max! - Supressing logging to prevent high CPU blockage."
+                        "Queue is at max! - Suppressing logging to prevent high CPU blockage."
                     )
                     discards = True
                 msg = self.queue.get()
@@ -87,12 +70,9 @@ class AsyncLogEmitter(object):
     def emit(self, msg: str):
         self.queue.put(msg)
 
-
 def make_dask_sink(name=None, log_emitter=None):
-
     if log_emitter:
         emitter = log_emitter
-
     else:
         _emitter = AsyncLogEmitter(name=name)
         emitter = _emitter.emit
