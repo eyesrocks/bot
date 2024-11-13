@@ -54,8 +54,8 @@ class Hog(commands.Cog):
           #  },
         #)
 
-    @commands.Cog.listener("on_guild_update")
-    async def on_guild_update(self, before: discord.Guild, after: discord.Guild):
+    #@commands.Cog.listener("on_guild_update")
+    #async def on_guild_update(self, before: discord.Guild, after: discord.Guild):
         posthog.group_identify(
             "guild",
             str(after.id),
