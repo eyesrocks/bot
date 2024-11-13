@@ -33,9 +33,9 @@ class Hog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.description = "Posthog Analytics"
-#
-        @self.bot.after_invoke
-        async def after_invoke(ctx):
+
+       # @self.bot.after_invoke
+       # async def after_invoke(ctx):
             posthog.capture(
                 str(ctx.author.id),
                 event="command executed",
