@@ -60,11 +60,11 @@ class Hog(commands.Cog):
             #"guild",
             #str(after.id),
             #{
-                "name": after.name,
-                "subscription type": await get_sub_type(self, after),
-                "member count": after.member_count,
-            },
-        )
+                #"name": after.name,
+                #"subscription type": await get_sub_type(self, after),
+                #"member count": after.member_count,
+            #},
+        #)
 
 
 async def get_sub_type(self, guild):
