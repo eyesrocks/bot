@@ -67,21 +67,6 @@ class Hog(commands.Cog):
         #)
 
 
-async def get_sub_type(self, guild):
-    auth = await self.bot.db.fetchrow(
-        "SELECT * FROM AUTHORIZE WHERE guild_id = $1", guild.id
-    )
-    if auth:
-        till = auth.get("till")
-        if till:
-            return "monthly"
-        else:
-            return "onetime"
-    else:
-        if guild.member_count > 5000:
-            return "5k"
-        else:
-            return "none"
 
 
 async def setup(bot) -> None:
