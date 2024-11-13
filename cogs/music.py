@@ -399,7 +399,7 @@ class Player(pomice.Player):
         filled_slots = percentage // 10
         empty_slots = 10 - filled_slots
         filled = "<a:CatJam:1304239102257922148>"
-        white = "<:greedgray:1262967760741335102>"
+        white = "<a:CatJam:1304239102257922148"
         faded = "<:greeddark:1262967761941041315>"
         # Construct the bar
         bar = [white, white, white, white, white, white, white, white, white, white]
