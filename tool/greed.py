@@ -16,21 +16,20 @@ import asyncio  # type: ignore
 import tuuid
 from tool.views import VoicemasterInterface  # type: ignore
 from loguru import logger
-from voice import Whisper
 from tool.important.services.Webhook import Webhook as Webhooks
 # from logging import getLogger
 # logger = getLogger(__name__)
 from typing import Any, Dict, Optional, Union, Callable
 from psutil import Process
 from aiohttp import ClientSession
-from discord import Color, Message, Guild, AuditLogEntry, TextChannel
+from discord import Message, Guild, AuditLogEntry, TextChannel
 from discord.ext import commands
 from discord.ext.commands import (
     AutoShardedBot as Bot,
     when_mentioned_or,
     BotMissingPermissions,
 )
-from tool.aliases import handle_aliases, CommandAlias, fill_commands  # type: ignore
+from tool.aliases import fill_commands  # type: ignore
 from tool.modlogs import Handler  # type: ignore
 
 # from cogs.tickets import TicketView
@@ -41,11 +40,9 @@ from tool.important import Cache, Context, Database, MyHelpCommand, Red  # type:
 from tool.important.subclasses.parser import Script  # type: ignore
 from tool.important.subclasses.context import NonRetardedCache  # type: ignore
 from tool.important.runner import RebootRunner  # type: ignore
-from tool.snipe import Snipe, SnipeError  # type: ignore
-from tool.important.subclasses.command import RolePosition  # type: ignore
+from tool.snipe import Snipe  # type: ignore
 from tool.views import GiveawayView, PrivacyConfirmation  # type: ignore
 from tool.important.subclasses.interaction import GreedInteraction  # type: ignore # noqa: F401
-from _types import catch
 # from tool import MemberConverter
 from rival_tools import ratelimit, lock  # type: ignore
 from tool.rival import RivalAPI, get_statistics as get_stats, Statistics  # type: ignore
@@ -213,7 +210,8 @@ class Greed(Bot):
             return invocations
         self.command_dict = []
         for command in self.walk_commands():
-            for invocation in get_command_invocations(command): self.command_dict.append(invocation)
+            for invocation in get_command_invocations(command): 
+                self.command_dict.append(invocation)
         return self.command_dict
 
     async def get_reference(self, message: discord.Message):
@@ -888,7 +886,7 @@ class Greed(Bot):
         if len(channels) == 0:
             try:
                 return await guild.owner.send(embed = discord.Embed(
-                    description=f"> Left due to the guild not having over **30 members**",
+                    description="> Left due to the guild not having over **30 members**",
                     color=self.color,
                 ))
             except Exception:
@@ -896,7 +894,7 @@ class Greed(Bot):
         try:
             return await channels[0].send(
                 embed=discord.Embed(
-                    description=f"> Left due to the guild not having over **30 members**",
+                    description="> Left due to the guild not having over **30 members**",
                     color=self.color,
                 )
             )
