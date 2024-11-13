@@ -159,7 +159,7 @@ class Greed(Bot):
             ]
         )
         self._cd = commands.CooldownMapping.from_cooldown(
-            5.0, 10.0, commands.BucketType.user
+            3.0, 6.0, commands.BucketType.user
         )
         self.__cd = commands.CooldownMapping.from_cooldown(
             1.0, 3.0, commands.BucketType.user
@@ -740,6 +740,8 @@ class Greed(Bot):
                 )
             raise
     async def get_prefix(self, message: Message):
+        if not message.guild:
+            return
 
         user_prefix = await self.db.fetchval(
             """SELECT prefix
@@ -754,7 +756,6 @@ class Greed(Bot):
             WHERE guild_id = $1""",
             message.guild.id,
         )
-
 
         default_prefix = ","
 
@@ -955,97 +956,97 @@ class Greed(Bot):
             ),
         )
 
-    async def on_xdcommand_error(self, ctx: Context, exception: Exception) -> None:
-        bucket = self._cd.get_bucket(ctx.message)
-        retry_after = bucket.update_rate_limit()
-        if await self.glory_cache.ratelimited(
-            f"rl:error_message:{ctx.author.id}", 1, 5
-        ):
-            return
-        if retry_after:
-            return
+    # async def on_xdcommand_error(self, ctx: Context, exception: Exception) -> None:
+    #     bucket = self._cd.get_bucket(ctx.message)
+    #     retry_after = bucket.update_rate_limit()
+    #     if await self.glory_cache.ratelimited(
+    #         f"rl:error_message:{ctx.author.id}", 1, 5
+    #     ):
+    #         return
+    #     if retry_after:
+    #         return
 
-        error = getattr(exception, "original", exception)
-        ignored = [
-            commands.CommandNotFound,
-        ]
-        if type(exception) in ignored:
-            return
+    #     error = getattr(exception, "original", exception)
+    #     ignored = [
+    #         commands.CommandNotFound,
+    #     ]
+    #     if type(exception) in ignored:
+    #         return
 
-        if isinstance(exception, commands.CommandOnCooldown):
-            if await self.glory_cache.ratelimited(
-                f"rl:cooldown_message{ctx.author.id}", 1, exception.retry_after
-            ):
-                return
+    #     if isinstance(exception, commands.CommandOnCooldown):
+    #         if await self.glory_cache.ratelimited(
+    #             f"rl:cooldown_message{ctx.author.id}", 1, exception.retry_after
+    #         ):
+    #             return
 
-            return await ctx.fail(
-                f"Command is on a ``{exception.retry_after:.2f}s`` **cooldown**"
-            )
-        if isinstance(exception, commands.MissingPermissions):
-            if ctx.author.id in self.owner_ids:
-                return await ctx.reinvoke()
-            return await ctx.fail(
-                f"Must have **{', '.join(exception.missing_permissions)}** permissions"
-            )
-        if isinstance(exception, commands.MissingRequiredArgument):
-            return await ctx.fail(f"Provide a **{exception.param.name}**")
-        if isinstance(exception, commands.BadArgument):
-            error = exception
-            tb = "".join(
-                traceback.format_exception(type(error), error, error.__traceback__)
-            )
-            logger.info(tb)
-            exception = (
-                str(exception)
-                .replace("Member", "**Member**")
-                .replace("User", "**User**")
-            )
-            return await ctx.warning(f"{exception}")
-        if isinstance(exception, commands.BadUnionArgument):
-            return await ctx.warning(f"{exception}")
-        if isinstance(exception, commands.MemberNotFound):
-            return await ctx.warning("That Member **not** found")
-        if isinstance(exception, commands.UserNotFound):
-            return await ctx.warning("That User **not** found")
-        if isinstance(exception, commands.RoleNotFound):
-            return await ctx.warning("That Role was **not** found")
-        if isinstance(exception, commands.ChannelNotFound):
-            return await ctx.warning("That Channel was **not** found")
-        if isinstance(exception, commands.EmojiNotFound):
-            return await ctx.warning("That **Emoji** was not found")
-        if isinstance(exception, discord.ext.commands.errors.CommandError):
-            return await ctx.warning(str(exception))
-        if isinstance(exception, commands.CommandNotFound):
-            await self.paginators.check(ctx)
-            aliases = [
-                CommandAlias(command=command_name, alias=alias)
-                for command_name, alias in await self.db.fetch(
-                    "SELECT command_name, alias FROM aliases WHERE guild_id = $1",
-                    ctx.guild.id,
-                )
-            ]
-            return await handle_aliases(ctx, aliases)
-        if isinstance(exception, discord.ext.commands.errors.CheckFailure):
-            return
-        exc = "".join(
-            traceback.format_exception(type(error), error, error.__traceback__)
-        )
-        if isinstance(exception, SnipeError):
-            return await ctx.warning(str(exception))
-        log.error(
-            f'{type(error).__name__:25} > {ctx.guild} | {ctx.author} "{ctx.message.content}" \n {error} \n {exc}'
-        )
-        if isinstance(exception, RolePosition):
-            return await ctx.warning(str(exception))
-        if hasattr(exception, "message"):
-            return await ctx.warning(exception.message.split(":")[-1])
-        if "Missing Permissions" in str(exception):
-            return await ctx.warning(
-                "Due to hierarchy position I could not edit that object"
-            )
-        return await self.send_exception(
-            ctx, exception
-        )  # await ctx.warning(str(exception))
+    #         return await ctx.fail(
+    #             f"Command is on a ``{exception.retry_after:.2f}s`` **cooldown**"
+    #         )
+    #     if isinstance(exception, commands.MissingPermissions):
+    #         if ctx.author.id in self.owner_ids:
+    #             return await ctx.reinvoke()
+    #         return await ctx.fail(
+    #             f"Must have **{', '.join(exception.missing_permissions)}** permissions"
+    #         )
+    #     if isinstance(exception, commands.MissingRequiredArgument):
+    #         return await ctx.fail(f"Provide a **{exception.param.name}**")
+    #     if isinstance(exception, commands.BadArgument):
+    #         error = exception
+    #         tb = "".join(
+    #             traceback.format_exception(type(error), error, error.__traceback__)
+    #         )
+    #         logger.info(tb)
+    #         exception = (
+    #             str(exception)
+    #             .replace("Member", "**Member**")
+    #             .replace("User", "**User**")
+    #         )
+    #         return await ctx.warning(f"{exception}")
+    #     if isinstance(exception, commands.BadUnionArgument):
+    #         return await ctx.warning(f"{exception}")
+    #     if isinstance(exception, commands.MemberNotFound):
+    #         return await ctx.warning("That Member **not** found")
+    #     if isinstance(exception, commands.UserNotFound):
+    #         return await ctx.warning("That User **not** found")
+    #     if isinstance(exception, commands.RoleNotFound):
+    #         return await ctx.warning("That Role was **not** found")
+    #     if isinstance(exception, commands.ChannelNotFound):
+    #         return await ctx.warning("That Channel was **not** found")
+    #     if isinstance(exception, commands.EmojiNotFound):
+    #         return await ctx.warning("That **Emoji** was not found")
+    #     if isinstance(exception, discord.ext.commands.errors.CommandError):
+    #         return await ctx.warning(str(exception))
+    #     if isinstance(exception, commands.CommandNotFound):
+    #         await self.paginators.check(ctx)
+    #         aliases = [
+    #             CommandAlias(command=command_name, alias=alias)
+    #             for command_name, alias in await self.db.fetch(
+    #                 "SELECT command_name, alias FROM aliases WHERE guild_id = $1",
+    #                 ctx.guild.id,
+    #             )
+    #         ]
+    #         return await handle_aliases(ctx, aliases)
+    #     if isinstance(exception, discord.ext.commands.errors.CheckFailure):
+    #         return
+    #     exc = "".join(
+    #         traceback.format_exception(type(error), error, error.__traceback__)
+    #     )
+    #     if isinstance(exception, SnipeError):
+    #         return await ctx.warning(str(exception))
+    #     log.error(
+    #         f'{type(error).__name__:25} > {ctx.guild} | {ctx.author} "{ctx.message.content}" \n {error} \n {exc}'
+    #     )
+    #     if isinstance(exception, RolePosition):
+    #         return await ctx.warning(str(exception))
+    #     if hasattr(exception, "message"):
+    #         return await ctx.warning(exception.message.split(":")[-1])
+    #     if "Missing Permissions" in str(exception):
+    #         return await ctx.warning(
+    #             "Due to hierarchy position I could not edit that object"
+    #         )
+    #     return await self.send_exception(
+    #         ctx, exception
+    #     )  # await ctx.warning(str(exception))
 
     async def hierarchy(
         self,
