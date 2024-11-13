@@ -1,47 +1,63 @@
-import os
-import json
-import orjson
-import asyncio
-import datetime
-import traceback
-from typing import Any, Dict, Optional, Union, Callable
+#import log
 
+#log.make_dask_sink("rival")
+
+import discord_ios  # type: ignore # noqa: F401
+import traceback
+import os
 import discord
+import datetime
+import orjson
+import aiohttp
+from tool.important.levels import Level
+import json
+from tool.worker import start_dask  # type: ignore
+import asyncio  # type: ignore
+import tuuid
+from tool.views import VoicemasterInterface  # type: ignore
+from loguru import logger
+from voice import Whisper
+from tool.important.services.Webhook import Webhook as Webhooks
+# from logging import getLogger
+# logger = getLogger(__name__)
+from typing import Any, Dict, Optional, Union, Callable
+from psutil import Process
+from aiohttp import ClientSession
 from discord import Color, Message, Guild, AuditLogEntry, TextChannel
 from discord.ext import commands
-from aiohttp import ClientSession
-from psutil import Process
-from loguru import logger
+from discord.ext.commands import (
+    AutoShardedBot as Bot,
+    when_mentioned_or,
+    BotMissingPermissions,
+)
+from tool.aliases import handle_aliases, CommandAlias, fill_commands  # type: ignore
+from tool.modlogs import Handler  # type: ignore
 
-from tool.important.levels import Level
-from tool.worker import start_dask
-from tool.views import VoicemasterInterface, GiveawayView, PrivacyConfirmation
-from tool.important.services.Webhook import Webhook as Webhooks
-from tool.aliases import handle_aliases, CommandAlias, fill_commands
-from tool.modlogs import Handler
-from tool.processing import Transformers
+# from cogs.tickets import TicketView
+from tool.processing import Transformers  # type: ignore # noqa: E402
 from tool.managers.ipc import IPC
 from cogs.voicemaster import VmButtons
-from tool.important import Cache, Context, Database, MyHelpCommand, Red
-from tool.important.subclasses.parser import Script
-from tool.important.subclasses.context import NonRetardedCache
-from tool.important.runner import RebootRunner
-from tool.snipe import Snipe, SnipeError
-from tool.important.subclasses.command import RolePosition
-from tool.important.subclasses.interaction import GreedInteraction
+from tool.important import Cache, Context, Database, MyHelpCommand, Red  # type: ignore
+from tool.important.subclasses.parser import Script  # type: ignore
+from tool.important.subclasses.context import NonRetardedCache  # type: ignore
+from tool.important.runner import RebootRunner  # type: ignore
+from tool.snipe import Snipe, SnipeError  # type: ignore
+from tool.important.subclasses.command import RolePosition  # type: ignore
+from tool.views import GiveawayView, PrivacyConfirmation  # type: ignore
+from tool.important.subclasses.interaction import GreedInteraction  # type: ignore # noqa: F401
 from _types import catch
-from rival_tools import ratelimit, lock
-from tool.rival import RivalAPI, get_statistics as get_stats, Statistics
-from tool.paginate import Paginate
+# from tool import MemberConverter
+from rival_tools import ratelimit, lock  # type: ignore
+from tool.rival import RivalAPI, get_statistics as get_stats, Statistics  # type: ignore
+from tool.paginate import Paginate  # type: ignore
 from sys import stdout
-from tuuid import tuuid
 
 discord.Interaction.success = GreedInteraction.success
 discord.Interaction.fail = GreedInteraction.fail
 discord.Interaction.warning = GreedInteraction.warning
 discord.Interaction.normal = GreedInteraction.normal
 discord.Interaction.voice_client = GreedInteraction.voice_client
-
+# discord.message.Message.edit = edit
 get_changes = Union[
     Guild,
     AuditLogEntry,
@@ -60,7 +76,7 @@ if loguru:
     )
 
 
-class iteration:
+class iteration(object):
     def __init__(self, data: Any):
         self.data = data
         self.index = -1
@@ -83,14 +99,17 @@ ips = [
     "185.199.228.220:7300",
     "185.199.231.45:8382",
 ]
-ips = [f"{user_pass}{ip}" for ip in ips]
+for i in ips:
+    ips[ips.index(i)] = f"{user_pass}{i}"
 
 
-class Greed(commands.AutoShardedBot):
+class Greed(Bot):
     def __init__(self, config: Dict[str, Any], *args, **kwargs) -> None:
         super().__init__(
             command_prefix=self.get_prefix,
-            allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
+            allowed_mentions=discord.AllowedMentions(
+                users=True, roles=False, everyone=False
+            ),
             strip_after_prefix=True,
             intents=config["intents"],
             case_insensitive=True,
@@ -99,6 +118,7 @@ class Greed(commands.AutoShardedBot):
             enable_debug_events=True,
             delay_ready=True,
             help_command=MyHelpCommand(),
+            #            proxy=f"{user_pass}{ips[1]}",
             *args,
             **kwargs,
         )
@@ -140,11 +160,17 @@ class Greed(commands.AutoShardedBot):
                 if cmd.cog_name not in ("Jishaku", "events", "Owner")
             ]
         )
-        self._cd = commands.CooldownMapping.from_cooldown(5.0, 10.0, commands.BucketType.user)
-        self.__cd = commands.CooldownMapping.from_cooldown(1.0, 3.0, commands.BucketType.user)
+        self._cd = commands.CooldownMapping.from_cooldown(
+            5.0, 10.0, commands.BucketType.user
+        )
+        self.__cd = commands.CooldownMapping.from_cooldown(
+            1.0, 3.0, commands.BucketType.user
+        )
         self.eros = "52ab341c-58c0-42f2-83ba-bde19f15facc"
         self.check(self.command_check)
         self.before_invoke(self.before_all_commands)
+
+
 
     def get_timestamp(self, dt: Optional[datetime.datetime] = None, style: str = "R"):
         if dt is None:
@@ -170,25 +196,26 @@ class Greed(commands.AutoShardedBot):
     def get_command_dict(self) -> list:
         if self.command_dict:
             return self.command_dict
-
         def get_command_invocations(command, prefix=''):
             invocations = []
+
             base_command = prefix + command.name
             invocations.append(base_command)
+
             for alias in command.aliases:
                 invocations.append(prefix + alias)
+
             if isinstance(command, commands.Group):
                 for subcommand in command.commands:
                     sub_invocations = get_command_invocations(subcommand, prefix=base_command + ' ')
                     for alias in command.aliases:
                         sub_invocations.extend(get_command_invocations(subcommand, prefix=prefix + alias + ' '))
                         invocations.extend(sub_invocations)
-            return invocations
 
+            return invocations
         self.command_dict = []
         for command in self.walk_commands():
-            for invocation in get_command_invocations(command):
-                self.command_dict.append(invocation)
+            for invocation in get_command_invocations(command): self.command_dict.append(invocation)
         return self.command_dict
 
     async def get_reference(self, message: discord.Message):
@@ -205,10 +232,12 @@ class Greed(commands.AutoShardedBot):
                 return await c.fetch_message(message.reference.message_id)
         return None
 
-    async def do_webhooks(self, channel: TextChannel, webhooks: Optional[str] = None, **kwargs):
+    async def do_webhooks(
+        self, channel: TextChannel, webhooks: Optional[str] = None, **kwargs
+    ):
         if not kwargs.get("name"):
             kwargs["name"] = "greed"
-        async with ClientSession() as session:
+        async with aiohttp.ClientSession() as session:
             if webhooks:
                 wh = json.loads(webhooks)
                 for w in wh:
@@ -217,7 +246,11 @@ class Greed(commands.AutoShardedBot):
                         await _.edit(**kwargs)
                     except Exception:
                         try:
-                            sh = (await channel.guild.get_channel(w[0]).create_webhook(**kwargs)).url
+                            sh = (
+                                await channel.guild.get_channel(w[0]).create_webhook(
+                                    **kwargs
+                                )
+                            ).url
                             wh[wh.index(w)] = [w[0], w[1], sh]
                         except Exception:
                             wh.remove(w)
@@ -231,6 +264,7 @@ class Greed(commands.AutoShardedBot):
     async def before_all_commands(self, ctx: Context):
         ctx.timer = datetime.datetime.now().timestamp()
         if ctx.command is not None:
+#            if not await self.db.fetchrow("""SELECT * FROM reskin.server WHERE guild_id = $1""", ctx.guild.id):
             if "purge" not in ctx.command.qualified_name:
                 if (
                     ctx.channel.permissions_for(ctx.guild.me).send_messages
@@ -246,11 +280,15 @@ class Greed(commands.AutoShardedBot):
         if len(ctx.message.attachments) > 0:
             return ctx.message.attachments[0].url
         elif ctx.message.reference:
-            if msg := await self.get_message(ctx.channel, ctx.message.reference.message_id):
+            if msg := await self.get_message(
+                ctx.channel, ctx.message.reference.message_id
+            ):
                 if len(msg.attachments) > 0:
                     return msg.attachments[0].url
                 else:
-                    logger.info(f"there are no attachments for {msg} : {msg.attachments}")
+                    logger.info(
+                        f"there are no attachments for {msg} : {msg.attachments}"
+                    )
             else:
                 logger.info("could not get message")
         else:
@@ -265,7 +303,7 @@ class Greed(commands.AutoShardedBot):
             INSERT INTO command_usage (guild_id, user_id, command_name, command_type)
                 VALUES ($1,$2,$3,$4)
             ON CONFLICT (guild_id, user_id, command_name) DO UPDATE SET
-            uses = command_usage.uses + 1;
+    uses = command_usage.uses + 1;
             """,
             ctx.guild.id,
             ctx.author.id,
@@ -305,6 +343,7 @@ class Greed(commands.AutoShardedBot):
             del roles
             return False
         return True
+
 
     async def guild_count(self) -> int:
         return sum(i for i in await self.ipc.roundtrip("get_guild_count"))
@@ -353,8 +392,23 @@ class Greed(commands.AutoShardedBot):
     async def process_commands(self, message: Message):
         if not message.guild:
             return
+
+        # check = await self.db.fetchrow(
+        #     """
+        #     SELECT * FROM blacklisted
+        #     WHERE (object_id = $1 AND object_type = $2)
+        #     OR (object_id = $3 AND object_type = $4)
+        # """,
+        #     message.author.id,
+        #     "user_id",
+        #     message.guild.id,
+        #     "guild_id",
+        # )
+        # if check:
+        #     return
         if not self.is_ready():
             return
+
         return await super().process_commands(message)
 
     async def log_command(self, ctx: Context):
@@ -387,7 +441,7 @@ class Greed(commands.AutoShardedBot):
             )
             .set_author(
                 name="Greed",
-                icon_url=self.user.avatar.url,
+                icon_url=self.user.avatar.url,  # Assuming self.user is your bot user object
             )
         )
 
@@ -405,7 +459,7 @@ class Greed(commands.AutoShardedBot):
             if not getattr(ctx.channel.permissions_for(ctx.guild.me), perm)
         ]
         if missing_perms:
-            raise commands.BotMissingPermissions(missing_perms)
+            raise BotMissingPermissions(missing_perms)
 
         check = await self.db.fetchrow(
             """
@@ -563,6 +617,7 @@ class Greed(commands.AutoShardedBot):
             return await ctx.alternative_paginate(embeds)
         else:
             embed.description = "".join(f"{r}\n" for r in rows)
+            # t = plural(len(rows)):type.title()
             embed.set_footer(text=f"Page 1/1 ({plural(rows).do_plural(type.title())})")
             return await ctx.send(embed=embed)
 
@@ -597,6 +652,17 @@ class Greed(commands.AutoShardedBot):
 
     async def on_ready(self) -> None:
         log.info(f"Logged in as {self.user} ({self.user.id})")
+        # self.browser = Browser(
+        #     executable_path="/usr/bin/google-chrome",
+        #     args=(
+        #         "--ignore-certificate-errors",
+        #         "--disable-extensions",
+        #         "--no-sandbox",
+        #         "--headless",
+        #     ),
+        # )
+
+        # await self.browser.__aenter__()
         self.ipc = IPC(self)
         await self.ipc.setup()
         await self.levels.setup(self)
@@ -604,6 +670,7 @@ class Greed(commands.AutoShardedBot):
         self.runner = RebootRunner(self, "cogs")
         await self.load_cogs()
         await self.runner.start()
+        #await self.check_guilds()
         log.info("Loaded all cogs")
 
     async def load_cog(self, cog: str):
@@ -638,9 +705,11 @@ class Greed(commands.AutoShardedBot):
         self._connection.botstate = self
         self.loop.create_task(self.cache.setup_cache())
         self.levels = Level(0.5, self)
+    #    await self.levels.setup(self)
         self.add_view(VmButtons(self))
         self.add_view(VoicemasterInterface(self))
         self.add_view(GiveawayView())
+        #        self.add_view(TicketView(self, True))
         os.environ["JISHAKU_NO_UNDERSCORE"] = "True"
         os.environ["JISHAKU_RETAIN"] = "True"
         await self.load_extension("jishaku")
@@ -692,8 +761,8 @@ class Greed(commands.AutoShardedBot):
         default_prefix = ","
 
         if user_prefix and message.content.strip().startswith(user_prefix):
-            return commands.when_mentioned_or(user_prefix)(self, message)
-        return commands.when_mentioned_or(server_prefix or default_prefix)(self, message)
+            return when_mentioned_or(user_prefix)(self, message)
+        return when_mentioned_or(server_prefix or default_prefix)(self, message)
 
 
     async def get_context(self, message, *, cls=Context):
@@ -704,8 +773,60 @@ class Greed(commands.AutoShardedBot):
             return
         if not after.edited_at:
             return
+        #        if after.edited_at - after.created_at > timedelta(minutes=1):
+        #           return
         if not before.author.bot:
             await self.on_message(after)
+
+    #            self.dispatch('message',after)
+    #        await self.process_commands(after)
+
+    # async def dump_commandsXD(self):
+    #     commands = {}
+    #     def get_usage(command):
+    #         if not command.clean_params:
+    #             return "None"
+    #         return ", ".join(m for m in [str(c) for c in command.clean_params.keys()])
+
+    #     def get_aliases(command):
+    #         if len(command.aliases) == 0:
+    #             return ["None"]
+    #         return command.aliases
+
+    #     def get_category(command):
+    #         if "settings" not in command.qualified_name:
+    #             return command.cog_name
+    #         else:
+    #             return "settings"
+
+    #     excluded = ["owner", "errors", "jishaku"]
+    #     for command in self.walk_commands():
+    #         if cog := command.cog_name:
+    #             if cog.lower() in excluded:
+    #                 continue
+    #             if command.hidden or not command.brief:
+    #                 continue
+    #             if not commands.get(command.cog_name):
+    #                 commands[command.cog_name] = []
+    #             if not command.permissions:
+    #                 permissions = ["send_messages"]
+    #             else:
+    #                 permissions = command.permissions
+    #             commands[command.cog_name].append(
+    #                 {
+    #                     "name": command.qualified_name,
+    #                     "help": command.brief or "",
+    #                     "brief": [permissions.replace("_", " ").title()]
+    #                     if not isinstance(permissions, list)
+    #                     else [_.replace("_", " ").title() for _ in permissions],
+    #                     "usage": get_usage(command),
+    #                     "example": command.example or ""
+    #                 }
+    #             )
+    #     with open(
+    #         "/root/commands.json", "wb"
+    #     ) as file:
+    #         file.write(orjson.dumps(commands))
 
     async def on_message(self, message: discord.Message) -> None:
         if not self.is_ready():
@@ -768,7 +889,7 @@ class Greed(commands.AutoShardedBot):
         if len(channels) == 0:
             try:
                 return await guild.owner.send(embed = discord.Embed(
-                    description="> Left due to the guild not having over **30 members**",
+                    description=f"> Left due to the guild not having over **30 members**",
                     color=self.color,
                 ))
             except Exception:
@@ -776,7 +897,7 @@ class Greed(commands.AutoShardedBot):
         try:
             return await channels[0].send(
                 embed=discord.Embed(
-                    description="> Left due to the guild not having over **30 members**",
+                    description=f"> Left due to the guild not having over **30 members**",
                     color=self.color,
                 )
             )
@@ -801,12 +922,23 @@ class Greed(commands.AutoShardedBot):
             await guild.leave()
             return
         if len(guild.members) < 30:
+            # if len(guild.members) < 75:
+            #     if owner := guild.owner:
+            #         try:
+            #             await owner.send(
+            #                 embed=discord.Embed(
+            #                     description="> I have left your guild due to you not having **75 members**",
+            #                     color=self.bot.color,
+            #                 )
+            #             )
+            #         except Exception:
+            #             pass
+            #         return await guild.leave()
             await self.leave_message(guild)
             return await guild.leave()
         await self.join_message(guild)
-
     async def send_exception(self, ctx: Context, exception: Exception):
-        code = tuuid()
+        code = tuuid.tuuid()
         await self.db.execute(
             """INSERT INTO traceback (command, error_code, error_message, guild_id, channel_id, user_id, content) VALUES($1, $2, $3, $4, $5, $6, $7)""",
             ctx.command.qualified_name,
