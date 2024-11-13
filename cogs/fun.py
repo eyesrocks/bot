@@ -390,18 +390,14 @@ class Fun(commands.Cog):
     async def howgay(self, ctx, user: discord.Member = None):
 
         if user is None:
-            embed = discord.Embed(
-                color=self.bot.color,
-                title="gay r8",
-                description=f"{ctx.author.mention} is `{random.randrange(201)}%` gay",
-            )
-            await ctx.reply(embed=embed, mention_author=False)
-        else:
-            embed = discord.Embed(
-                color=self.bot.color,
-                title="gay r8",
-                description=f"{user.mention} is `{random.randrange(201)}%` gay",
-            )
+            user = ctx.author
+
+        embed = discord.Embed(
+            color=self.bot.color,
+            title="gay r8",
+            description=f"{user.mention} is `{random.randrange(201)}%` gay",
+        )
+        await ctx.reply(embed=embed, mention_author=False)
 
     @commands.command(help="shows your iq", description="fun", usage="<member>")
     async def iq(self, ctx, user: discord.Member = None):
