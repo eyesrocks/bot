@@ -36,12 +36,12 @@ class Hog(commands.Cog):
 
        # @self.bot.after_invoke
        # async def after_invoke(ctx):
-            posthog.capture(
-                str(ctx.author.id),
-                event="command executed",
-                properties={"command name": ctx.command.qualified_name},
-                groups={"guild": str(ctx.guild.id)},
-            )
+           # posthog.capture(
+              #  str(ctx.author.id),
+              #  event="command executed",
+               # properties={"command name": ctx.command.qualified_name},
+              #  groups={"guild": str(ctx.guild.id)},
+           # )
 
     @commands.Cog.listener("on_guild_join")
     async def on_guild_join(self, guild: discord.Guild):
