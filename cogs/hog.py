@@ -48,8 +48,8 @@ class Hog(commands.Cog):
      #   posthog.group_identify(
       #      "guild",
        #     str(guild.id),
-            {
-                "name": guild.name,
+        #    {
+         #       "name": guild.name,
                 "member count": guild.member_count,
             },
         )
