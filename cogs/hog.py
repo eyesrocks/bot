@@ -58,8 +58,8 @@ class Hog(commands.Cog):
     #async def on_guild_update(self, before: discord.Guild, after: discord.Guild):
         #posthog.group_identify(
             #"guild",
-            str(after.id),
-            {
+            #str(after.id),
+            #{
                 "name": after.name,
                 "subscription type": await get_sub_type(self, after),
                 "member count": after.member_count,
