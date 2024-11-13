@@ -146,8 +146,6 @@ class Greed(Bot):
         self.http.iterate_local_addresses = False
         self.loaded = False
         self.guilds_maxed = True
-        self.whitelisted = [1262921792440242286, 1262966050190786633, 1270023221181153332]
-        self.owner_channel = 1262966163600703529
         self.to_send = []
         self.authentication = [
             self.config["token"],
@@ -456,7 +454,7 @@ class Greed(Bot):
 
         missing_perms = [
             perm for perm in ["send_messages", "embed_links", "attach_files"]
-            if not getattr(ctx.channel.permissions_for(ctx.guild.me), perm)
+            if not getattr(ctx.channel.permissions_for(ctx.me), perm)
         ]
         if missing_perms:
             raise BotMissingPermissions(missing_perms)
