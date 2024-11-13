@@ -402,7 +402,7 @@ class Fun(commands.Cog):
                 title="gay r8",
                 description=f"{user.mention} is `{random.randrange(201)}%` gay",
             )
-            
+            await ctx.reply(embed=embed, mention_author=False)
 
     @commands.command(help="shows your iq", description="fun", usage="<member>")
     async def iq(self, ctx, user: discord.Member = None):
