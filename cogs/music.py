@@ -400,7 +400,7 @@ class Player(pomice.Player):
         empty_slots = 10 - filled_slots
         filled = "<a:CatJam:1304239102257922148>"
         white = "<a:CatJam:1304239102257922148"
-        faded = "<:greeddark:1262967761941041315>"
+        faded = "<a:CatJam:1304239102257922148"
         # Construct the bar
         bar = [white, white, white, white, white, white, white, white, white, white]
         for i in range(filled_slots):
