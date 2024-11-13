@@ -50,7 +50,7 @@ class Hog(commands.Cog):
        #     str(guild.id),
         #    {
          #       "name": guild.name,
-                "member count": guild.member_count,
+               # "member count": guild.member_count,
           #  },
         #)
 
