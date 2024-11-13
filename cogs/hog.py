@@ -52,7 +52,7 @@ class Hog(commands.Cog):
          #       "name": guild.name,
                 "member count": guild.member_count,
           #  },
-        )
+        #)
 
     @commands.Cog.listener("on_guild_update")
     async def on_guild_update(self, before: discord.Guild, after: discord.Guild):
