@@ -43,11 +43,11 @@ class Hog(commands.Cog):
               #  groups={"guild": str(ctx.guild.id)},
            # )
 
-    @commands.Cog.listener("on_guild_join")
-    async def on_guild_join(self, guild: discord.Guild):
-        posthog.group_identify(
-            "guild",
-            str(guild.id),
+   # @commands.Cog.listener("on_guild_join")
+    #async def on_guild_join(self, guild: discord.Guild):
+     #   posthog.group_identify(
+      #      "guild",
+       #     str(guild.id),
             {
                 "name": guild.name,
                 "member count": guild.member_count,
