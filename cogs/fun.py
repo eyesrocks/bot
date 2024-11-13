@@ -389,18 +389,20 @@ class Fun(commands.Cog):
     @commands.command(help="shows how gay you are", description="fun", usage="<member>")
     async def howgay(self, ctx, user: discord.Member = None):
 
+        percentage = random.randint(1, 100)
+
         if user is None:
             embed = discord.Embed(
                 color=self.bot.color,
                 title="gay r8",
-                description=f"{ctx.author.mention} is `{random.randrange(201)}%` gay",
+                description=f"{ctx.author.mention} is `{percentage}%` gay",
             )
             await ctx.reply(embed=embed, mention_author=False)
         else:
             embed = discord.Embed(
                 color=self.bot.color,
                 title="gay r8",
-                description=f"{user.mention} is `{random.randrange(201)}%` gay",
+                description=f"{user.mention} is `{percentage}%` gay",
             )
             await ctx.reply(embed=embed, mention_author=False)
 
