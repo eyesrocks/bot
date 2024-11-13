@@ -68,6 +68,5 @@ class Hog(commands.Cog):
 
 
 
-
 async def setup(bot) -> None:
     return await bot.add_cog(Hog(bot))
