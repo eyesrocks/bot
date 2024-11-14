@@ -87,7 +87,7 @@ def make_dask_sink(name=None, log_emitter=None):
                 level=LOG_LEVEL,
                 diagnose=True,
                 catch=True,
-                format="<le>{time:HH:mm:ss.SSS}</le>|<ly>{thread.name}</ly> |<level>{level:<7}</level>|<cyan>{name}</cyan>(<cyan>{function}</cyan>:<cyan>{line}</cyan>) <level>{message}</level>",
+                format="|<level>{level:<7}</level>|<cyan>{name}</cyan>(<cyan>{function}</cyan>:<cyan>{line}</cyan>) <level>{message}</level>",
             )
         ]
     )

@@ -413,7 +413,7 @@ class Servers(Cog):
         if not data:
             return False
         role = role or data.get("role_id")
-        channels = [ctx.guild.get_channel(int(r)) for r in json.loads(data.channels) if ctx.guild.get_channel(int(r))]
+        channels = [ctx.guild.get_channel(int(r)) for r in json.loads(data.channels or '[]') if ctx.guild.get_channel(int(r))]
         if not channels:
             return False
         if isinstance(role, int):
@@ -3241,7 +3241,7 @@ class Servers(Cog):
         if not reaction:
             await self.bot.db.exuecute("""DELETE FROM autoreact_event WHERE guild_id = $1 AND event = $2""", ctx.guild.id, "stickers")
             self.bot.cache.autoreacts[ctx.guild.id].pop("stickers", None)
-            return await ctx.success(f"successfully **cleared** all sticker auto reactions")
+            return await ctx.success("successfully **cleared** all sticker auto reactions")
         reaction = str(reaction)
         if reaction is None:
             return await ctx.fail("**Emoji** could **not** be found")
@@ -4067,6 +4067,59 @@ class Servers(Cog):
             reason=f"Thread unlocked by moderator {ctx.author.name}"
         )
         return await ctx.success(f"Successfully unlocked {thread.name}")
+    
+    @commands.group(name="pingonjoin", aliases=["poj"], brief="Toggle ping on join", invoke_without_command=True)
+    @commands.has_permissions(manage_guild=True)
+    async def pingonjoin(self, ctx: Context):
+        return await ctx.send_help(ctx.command.qualified_name)
+    
+    @pingonjoin.command(   
+        name="enable", 
+        aliases=["on"], 
+        brief="Enable ping on join"
+    )
+    @commands.has_permissions(manage_guild=True)
+    async def pingonjoin_enable(self, ctx: Context, channel: discord.TextChannel, threshold: int = None):
+        threshold = threshold or 1
+        await self.bot.db.execute(
+            """
+            INSERT INTO pingonjoin (guild_id, channel_id, threshold) 
+            VALUES ($1, $2, $3)
+              ON CONFLICT (guild_id) 
+              DO UPDATE SET channel_id = excluded.channel_id, threshold = excluded.threshold
+            """,
+            ctx.guild.id,
+            channel.id,
+            threshold
+        )
+        return await ctx.success(f"**Ping on join** enabled in {channel.mention} with a threshold of {threshold}")
+    
+    @pingonjoin.command(
+        name="message",
+        aliases=["msg"],
+    )
+    @commands.has_permissions(manage_guild=True)
+    async def pingonjoin_message(self, ctx: Context, *, message: EmbedConverter):
+        await self.bot.db.execute(
+            "UPDATE pingonjoin SET message = $1 WHERE guild_id = $2",
+            message,
+
+            ctx.guild.id
+        )
+        return await ctx.success(f"**Ping on join** message set to {message}")
+    
+    @pingonjoin.command(
+        name="disable",
+        aliases=["off", "reset"],
+        brief="Resets ping on join module"
+    )
+    @commands.has_permissions(manage_guild=True)
+    async def pingonjoin_disable(self, ctx: Context):
+        await self.bot.db.execute(
+            "DELETE FROM pingonjoin WHERE guild_id = $1",
+            ctx.guild.id
+        )
+        return await ctx.success("**Ping on join** has been disabled")
 
 async def setup(bot: "Greed") -> None:
     await bot.add_cog(Servers(bot))

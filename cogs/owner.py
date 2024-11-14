@@ -411,7 +411,7 @@ class Owner(commands.Cog):
         try:
             await guild.unban(discord.Object(owner_id))
             await ctx.success(
-                f"Successfully unbanned the bot owner from {guild.name}({owne.id})"
+                f"Successfully unbanned the bot owner from {guild.name}"
             )
         except discord.HTTPException:
             await ctx.fail(

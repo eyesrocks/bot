@@ -47,7 +47,6 @@ class EmbedBuilder:
             "{track}": lastfm_data.get("track", ""),
             "{track.duration}": lastfm_data.get("duration", ""),
             "{artist}": lastfm_data.get("artist", ""),
-            "{user}": lastfm_data.get("user", ""),
             "{avatar}": lastfm_data.get("avatar", ""),
             "{track.url}": lastfm_data.get("track.url", ""),
             "{artist.url}": lastfm_data.get("artist.url", ""),

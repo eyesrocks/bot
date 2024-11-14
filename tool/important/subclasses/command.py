@@ -33,28 +33,24 @@ class NonStrictMessage(commands.Converter):
 
 def has_permissions(**permissions):
     async def predicate(ctx: commands.Context):
-        if isinstance(ctx, int):
-            return [permission for permission, value in permissions.items() if value]
         if ctx.author.id in ctx.bot.owner_ids or ctx.author.guild_permissions.administrator:
             return True
 
         missing_permissions = [
-            permission for permission in permissions
-            if not getattr(ctx.author.guild_permissions, permission, False)
+            perm for perm, value in permissions.items()
+            if value and not getattr(ctx.author.guild_permissions, perm, False)
         ]
 
         if missing_permissions:
-            mroles = [r.id for r in ctx.author.roles if r.is_assignable()]
+            mroles = {r.id for r in ctx.author.roles if r.is_assignable()}
             data = await ctx.bot.db.fetch(
-                """SELECT role_id, perms FROM fakeperms WHERE guild_id = $1""",
+                "SELECT role_id, perms FROM fakeperms WHERE guild_id = $1",
                 ctx.guild.id,
             )
-            if data:
-                for role_id, perms in data:
-                    if role_id in mroles:
-                        for perm in perms.split(","):
-                            with suppress(ValueError):
-                                missing_permissions.remove(perm.strip())
+            for role_id, perms in data:
+                if role_id in mroles:
+                    for perm in perms.split(","):
+                        missing_permissions.discard(perm.strip())
 
         if missing_permissions:
             raise commands.MissingPermissions(missing_permissions)
@@ -307,7 +303,7 @@ class Attachment(commands.Converter):
     @staticmethod
     async def search(ctx: "Context", fail: bool = False) -> Optional[str]:
         if ref := ctx.message.reference:
-            logger.info(f"attachment search has a reference")
+            logger.info("attachment search has a reference")
             if channel := ctx.guild.get_channel(ref.channel_id):
                 if message := await channel.fetch_message(ref.message_id):
                     try:

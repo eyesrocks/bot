@@ -30,7 +30,7 @@ class Automod(commands.Cog):
         name="filter",
         aliases=(
             "chatfilter",
-            "cf",
+            "automod", 
         ),
         invoke_without_command=False,
         brief="Filter commands to keep your chat secure",

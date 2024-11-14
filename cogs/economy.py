@@ -1,117 +1,70 @@
-from discord.ext import commands, tasks  # type: ignore
-from discord.ext.commands import Context, check, CommandError  # type: ignore
-from discord import (  # type: ignore
-    Member as DiscordMember,
-    Embed,
-)
-from tool.greed import Greed  # type: ignore
-from typing import Union, Optional  # type: ignore
-from tool.important.subclasses.command import (  # type: ignore
-    Member,
-    User,  # type: ignore
-)
-from rival_tools import thread  # type: ignore
-from tool.important.subclasses.color import ColorConverter  # type: ignore
-from discord.utils import format_dt  # type: ignore
+import discord
+from discord.ext import commands, tasks
+from discord.ext.commands import Context, CommandError, check
+from discord import Member as DiscordMember, Embed, ui
+from typing import Union, Optional
+from tool.greed import Greed
+from tool.important.subclasses.command import Member, User
+from tool.important.subclasses.color import ColorConverter
+from tool.chart import EconomyCharts
+from discord.utils import format_dt
 from collections import defaultdict
-from tool.chart import EconomyCharts  # type: ignore
 import random
 import asyncio
-import discord  # type: ignore
-from discord.ui import View, Button  # type: ignore
-from tool.worker import offloaded  # type: ignore
-from loguru import logger  # type: ignore
 from datetime import datetime, timedelta
-from pytz import timezone  # type: ignore
 from dataclasses import dataclass
+from pytz import timezone
+from rival_tools import thread
+from loguru import logger
 
 log = logger
-
-maximum_gamble = 10000000000000000000000000
-
-
-
-def format_large_number(num: Union[int, float]) -> str:
-    # List of suffixes for large numbers
-    suffixes = [
-        "",
-        "K",
-        "M",
-        "B",
-        "T",
-        "Qa",
-        "Qi",
-        "Sx",
-        "Sp",
-        "Oc",
-        "No",
-        "Dc",
-        "Ud",
-        "Dd",
-        "Td",
-        "Qad",
-        "Qid",
-        "Sxd",
-        "Spd",
-        "Ocd",
-        "Nod",
-        "Vg",
-        "Uv",
-        "Dv",
-        "Tv",
-        "Qav",
-        "Qiv",
-        "Sxv",
-        "Spv",
-        "Ocv",
-        "Nov",
-        "Tg",
-        "Utg",
-        "Dtg",
-        "Ttg",
-        "Qatg",
-        "Qitg",
-        "Sxtg",
-        "Sptg",
-        "Octg",
-        "Notg",
-        "Qng",
-    ]
-
-    # Number of digits in the input number
-    num_str = str(num)
-    if "." in num_str:
-        num_str = num_str[: num_str.index(".")]
-    num_len = len(num_str)
-
-    # Determine the appropriate suffix and scale the number
-    if num_len <= 3:
-        return num_str  # No suffix needed for numbers with 3 or fewer digits
-
-    # Calculate the index for suffixes list
-    suffix_index = (num_len - 1) // 3
-
-    if suffix_index >= len(suffixes):
-        return f"{num} is too large to format."
-
-    # Calculate the formatted number
-    scaled_num = int(num_str[: num_len - suffix_index * 3])
-
-    return f"{scaled_num}{suffixes[suffix_index]}"
-
+MAX_GAMBLE = 100_000_000_000_000_000  # Simplified max gamble amount
 
 class OverMaximum(CommandError):
-    def __init__(self, m, **kwargs):
-        self.m = m
-        super().__init__(m)
+    def __init__(self, message):
+        self.message = message
+        super().__init__(message)
 
+class GambleConverter(commands.Converter):
+    async def convert(self, ctx: Context, argument: str) -> float:
+        try:
+            amount = float(argument.replace(",", ""))
+            if amount <= 0:
+                raise ValueError("Amount must be positive")
+            if amount > MAX_GAMBLE:
+                raise OverMaximum(f"Maximum gamble amount is {MAX_GAMBLE:,}")
+                
+            balance = await ctx.bot.db.fetchval(
+                "SELECT balance FROM economy WHERE user_id = $1", 
+                ctx.author.id
+            )
+            if amount > balance:
+                raise ValueError(f"You only have {balance:,} bucks")
+            return amount
+        except ValueError as e:
+            raise CommandError(str(e))
+
+def format_large_number(num: Union[int, float]) -> str:
+    suffixes = [
+        "", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc", "Ud", "Dd", "Td", "Qad", "Qid", "Sxd", "Spd", "Ocd", "Nod", "Vg", "Uv", "Dv", "Tv", "Qav", "Qiv", "Sxv", "Spv", "Ocv", "Nov", "Tg", "Utg", "Dtg", "Ttg", "Qatg", "Qitg", "Sxtg", "Sptg", "Octg", "Notg", "Qng"
+    ]
+    num_str = str(num)
+    if "." in num_str:
+        num_str = num_str[:num_str.index(".")]
+    num_len = len(num_str)
+    if num_len <= 3:
+        return num_str
+    suffix_index = (num_len - 1) // 3
+    if suffix_index >= len(suffixes):
+        return f"{num} is too large to format."
+    scaled_num = int(num_str[:num_len - suffix_index * 3])
+    return f"{scaled_num}{suffixes[suffix_index]}"
 
 @dataclass
 class Achievement:
     name: str
     description: str
     price: Optional[int] = None
-
 
 @dataclass
 class Item:
@@ -121,14 +74,12 @@ class Item:
     duration: int
     emoji: str
 
-
 @dataclass
 class Chance:
     percentage: float
     total: float
 
-
-class BlackjackView(View):
+class BlackjackView(ui.View):
     def __init__(self, ctx, bot):
         super().__init__(timeout=60)
         self.ctx = ctx
@@ -138,14 +89,14 @@ class BlackjackView(View):
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         return interaction.user == self.ctx.author
 
-    @discord.ui.button(label="Hit", style=discord.ButtonStyle.green)
-    async def hit_button(self, interaction: discord.Interaction, button: Button):
+    @ui.button(label="Hit", style=discord.ButtonStyle.green)
+    async def hit_button(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.defer()
         self.move = 0
         self.stop()
 
-    @discord.ui.button(label="Stay", style=discord.ButtonStyle.gray)
-    async def stay_button(self, interaction: discord.Interaction, button: Button):
+    @ui.button(label="Stay", style=discord.ButtonStyle.gray)
+    async def stay_button(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.defer()
         self.move = 1
         self.stop()
@@ -157,12 +108,10 @@ class BlackjackView(View):
         except Exception:
             return 1
 
-
 def get_hour():
     est = timezone("US/Eastern")
     now = datetime.now(est)
     return now.hour + 1
-
 
 def get_win(multiplied: bool = False, by: int = 3):
     if multiplied:
@@ -172,7 +121,7 @@ def get_win(multiplied: bool = False, by: int = 3):
             return random.uniform(4.5, 7.5)
     else:
         return random.uniform(1.5, 2.5)
-    
+
 def _format_int(n: Union[float, str, int]):
     if isinstance(n, float):
         n = "{:.2f}".format(n)
@@ -197,26 +146,21 @@ def _format_int(n: Union[float, str, int]):
         return d[::-1][1:]
     return d[::-1]
 
-
 def format_int(n: Union[float, str, int], disallow_negatives: Optional[bool] = False):
     n = _format_int(n)
     if disallow_negatives is True and n.startswith("-"):
         return 0
     return n
 
-
 def ensure_non_negative(value: float) -> float:
     return max(value, 0)
 
-
 def get_chances():
     from config import CHANCES
-
     data = {}
     for key, value in CHANCES.items():
         data[key] = Chance(percentage=value["percentage"], total=value["total"])
     return data
-
 
 def get_time_next_day():
     current_datetime = datetime.now()
@@ -224,7 +168,6 @@ def get_time_next_day():
     next_day_start = datetime(tomorrow.year, tomorrow.month, tomorrow.day, 0, 0, 0)
     time_until_next_day = (next_day_start - current_datetime).total_seconds()
     return time_until_next_day
-
 
 class BankAmount(commands.Converter):
     name = "BankAmount"
@@ -264,7 +207,6 @@ class BankAmount(commands.Converter):
                 await ctx.warning("Please provide an **Amount**")
                 raise OverMaximum("lol")  # MissingRequiredArgument(BankAmount)
         return argument
-
 
 class Amount(commands.Converter):
     name = "Amount"
@@ -307,7 +249,6 @@ class Amount(commands.Converter):
         if float(argument) <= 0.00:
             raise commands.CommandError("you can't use an amount below 0")
         return argument
-
 
 class GambleAmount(commands.Converter):
     name = "GambleAmount"
@@ -353,19 +294,11 @@ class GambleAmount(commands.Converter):
         if argument <= 0.00:
             await ctx.warning("you can't gamble an amount below 0")
             raise OverMaximum("lol")
-        if float(argument) >= float(maximum_gamble):
+        if float(argument) >= float(MAX_GAMBLE):
             raise OverMaximum(
-                f"you can only gamble a maximum of **{format_int(float(maximum_gamble) - 1.0)}** looser"
+                f"you can only gamble a maximum of **{format_int(float(MAX_GAMBLE) - 1.0)}** looser"
             )
-        # if float(argument) >= float(maximum_gamble):
-        #     if ctx.author.name == "aiohttp":
-        #         m = f" not `{argument}`"
-        #     else:
-        #         m = ""
-        #     await ctx.fail(f"you can only gamble a maximum of **{format_int(float(maximum_gamble) - 1.0)}**{m}")
-        #     raise OverMaximum("lol")
         return argument
-
 
 def account():
     async def predicate(ctx: Context):
@@ -392,7 +325,6 @@ def account():
 
     return check(predicate)
 
-
 class Economy(commands.Cog):
     def __init__(self, bot: Greed):
         self.bot = bot
@@ -409,7 +341,6 @@ class Economy(commands.Cog):
             9: ":nine:",
         }
         self.chances = get_chances()
-    #    self.clear_items.start()
         self.items = {
             "purple devil": {
                 "price": 1000000,
@@ -542,7 +473,6 @@ class Economy(commands.Cog):
 
         self.format_economy()
         self.chart = EconomyCharts(self.bot)
-    #    self.clear_earnings.start()
 
     def format_economy(self):
         new_items = {}
@@ -557,14 +487,6 @@ class Economy(commands.Cog):
     def get_value(self, ctx: Context) -> bool:
         values = self.chances[ctx.command.qualified_name]
         return calculate(values.percentage, values.total)  # type: ignore # noqa: F821
-
-    # @tasks.loop(hours=24)
-    # async def clear_earnings(self):
-    #     time = get_time_next_day()
-    #     if guild := self.bot.get_guild(1259918254344896595):
-    #         await guild.leave()
-    #     await asyncio.sleep(time)
-    #     await self.bot.db.execute("""DELETE FROM earnings""")
 
     @thread
     def generate_cards(self):
@@ -1024,7 +946,6 @@ class Economy(commands.Cog):
                 )
                 await msg.edit(embed=em, view=None)
 
-
     @commands.command(name="shop", brief="shows all of the items", example=",shop")
     async def shop(self, ctx: Context):
         product = list()
@@ -1284,7 +1205,7 @@ class Economy(commands.Cog):
 
     @commands.command(
         name="coinflip",
-        aliases=["flip", "cflip"],
+        aliases=["flip", "cflip", "cf"],
         brief="flip a coin to earn bucks",
         example=",coinflip 100 heads",
     )
@@ -1326,7 +1247,7 @@ class Economy(commands.Cog):
                 amount = int(float(amount) * get_win(multiplied, 3))
         await self.update_balance(ctx.author, result, amount)
         return await ctx.currency(
-            f"You flipped a **{roll_coin}** and **{action} {self.format_int(amount)} bucks**"
+            f"You flipped **{roll_coin}** and **{action} {self.format_int(amount)} bucks**"
         )
 
     @commands.command(
@@ -1639,7 +1560,6 @@ class Economy(commands.Cog):
             embed = Embed(title=f"{type.title()} Leaderboard (resets in 1 week)", color=self.bot.color)
             embed.description = "\n".join(rows)
             return await ctx.send(embed=embed)
-
 
 async def setup(bot):
     await bot.add_cog(Economy(bot))

@@ -4,10 +4,8 @@ import discord
 import pytz
 import aiohttp
 import psutil
-import math
 from difflib import get_close_matches
 from tool.important import Context  # type: ignore
-from munch import Munch, DefaultMunch
 from discord.ui import Button, View
 from io import BytesIO
 from discord.ext.commands import CommandError, param
@@ -16,7 +14,6 @@ from datetime import timedelta, datetime
 from tool.important.subclasses.command import (  # type: ignore
     Member,
     User,
-    Message,  # noqa: F401
     NonAssignedRole,
 )
 from tool.worker import offloaded  # type: ignore
@@ -32,7 +29,7 @@ from tool.greed import Greed  # type: ignore
 #from weather import WeatherClient  # type: ignore
 #from weather.weathertypes import Kind  # type: ignore
 # ` 1from geopy import geocoders
-from typing_extensions import Type, NotRequired
+from typing_extensions import Type
 import re
 from discord import Embed
 
@@ -673,7 +670,6 @@ class Information(commands.Cog):
         #
         percent_used = usage.percent
         free_space = int(usage.free / (1024 ** 3))  # Convert bytes to GB
-        total_space = usage.total / (1024 ** 3)  # Convert bytes to GB
 
         embed.add_field(
             name="**__Client__**",
@@ -823,6 +819,8 @@ class Information(commands.Cog):
 
         badges = []
 
+        staff = []
+
         flags = user.public_flags
 
         emojis = {
@@ -858,6 +856,12 @@ class Information(commands.Cog):
 
         }
 
+        staff = {
+            "staff1": "<:Verified_badge_1_staff:1302154827714789396>",
+            "lim": "<:greed:1302748498034429973>",
+            "dev": "<:dev:1303611681427165206>",
+        }
+
         for flag in (
             "staff1"
             "nitro",
@@ -876,6 +880,32 @@ class Information(commands.Cog):
         ):
             if getattr(flags, flag, False) is True:
                 badges.append(emojis[flag])
+
+        for flag in (
+            "dev",
+            "staff1",
+            "lim",
+        ):
+            if getattr(flags, flag, False) is True:
+                badges.append(staff[flag])
+        
+        def founder(u):
+            return u.id == self.bot.lim
+
+        def is_bot_staff(u):
+            return u.id == self.bot.owner_id 
+
+        def is_dev(u):
+            return u.id == self.bot.dev
+        
+        if founder(user) is True:
+            badges.extend((emojis.get("lim"), emojis.get("staff1")))
+        
+        if is_bot_staff(user) is True:
+            badges.extend((emojis.get("staff1"), emojis.get("staff")))
+        
+        if is_dev(user) is True:
+            badges.extend((emojis.get("dev"), emojis.get("staff1")))
 
         def is_boosting(u):
             for g in mutual_guilds:

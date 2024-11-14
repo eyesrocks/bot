@@ -1,8 +1,8 @@
 from aiohttp import ClientSession
-from shazamio import Shazam as ShazamClient
+from shazamio import Shazam
 from loguru import logger
 from dataclasses import dataclass
-from asyncio import create_subprocess_shell as shell
+from asyncio import create_subprocess_shell
 from asyncio.subprocess import PIPE
 from aiofiles import open as async_open
 from tuuid import tuuid
@@ -20,18 +20,19 @@ class Track:
 
 class Recognizer:
     def __init__(self):
-        self.session = None
-        self.client = ShazamClient()
+        self.session = ClientSession()
+        self.client = Shazam()
 
     async def get_bytes(self, url: str) -> bytes:
-        if self.session is None:
-            self.session = ClientSession()
         async with self.session.get(url) as response:
             return await response.read()
 
     async def get_audio(self, file: str) -> bytes:
         output_file = f"{file.rsplit('.', 1)[0]}.mp3"
-        process = await shell(f"ffmpeg -i {file} -q:a 0 -map a {output_file}", stdout=PIPE)
+        process = await create_subprocess_shell(
+            f"ffmpeg -i {file} -q:a 0 -map a {output_file}",
+            stdout=PIPE
+        )
         await process.communicate()
         async with async_open(output_file, "rb") as ff:
             data = await ff.read()
@@ -40,8 +41,8 @@ class Recognizer:
         return data
 
     async def recognize(self, url: str):
-        if ".mp3" not in url:
-            extension = url.split("/")[-1].split(".")[1].split("?")[0]
+        if not url.endswith(".mp3"):
+            extension = url.split("/")[-1].split(".")[-1].split("?")[0]
             file = f"/root/{tuuid()}.{extension}"
             async with async_open(file, "wb") as ff:
                 await ff.write(await self.get_bytes(url))
