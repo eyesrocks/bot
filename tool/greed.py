@@ -495,28 +495,44 @@ class Greed(Bot):
         if not await self.db.fetchval(
             """SELECT state FROM terms_agreement WHERE user_id = $1""", ctx.author.id
         ):
-            message = await ctx.normal(
-                f"Greed bot will store your data. **By continuing to use our services**, you agree to our **[policy]({self.domain}/terms)**"
-            )
-            view = PrivacyConfirmation(bot=self, message=message, invoker=ctx.author)
-            await message.edit(view=view)
-            await view.wait()
-
-            state = view.value if view.value is not None else False
-            await self.db.execute(
-                """INSERT INTO terms_agreement (user_id, state) VALUES ($1, $2) ON CONFLICT DO NOTHING;""",
-                ctx.author.id,
-                state,
-            )
-            if not state:
-                await message.edit(
-                    embed=discord.Embed(
-                        description=f"> {ctx.author.mention} has **declined our privacy policy** and as a result you have been **blacklisted from using any greed command or feature**. Feel free to accept our [**policy**](https://greed.bot/terms) using `{ctx.prefix}reset`",
-                        color=self.color,
-                    )
+            try:
+                message = await ctx.normal(
+                    f"Greed bot will store your data. **By continuing to use our services**, you agree to our **[policy]({self.domain}/terms)**"
                 )
+                view = PrivacyConfirmation(bot=self, message=message, invoker=ctx.author)
+                await message.edit(view=view)
+                await view.wait()
+
+                state = view.value if view.value is not None else False
+                await self.db.execute(
+                    """INSERT INTO terms_agreement (user_id, state) VALUES ($1, $2) ON CONFLICT DO NOTHING;""",
+                    ctx.author.id,
+                    state,
+                )
+                if not state:
+                    try:
+                        await message.edit(
+                            embed=discord.Embed(
+                                description=f"> {ctx.author.mention} has **declined our privacy policy** and as a result you have been **blacklisted from using any greed command or feature**. Feel free to accept our [**policy**](https://greed.bot/terms) using `{ctx.prefix}reset`",
+                                color=self.color,
+                            )
+                        )
+                    except discord.NotFound:
+                        await ctx.send(
+                            embed=discord.Embed(
+                                description=f"> {ctx.author.mention} has **declined our privacy policy** and as a result you have been **blacklisted from using any greed command or feature**. Feel free to accept our [**policy**](https://greed.bot/terms) using `{ctx.prefix}reset`",
+                                color=self.color,
+                            )
+                        )
+                    return False
+                try:
+                    await message.delete()
+                except discord.NotFound:
+                    pass  # Message was already deleted
+                
+            except Exception as e:
+                logger.error(f"Privacy confirmation error: {str(e)}")
                 return False
-            await message.delete()
 
         data = await self.db.fetchrow(
             """SELECT command, channels FROM disabled_commands WHERE guild_id = $1 AND command = $2""",
