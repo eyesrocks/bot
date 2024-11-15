@@ -601,7 +601,21 @@ class Fun(commands.Cog):
 
 
 
-
+    @commands.command(name = "pp", description = "See pp size for specified user",aliases=['ppsize'], usage = "pp [user]")
+    @commands.cooldown(1, 4, commands.BucketType.guild)
+    async def pp(self, ctx, *, user: discord.Member = None):
+        if user is None:
+            user = ctx.author
+            size = random.randint(1, 50)
+            ppsize = ""
+            for _i in range(size):
+                ppsize += "="
+                embed = discord.Embed(
+                    title=f"{user}'s pp size",
+                    description=f"8{ppsize}D",
+                    colour=Colors.gold,
+                )
+            await ctx.send(embed=embed)
 
 
 
