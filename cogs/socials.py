@@ -8,6 +8,10 @@ from tool.pinpostmodels import Model  # type: ignore
 from tuuid import tuuid
 import requests
 
+
+
+
+
 class Socials(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
