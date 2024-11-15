@@ -597,7 +597,7 @@ class Fun(commands.Cog):
             return await ctx.reply(f"mention someone to fuck them loser")
 
 
-        await ctx.reply(f"**{ctx.author.name}** fucks **{member.name}** 🍆🍑")
+        await ctx.reply(f"**{ctx.author.name}** fucks **{member.name}** ")
 
 
 
