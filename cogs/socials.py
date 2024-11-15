@@ -14,5 +14,11 @@ class Socials(commands.Cog):
         self.pinterest = Pinterest()
 
 
+
+
+
+
+
+
 async def setup(bot):
     await bot.add_cog(Socials(bot))
