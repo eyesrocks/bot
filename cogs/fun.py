@@ -589,7 +589,15 @@ class Fun(commands.Cog):
         return await self.get_caption(ctx, message)
 
 
+    @commands.command()
+    @commands.cooldown(1, 3, commands.BucketType.user)
+    async def fuck(self, ctx, member: discord.Member = None):
+        if member == None:
+            member = ctx.author
+            return await ctx.reply(f"mention someone to fuck them loser")
 
+
+        await ctx.reply(f"**{ctx.author.name}** fucks **{member.name}** 🍆🍑")
 
 
 
