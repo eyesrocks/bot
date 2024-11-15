@@ -1616,7 +1616,24 @@ class Information(commands.Cog):
         return await ctx.paginate(embeds)
 
 
+    @commands.command(
+        name="boomer",
+        help="Show the oldest member in the guild by account creation date.",
+        aliases=["boomers", "oldest"],
+    )
+    async def boomer(self, ctx):
+        oldest_member = min(ctx.guild.members, key=lambda m: m.created_at)
 
+        embed = discord.Embed(title="Oldest Member", color=self.bot.colo)
+
+        embed.add_field(name="Username", value=oldest_member.name, inline=False)
+        embed.add_field(
+            name="Account Creation Date",
+            value=oldest_member.created_at.strftime("%Y-%m-%d"),
+            inline=False,
+        )
+
+        await ctx.send(embed=embed)
 
     @commands.command(
         name='avatar',
