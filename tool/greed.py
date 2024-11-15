@@ -120,7 +120,7 @@ class Greed(Bot):
             **kwargs,
         )
         self.proxies = ips
-        self.lim = 977036206179233862
+        self.lim = [977036206179233862]
         self.dev = [744806691396124673, 863914425445908490, 352190010998390796]
         self.modlogs = Handler(self)
         self.config = config
