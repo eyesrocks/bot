@@ -6,7 +6,7 @@ from discord.ext.commands import Context
 from aiohttp import ClientSession as Session
 from tool.pinpostmodels import Model  # type: ignore
 from tuuid import tuuid
-
+import requests
 
 class Socials(commands.Cog):
     def __init__(self, bot):
