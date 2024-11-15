@@ -613,7 +613,7 @@ class Fun(commands.Cog):
                 embed = discord.Embed(
                     title=f"{user}'s pp size",
                     description=f"8{ppsize}D",
-                    colour=Colors.gold,
+                    colour=self.bot.color,
                 )
             await ctx.send(embed=embed)
 
