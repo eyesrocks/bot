@@ -1624,7 +1624,7 @@ class Information(commands.Cog):
     async def boomer(self, ctx):
         oldest_member = min(ctx.guild.members, key=lambda m: m.created_at)
 
-        embed = discord.Embed(title="Oldest Member", color=self.bot.colo)
+        embed = discord.Embed(title="Oldest Member", color=self.bot.color)
 
         embed.add_field(name="Username", value=oldest_member.name, inline=False)
         embed.add_field(
