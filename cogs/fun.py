@@ -490,7 +490,7 @@ class Fun(commands.Cog):
             ctx.guild.id,
         )
         embed.description = (
-            f"<:hits:1303239575250014241> {ctx.author.mention} took a hit of the vape! "
+            f"<:vape:1306875712065503262> {ctx.author.mention} took a hit of the vape! "
             f"The server now has **{guild_hits}** hits."
         )
         await message.edit(embed=embed)
