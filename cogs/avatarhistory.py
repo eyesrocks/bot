@@ -39,7 +39,7 @@ class AvatarHistory(Cog):
         url = f"https://cdn.greed.wtf/avatars/{user.id}"
         title = f"here's a list of {user.name}'s avatar history"
         embed = Embed(title=title, url=url).set_author(name=str(ctx.author), icon_url=ctx.author.display_avatar.url)
-        embed.set_image(url=url)
+        embed.set_image(url=user)
         return await ctx.send(embed=embed)
 
     @command(name = "clearavatars", aliases = ["clavs", "clavh", "clearavh"], brief = "clear your avatar history")
