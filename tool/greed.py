@@ -904,7 +904,7 @@ class Greed(Bot):
         if len(channels) == 0:
             try:
                 return await guild.owner.send(embed = discord.Embed(
-                    description="> Left due to the guild not having over **30 members**",
+                    description="> Left due to the guild not having over **20 members**",
                     color=self.color,
                 ))
             except Exception:
@@ -912,7 +912,7 @@ class Greed(Bot):
         try:
             return await channels[0].send(
                 embed=discord.Embed(
-                    description="> Left due to the guild not having over **30 members**",
+                    description="> Left due to the guild not having over **20 members**",
                     color=self.color,
                 )
             )
@@ -936,7 +936,7 @@ class Greed(Bot):
         if check:
             await guild.leave()
             return
-        if len(guild.members) < 30:
+        if len(guild.members) < 20:
             # if len(guild.members) < 75:
             #     if owner := guild.owner:
             #         try:

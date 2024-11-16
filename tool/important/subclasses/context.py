@@ -13,10 +13,30 @@ import discord
 from discord.ext import commands
 from discord.ext.commands import CommandError
 from discord.utils import cached_property
+from discord.ui import View, Button
 
 TUPLE = ()
 SET = set()
 
+class Confirm(discord.ui.View):
+    def __init__(self, ctx: commands.Context, *, timeout: Optional[int] = 60):
+        super().__init__(timeout=timeout)
+        self.value = None
+        self.ctx = ctx
+
+    @discord.ui.button(label="Yes", style=discord.ButtonStyle.green)
+    async def yes(self, button: discord.ui.Button, interaction: discord.Interaction):
+        if not interaction.user.id == self.ctx.author.id:
+            return await interaction.response.send_message("This is not your interaction", ephemeral=True)
+        self.value = True
+        self.stop()
+
+    @discord.ui.button(label="No", style=discord.ButtonStyle.red)
+    async def no(self, button: discord.ui.Button, interaction: discord.Interaction):
+        if not interaction.user.id == self.ctx.author.id:
+            return await interaction.response.send_message("This is not your interaction", ephemeral=True)
+        self.value = False
+        self.stop()
 
 def is_unicode(emoji: str) -> bool:
     with contextlib.suppress(Exception):
@@ -877,5 +897,15 @@ class Context(commands.Context):
             return await self.send(embed=embeds[0])
         return await self.alternative_paginate(embeds, message)
 
+    async def confirm(self, text: str, timeout: int = 60) -> bool:
+        cache_key = f"confirm_{self.author.id}"
+        con = Confirm(self)
+        await self.send(text, view=con)
+        await self.bot.cache.set(cache_key, con, expiration=timeout)
+        
+        await con.wait()
+        con = con.value
+        await self.bot.cache.delete(cache_key)
+        return con
 
 #
