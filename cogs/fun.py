@@ -521,7 +521,7 @@ class Fun(commands.Cog):
         if current_holder == ctx.author:
             return await ctx.send(
                 embed=discord.Embed(
-                    description="<:hits:1303239575250014241> You already have the vape, you fiend!",
+                    description="<:vape:1306875712065503262> You already have the vape, you fiend!",
                     color=self.bot.color,
                 )
             )
