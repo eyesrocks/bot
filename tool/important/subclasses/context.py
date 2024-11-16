@@ -18,132 +18,6 @@ TUPLE = ()
 SET = set()
 
 
-class MSG(discord.message.Message):
-    async def edit(self, *args, **kwargs):
-        delete_after = kwargs.pop("delete_after", None)
-        kwargs.pop("stickers", None)
-        kwargs.pop("reference", None)
-        kwargs.pop("followup", None)
-
-        try:
-            for w in wh:
-                if w[0] == self.channel.id:
-                    webhook = discord.Webhook.from_url(w[1], client=self._state.botstate)
-                    try:
-                        message = await webhook.edit_message(self.id, *args, **kwargs)
-                    except Exception as e:
-                        d = await super(discord.message.Message, self).edit(*args, **kwargs)
-                        logger.info(
-                            f"Message editing errored with: {e} and tried to super it with {d}"
-                        )
-                        return d
-                    if delete_after:
-                        await message.delete(delay=delete_after)
-                    return message
-        except Exception as e:
-            d = await super(discord.message.Message, self).edit(*args, **kwargs)
-            logger.info(
-                f"Message editing errored with: {e} and tried to super it with {d}"
-            )
-            return d
-
-        d = await super(discord.message.Message, self).edit(*args, **kwargs)
-        logger.info(f"sent {d}")
-        return d
-
-
-class TextChannel(discord.TextChannel):
-    def __init__(self: discord.TextChannel):
-        super().__init__()
-
-    async def send(self, *args, **kwargs):
-        bot = self._state._get_client()
-        if not self.guild:
-            return await discord.abc.Messageable.send(self, *args, **kwargs)
-
-        try:
-            delete_after = kwargs.pop("delete_after", None)
-            for w in wh:
-                if w[0] == self.id:
-                    kwargs.update(
-                        {
-                            "wait": True,
-                        }
-                    )
-                    webhook = discord.Webhook.from_url(w[2], client=bot)
-                    msg = await webhook.send(*args, **kwargs)
-                    if msg:
-                        if delete_after:
-                            await msg.delete(delay=delete_after)
-                        return msg
-                    else:
-                        raise ValueError("Message didn't send")
-
-            for w in wh:
-                if w[1] == self.name:
-                    kwargs.update(
-                        {
-                            "wait": True,
-                        }
-                    )
-                    index = wh.index(w)
-                    webhook = discord.Webhook.from_url(w[2], client=bot, bot_token=bot.config["token"])
-                    await webhook.edit(channel=self)
-                    w[0] = self.id
-                    wh[index] = w
-
-                    msg = await webhook.send(*args, **kwargs)
-                    async def update():
-                        await bot.db.execute(query, *k)
-                    asyncio.ensure_future(update())
-                    if msg:
-                        if delete_after:
-                            await msg.delete(delay=delete_after)
-                        return msg
-                    else:
-                        raise ValueError("Message didn't send")
-
-        except Exception as e:
-            if "Invalid webhook URL given" in str(e) or "Unknown Webhook" in str(e):
-                try:
-                    for w in wh:
-                        if w[1] == self.name:
-                            kwargs.update(
-                                {
-                                    "wait": True,
-                                }
-                            )
-                            created_webhook = await self.create_webhook(name=check["username"], avatar=check["avatar"])
-                            webhook = discord.Webhook.from_url(created_webhook.url, client=bot, bot_token=bot.config["token"])
-                            w[2] = created_webhook.url
-                            w[0] = self.id
-                            wh[index] = w
-                            async def update():
-                                await bot.db.execute(query, *k)
-                            asyncio.ensure_future(update())
-                            msg = await webhook.send(*args, **kwargs)
-                            if msg:
-                                if delete_after:
-                                    await msg.delete(delay=delete_after)
-                                return msg
-                            else:
-                                raise ValueError("Message didn't send")
-                except Exception as e:
-                    exc = "".join(
-                        traceback.format_exception(type(e), e, e.__traceback__)
-                    )
-                    logger.info(f"An error occurred: {exc}")
-            else:
-                logger.info(f"An error occurred: {e}")
-
-        kwargs.pop("avatar_url", None)
-        kwargs.pop("username", None)
-        kwargs.pop("wait", None)
-        return await discord.abc.Messageable.send(self, *args, **kwargs)
-
-
-discord.TextChannel.send = TextChannel.send
-
 def is_unicode(emoji: str) -> bool:
     with contextlib.suppress(Exception):
         unicodedata.name(emoji)
@@ -698,6 +572,7 @@ class Context(commands.Context):
                 color = 0x2a8000
         else:
             color = 0x2a8000
+            emoji = "<:UB_Check_Icon:1306875712782864445>"
         embed = discord.Embed(
             color=color, description=f"{emoji} {self.author.mention}: {text}"
         )
@@ -834,6 +709,7 @@ class Context(commands.Context):
                 color = 0x2a8000
         else:
             color = 0x2a8000
+            emoji = "<:UB_X_Icon:1306875714426900531>"
         embed = discord.Embed(
             color=color, description=f"{emoji} {self.author.mention}: {text}"
         )
@@ -868,10 +744,11 @@ class Context(commands.Context):
                 color = 0xffd036
         else:
             color = 0xffd036
+            emoji = "<:icons_warning:1306875715421077546>"
             if e := kwargs.get("emoji"):
                 emoji += e
             else:
-                emoji = None
+                emoji = "<:icons_warning:1306875715421077546>"
         embed = discord.Embed(
             color=color,
             description=f"{emoji or ''} {self.author.mention}: {text}",
@@ -892,86 +769,22 @@ class Context(commands.Context):
 
     # misc
 
-    async def send(self, *args, **kwargs):
-        delete_after = kwargs.pop("delete_after", None)
-
+    async def send(
+        self,
+        content: Any = None,
+        embed: Optional[discord.Embed] = None,
+        *,
+        delete_after: Optional[float] = None,
+        **kwargs
+    ) -> discord.Message:
         try:
-            for w in wh:
-                if w[0] == self.channel.id:
-                    kwargs.update(
-                        {
-                            "wait": True,
-                        }
-                    )
-                    webhook = discord.Webhook.from_url(w[2], client=self.bot)
-                    msg = await webhook.send(*args, **kwargs)
-                    if msg:
-                        if delete_after:
-                            await msg.delete(delay=delete_after)
-                        return msg
-                    else:
-                        raise ValueError("Message didn't send")
-
-            for w in wh:
-                if w[1] == self.channel.name:
-                    kwargs.update(
-                        {
-                            "wait": True,
-                        }
-                    )
-                    index = wh.index(w)
-                    webhook = discord.Webhook.from_url(w[2], client=self.bot, bot_token=self.bot.config["token"])
-                    await webhook.edit(channel=self.channel)
-                    w[0] = self.channel.id
-                    wh[index] = w
-
-                    msg = await webhook.send(*args, **kwargs)
-                    async def update():
-                        await self.bot.db.execute(query, *k)
-                    asyncio.ensure_future(update())
-                    if msg:
-                        if delete_after:
-                            await msg.delete(delay=delete_after)
-                        return msg
-                    else:
-                        raise ValueError("Message didn't send")
-
-        except Exception as e:
-            if "Invalid webhook URL given" in str(e) or "Unknown Webhook" in str(e):
-                try:
-                    for w in wh:
-                        if w[1] == self.channel.name:
-                            kwargs.update(
-                                {
-                                    "wait": True,
-                                }
-                            )
-                            created_webhook = await self.channel.create_webhook(name=check["username"], avatar=check["avatar"])
-                            webhook = discord.Webhook.from_url(created_webhook.url, client=self.bot, bot_token=self.bot.config["token"])
-                            w[2] = created_webhook.url
-                            w[0] = self.channel.id
-                            wh[index] = w
-                            async def update():
-                                await self.bot.db.execute(query, *k)
-                            asyncio.ensure_future(update())
-                            msg = await webhook.send(*args, **kwargs)
-                            if msg:
-                                if delete_after:
-                                    await msg.delete(delay=delete_after)
-                                return msg
-                            else:
-                                raise ValueError("Message didn't send")
-                except Exception as e:
-                    exc = "".join(traceback.format_exception(type(e), e, e.__traceback__))
-                    logger.info(f"An error occurred: {exc}")
-            else:
-                exc = "".join(traceback.format_exception(type(e), e, e.__traceback__))
-                logger.info(f"An error occurred: {exc}")
-
-        kwargs.pop("avatar_url", None)
-        kwargs.pop("username", None)
-        kwargs.pop("wait", None)
-        return await super().send(*args, **kwargs)
+            msg = await super().send(content=content, embed=embed, **kwargs)
+            if delete_after is not None:
+                await msg.delete(delay=delete_after)
+            return msg
+        except discord.HTTPException as e:
+            logger.error(f"Failed to send message: {e}")
+            raise
 
 
     #     async def send_help(self, command=None):
