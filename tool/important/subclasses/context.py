@@ -11,9 +11,8 @@ from typing import Any, Dict, Optional, Tuple
 import aiohttp
 import discord
 from discord.ext import commands
-from discord.ext.commands import CommandError
+from discord.ext.commands import CommandError, UserInputError
 from discord.utils import cached_property
-from discord.ui import View, Button
 
 TUPLE = ()
 SET = set()
@@ -23,18 +22,27 @@ class Confirm(discord.ui.View):
         super().__init__(timeout=timeout)
         self.value = None
         self.ctx = ctx
+    
+    async def interaction_check(self, interaction: discord.Interaction):
+        if interaction.user.id == self.ctx.author.id:
+            return True
+        return await interaction.response.send_message("This is not your interaction!", ephemeral=True)
 
     @discord.ui.button(label="Yes", style=discord.ButtonStyle.green)
-    async def yes(self, button: discord.ui.Button, interaction: discord.Interaction):
-        if not interaction.user.id == self.ctx.author.id:
-            return await interaction.response.send_message("This is not your interaction", ephemeral=True)
+    async def yes(
+        self, 
+        button: discord.ui.Button, 
+        interaction: discord.Interaction
+    ):
         self.value = True
         self.stop()
 
     @discord.ui.button(label="No", style=discord.ButtonStyle.red)
-    async def no(self, button: discord.ui.Button, interaction: discord.Interaction):
-        if not interaction.user.id == self.ctx.author.id:
-            return await interaction.response.send_message("This is not your interaction", ephemeral=True)
+    async def no(
+        self, 
+        button: discord.ui.Button, 
+        interaction: discord.Interaction
+    ):
         self.value = False
         self.stop()
 
@@ -898,14 +906,15 @@ class Context(commands.Context):
         return await self.alternative_paginate(embeds, message)
 
     async def confirm(self, text: str, timeout: int = 60) -> bool:
-        cache_key = f"confirm_{self.author.id}"
         con = Confirm(self)
-        await self.send(text, view=con)
-        await self.bot.cache.set(cache_key, con, expiration=timeout)
+        msg = await self.send(text, view=con)
         
         await con.wait()
-        con = con.value
-        await self.bot.cache.delete(cache_key)
-        return con
+        with contextlib.suppress(discord.NotFound):
+            await msg.delete()
+        if con.value is True:
+            return True
+        raise UserInputError("The confirmation was not approved.")
+
 
 #
