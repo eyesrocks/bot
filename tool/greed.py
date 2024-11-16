@@ -515,14 +515,14 @@ class Greed(Bot):
                     try:
                         await message.edit(
                             embed=discord.Embed(
-                                description=f"> {ctx.author.mention} has **declined our privacy policy** and as a result you have been **blacklisted from using any greed command or feature**. Feel free to accept our [**policy**](https://greed.bot/terms) using `{ctx.prefix}reset`",
+                                description=f"> {ctx.author.mention} has **declined our privacy policy** and as a result you have been **blacklisted from using any greed command or feature**. Feel free to accept our [**policy**](https://greed.my/terms) using `{ctx.prefix}reset`",
                                 color=self.color,
                             )
                         )
                     except discord.NotFound:
                         await ctx.send(
                             embed=discord.Embed(
-                                description=f"> {ctx.author.mention} has **declined our privacy policy** and as a result you have been **blacklisted from using any greed command or feature**. Feel free to accept our [**policy**](https://greed.bot/terms) using `{ctx.prefix}reset`",
+                                description=f"> {ctx.author.mention} has **declined our privacy policy** and as a result you have been **blacklisted from using any greed command or feature**. Feel free to accept our [**policy**](https://greed.my/terms) using `{ctx.prefix}reset`",
                                 color=self.color,
                             )
                         )
@@ -738,7 +738,7 @@ class Greed(Bot):
         return {
             "embed": discord.Embed(
                 color=0xFFA500,
-                description=f"<:warns:1302330367323148399> {message}",
+                description=f"<:UB_X_Icon:1306875714426900531> {message}",
             )
         }
 
@@ -967,7 +967,7 @@ class Greed(Bot):
         return await ctx.send(
             content=f"`{code}`",
             embed=discord.Embed(
-                description=f"<:warns:1302330367323148399> {ctx.author.mention}: Error occurred while performing command **{ctx.command.qualified_name}**. Use the given error code to report it to the developers in the [support server]({self.support_server})",
+                description=f"<:icons_warning:1306875715421077546> {ctx.author.mention}: Error occurred while performing command **{ctx.command.qualified_name}**. Use the given error code to report it to the developers in the [support server]({self.support_server})",
                 color=0xFFA500,
             ),
         )

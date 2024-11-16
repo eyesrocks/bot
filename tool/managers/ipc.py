@@ -1,3 +1,5 @@
+import asyncio
+from functools import wraps
 from rival import Connection
 from discord import Client, utils, User, Member, Guild
 from asyncio import gather
@@ -25,6 +27,18 @@ class IPC:
         self.cluster_id = self.chunks.index([k for k, v in self.bot.shards.items()])
         self.bot.connection = Connection(local_name = f"cluster{str(self.cluster_id + 1)}", host = "127.0.0.1", port = 13254)
         self.sources = [f"cluster{str(i)}" for i, chunk in enumerate(self.chunks, start = 1)]
+        self.max_retries = 3
+        self.retry_delay = 1
+
+    async def wait_for_connection(self):
+        """Wait until the IPC connection is ready"""
+        if not self.bot.connection.authorized or self.bot.connection.on_hold:
+            try:
+                await self.bot.connection.wait_until_ready()
+            except asyncio.TimeoutError:
+                logger.warning("Timeout while waiting for IPC connection to be ready")
+                return False
+        return True
 
     def get_coroutine_names_with_kwarg(self, kwarg_name: str):
         # Get all members of the class
@@ -38,30 +52,62 @@ class IPC:
         return coroutine_names
 
     async def setup(self):
-        await self.bot.connection.start()
-        coroutine_names = self.get_coroutine_names_with_kwarg("source")
-        await gather(*[self.bot.connection.add_route(getattr(self, coroutine)) for coroutine in coroutine_names])
-        logger.info(f"successfully setup the IPC routes")
-
-        
-
-
+        for attempt in range(self.max_retries):
+            try:
+                await self.bot.connection.start()
+                coroutine_names = self.get_coroutine_names_with_kwarg("source")
+                await gather(*[self.bot.connection.add_route(getattr(self, coroutine)) for coroutine in coroutine_names])
+                logger.info("Successfully setup the IPC routes")
+                return
+            except Exception as e:
+                if attempt == self.max_retries - 1:
+                    raise
+                logger.warning(f"IPC setup failed (attempt {attempt + 1}/{self.max_retries}): {str(e)}")
+                await asyncio.sleep(self.retry_delay * (attempt + 1))
 
     async def roundtrip(self, method: str, *args: Any, **kwargs: Any) -> Any:
-        """Send a message to the IPC server and return the response"""
+        """Send a message to the IPC server and return the response with retry logic"""
         coro = getattr(self, method)
-        tasks = [self.bot.connection.request(method, s, *args, **kwargs) for s in self.sources if s != self.bot.connection.local_name]
-        tasks.append(coro(self.bot.connection.local_name, *args, **kwargs))
-        if method == "get_shards":
-            data = await gather(*tasks)
-            d = []
-            for i in data: d.extend(i)
-            return d
-        elif method not in EXCLUDED_METHODS:
-            data = chain(await gather(*tasks))
-        else:
-            return await gather(*tasks)
-            
+        
+        # Try to ensure connection is ready
+        if not await self.wait_for_connection():
+            raise RuntimeError("IPC connection is not ready")
+
+        for attempt in range(self.max_retries):
+            try:
+                tasks = [
+                    self.bot.connection.request(method, s, *args, **kwargs) 
+                    for s in self.sources if s != self.bot.connection.local_name
+                ]
+                tasks.append(coro(self.bot.connection.local_name, *args, **kwargs))
+
+                if method == "get_shards":
+                    data = await gather(*tasks)
+                    d = []
+                    for i in data:
+                        d.extend(i)
+                    return d
+                elif method not in EXCLUDED_METHODS:
+                    data = chain(await gather(*tasks))
+                else:
+                    return await gather(*tasks)
+                
+                return data
+
+            except Exception as e:
+                if attempt == self.max_retries - 1:
+                    raise
+                
+                logger.warning(f"IPC request failed (attempt {attempt + 1}/{self.max_retries}): {str(e)}")
+                await asyncio.sleep(self.retry_delay * (attempt + 1))
+                
+                # Try to reconnect if needed
+                if not self.bot.connection.authorized:
+                    try:
+                        await self.bot.connection.start()
+                    except Exception as e:
+                        logger.error(f"Failed to restart IPC connection: {str(e)}")
+
     async def get_shards(self, source: str, *args, **kwargs):
         data = []
         for shard_id, shard in self.bot.shards.items():
@@ -133,4 +179,4 @@ class IPC:
         else:
             return [asDict(guild) for guild in user.mutual_guilds]
 
-    
+

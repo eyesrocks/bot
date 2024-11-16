@@ -523,8 +523,6 @@ class Events(commands.Cog):
 
     @commands.Cog.listener("on_message")
     async def autoresponder_event(self, message: discord.Message):
-        if message.author.id == 1119288050967650304:
-            await message.reply(content = "faceless minor luvr sam")
         if message.guild is None:
             return
         if message.author.bot:
