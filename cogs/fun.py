@@ -476,7 +476,7 @@ class Fun(commands.Cog):
 
         # Vape hit sequence
         embed = discord.Embed(
-            description=f"<:hits:1303239575250014241> {ctx.author.mention} is about to take a hit of the vape...",
+            description=f"<:vape:1306875712065503262> {ctx.author.mention} is about to take a hit of the vape...",
             color=self.bot.color,
         )
         message = await ctx.send(embed=embed)
