@@ -532,9 +532,9 @@ class Fun(commands.Cog):
             ctx.guild.id,
         )
         description = (
-            f"<:hits:1303239575250014241> You have successfully stolen the vape from {current_holder.mention}."
+            f"<:vape:1306875712065503262> You have successfully stolen the vape from {current_holder.mention}."
             if current_holder
-            else f"<:hits:1303239575250014241> You have claimed the vape, **{ctx.author.mention}**"
+            else f"<:vape:1306875712065503262> You have claimed the vape, **{ctx.author.mention}**"
         )
         await ctx.send(
             embed=discord.Embed(description=description, color=self.bot.color)
