@@ -107,6 +107,11 @@ class Greed(Bot):
             allowed_mentions=discord.AllowedMentions(
                 users=True, roles=False, everyone=False
             ),
+            activity=discord.Activity(
+                type=discord.ActivityType.custom,
+                    name=" ",
+                    state="/pomice",
+            ),
             strip_after_prefix=True,
             intents=config["intents"],
             case_insensitive=True,
@@ -515,14 +520,14 @@ class Greed(Bot):
                     try:
                         await message.edit(
                             embed=discord.Embed(
-                                description=f"> {ctx.author.mention} has **declined our privacy policy** and as a result you have been **blacklisted from using any greed command or feature**. Feel free to accept our [**policy**](https://greed.my/terms) using `{ctx.prefix}reset`",
+                                description=f"> {ctx.author.mention} has **declined our privacy policy** and as a result you have been **blacklisted from using any greed command or feature**. Feel free to accept our [**policy**](https://greed.bot/terms) using `{ctx.prefix}reset`",
                                 color=self.color,
                             )
                         )
                     except discord.NotFound:
                         await ctx.send(
                             embed=discord.Embed(
-                                description=f"> {ctx.author.mention} has **declined our privacy policy** and as a result you have been **blacklisted from using any greed command or feature**. Feel free to accept our [**policy**](https://greed.my/terms) using `{ctx.prefix}reset`",
+                                description=f"> {ctx.author.mention} has **declined our privacy policy** and as a result you have been **blacklisted from using any greed command or feature**. Feel free to accept our [**policy**](https://greed.bot/terms) using `{ctx.prefix}reset`",
                                 color=self.color,
                             )
                         )
@@ -738,7 +743,7 @@ class Greed(Bot):
         return {
             "embed": discord.Embed(
                 color=0xFFA500,
-                description=f"<:UB_X_Icon:1306875714426900531> {message}",
+                description=f"<:warns:1302330367323148399> {message}",
             )
         }
 
@@ -904,7 +909,7 @@ class Greed(Bot):
         if len(channels) == 0:
             try:
                 return await guild.owner.send(embed = discord.Embed(
-                    description="> Left due to the guild not having over **20 members**",
+                    description="> Left due to the guild not having over **30 members**",
                     color=self.color,
                 ))
             except Exception:
@@ -912,7 +917,7 @@ class Greed(Bot):
         try:
             return await channels[0].send(
                 embed=discord.Embed(
-                    description="> Left due to the guild not having over **20 members**",
+                    description="> Left due to the guild not having over **30 members**",
                     color=self.color,
                 )
             )
@@ -936,7 +941,7 @@ class Greed(Bot):
         if check:
             await guild.leave()
             return
-        if len(guild.members) < 20:
+        if len(guild.members) < 30:
             # if len(guild.members) < 75:
             #     if owner := guild.owner:
             #         try:
@@ -967,7 +972,7 @@ class Greed(Bot):
         return await ctx.send(
             content=f"`{code}`",
             embed=discord.Embed(
-                description=f"<:icons_warning:1306875715421077546> {ctx.author.mention}: Error occurred while performing command **{ctx.command.qualified_name}**. Use the given error code to report it to the developers in the [support server]({self.support_server})",
+                description=f"<:warns:1302330367323148399> {ctx.author.mention}: Error occurred while performing command **{ctx.command.qualified_name}**. Use the given error code to report it to the developers in the [support server]({self.support_server})",
                 color=0xFFA500,
             ),
         )
