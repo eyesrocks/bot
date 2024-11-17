@@ -1696,7 +1696,7 @@ class RivalAPI(object):
 
     async def roblox_profile(self, username: str) -> pos[Roblox]:
         async with aiohttp.ClientSession() as session:
-            async with self.session.get(
+            async with session.get(
                 "https://api.rival.rocks/roblox",
                 params={"username": username},
                 headers={"api-key": self.key},
