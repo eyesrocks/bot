@@ -859,7 +859,7 @@ class Information(commands.Cog):
 
         _staff = {
             "staff1": "<:Verified_badge_1_staff:1302154827714789396>",
-            "lim": "<:greed:1302748498034429973>",
+            "lim": "<:greed:1307532936932757555>",
             "dev": "<:buildbadge:1302156325735764060>",
         }
 
