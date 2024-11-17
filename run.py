@@ -12,10 +12,8 @@ headers = {
     'Authorization': f'Bot {TOKEN}'
 }
 
-def run_bot(bot):
-    bot.run()
-
 async def start():
+    BOTS = []
     PROCESSES = []
     ips = ["23.160.168.194", "23.160.168.195", "23.160.168.196"]
     response = requests.get('https://discord.com/api/v10/gateway/bot', headers=headers)
@@ -25,20 +23,18 @@ async def start():
 
     for i, shard_array in enumerate(chunk_list(shards, per_cluster), start=0):
         bot = Greed(CONFIG_DICT, shard_count=shard_count, shard_ids=shard_array, local_address=(ips[i], 0))
-        process = multiprocessing.Process(target=run_bot, args=(bot,), daemon=True)
-        process.start()
-        PROCESSES.append(process)
+        BOTS.append(bot)
 
     while True:
-        for i, process in enumerate(PROCESSES):
-            if not process.is_alive():
-                # Recreate and restart the dead process
-                bot = Greed(CONFIG_DICT, shard_count=shard_count, 
-                          shard_ids=list(chunk_list(shards, per_cluster))[i], 
-                          local_address=(ips[i], 0))
-                new_process = multiprocessing.Process(target=run_bot, args=(bot,), daemon=True)
-                new_process.start()
-                PROCESSES[i] = new_process
+        for i, bot in enumerate(BOTS):
+            if len(PROCESSES) <= i or not PROCESSES[i].is_alive():
+                # Process is not alive, restart it
+                process = multiprocessing.Process(target=bot.run, daemon=True)
+                process.start()
+                if len(PROCESSES) > i:
+                    PROCESSES[i] = process  # Replace the dead process
+                else:
+                    PROCESSES.append(process)  # Add new process
 
         await asyncio.sleep(5)  # Check every 5 seconds
 

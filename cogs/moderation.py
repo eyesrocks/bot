@@ -865,10 +865,9 @@ class Moderation(Cog):
     )
     @commands.bot_has_permissions(administrator=True)
     @commands.has_permissions(manage_roles=True)
-    async def roleall_humans(self, ctx: Context, *, role: Role):
-        if self.tasks.get(f"role-all-{ctx.guild.id}"):
+    async def roleall_humans(self, ctx: Context, *, role: discord.Role):
+        if self.tasks.get(f"role-all-{ctx.guild.id}") is not None:
             return await ctx.fail("only one **task** can run at a time")
-        role = role[0]
         message = await ctx.send(
             embed=discord.Embed(
                 description=f"giving {role.mention} to all humans... this may take a while...",
