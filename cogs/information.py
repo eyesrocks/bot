@@ -840,7 +840,7 @@ class Information(commands.Cog):
             "staff": "<:vile_dstaff:1022944972858720327>",
             "verified_bot": "<:694579695567503381:1302748499607289928>",
             "server_boost": "<:iconscolorboostnitro:1302340831906365482>",
-            "active_developer": "<:dev:1302154832593027092>",
+            "active_developer": "<:ActiveDeveloper:1307532835434790974>",
             "pomelo": "<:pomelo:1122143950719954964>",
             "web_idle": "<:status_idle:1302238592172822569>",
             "web_dnd": "<:status_dnd:1302238595515551784>",

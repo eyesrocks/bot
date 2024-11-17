@@ -13,7 +13,7 @@ cors = CORS(app)
 
 async def avatar(request: Request, user_id: int, identifier: str):
     if not (data := await app.ctx.db.fetchrow("""SELECT avatar, content_type, ts FROM avatars WHERE user_id = $1 AND id = $2""", user_id, identifier)):
-        return json(content={'message':'Not found'}, status=404)
+        return json(body={'message':'Not found'}, status=404)
     return raw(data.avatar, content_type=data.content_type, status=200)
 
 def get_url(row: Record) -> str:
