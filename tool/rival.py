@@ -1349,17 +1349,19 @@ class RobloxStatistics(BaseModel):
 
 
 class Roblox(BaseModel):
-    url: Optional[str] = None
-    id: Optional[int] = None
-    username: Optional[str] = None
-    display_name: Optional[str] = None
-    avatar_url: Optional[str] = None
-    description: Optional[str] = None
-    created_at: Optional[int] = None
-    last_online: Optional[str] = None
-    last_location: Optional[str] = None
-    badges: Optional[List[str]] = None
-    statistics: Optional[RobloxStatistics] = None
+    error: pos[str] = None
+    url: pos[str] = None
+    id: pos[int] = None
+    username: pos[str] = None
+    display_name: pos[str] = None
+    avatar_url: pos[str] = None
+    description: pos[Any] = None
+    created_at: pos[int] = None
+    last_online: pos[Any] = None
+    last_location: pos[Any] = None
+    badges: pos[array] = None
+    statistics: pos[RobloxStatistics] = None
+
 
 class Statistics(BaseModel):
     files: str
@@ -1695,14 +1697,14 @@ class RivalAPI(object):
         return ImageSearchResponse(**data)
 
     async def roblox_profile(self, username: str) -> pos[Roblox]:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                "https://api.rival.rocks/roblox",
-                params={"username": username},
-                headers={"api-key": self.key},
-            ) as response:
-                data = await response.json()
-            return Roblox(**data)
+        await self.get_session()
+        async with self.session.get(
+            "https://api.rival.rocks/roblox",
+            params={"username": username},
+            headers={"api-key": self.key},
+        ) as response:
+            data = await response.json()
+        return Roblox(**data)
 
     async def transparent(self, url: str) -> discord.File:
         await self.get_session()

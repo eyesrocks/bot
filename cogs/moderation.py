@@ -263,10 +263,12 @@ class Moderation(Cog):
                     )
                 )
             reason = f"invoked by author | {ctx.author.id}"
-            future = asyncio.ensure_future(
-                self.add_role(message, members, role, remove, reason)
-            )
-            self.tasks[f"role-all-{ctx.guild.id}"] = future
+            tasks = [
+                self.add_role(message, [member], role, remove, reason)
+                for member in members
+            ]
+            await asyncio.gather(*tasks)
+            self.tasks.pop(f"role-all-{ctx.guild.id}")
 
     async def disable_slowmode(self, sleep_time: int, channel: discord.TextChannel):
         await asyncio.sleep(sleep_time)
@@ -865,9 +867,10 @@ class Moderation(Cog):
     )
     @commands.bot_has_permissions(administrator=True)
     @commands.has_permissions(manage_roles=True)
-    async def roleall_humans(self, ctx: Context, *, role: discord.Role):
-        if self.tasks.get(f"role-all-{ctx.guild.id}") is not None:
+    async def roleall_humans(self, ctx: Context, *, role: Role):
+        if self.tasks.get(f"role-all-{ctx.guild.id}"):
             return await ctx.fail("only one **task** can run at a time")
+        role = role[0]
         message = await ctx.send(
             embed=discord.Embed(
                 description=f"giving {role.mention} to all humans... this may take a while...",
