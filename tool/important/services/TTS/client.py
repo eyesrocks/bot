@@ -58,20 +58,20 @@ class TTS:
         self.model_storage = None
 
     def get_model_names(self):
-        return [str(p) for p in Path('/root/tts_models/piper-voices/en/en_US/amy').iterdir() if p.is_dir()]
+        return [str(p) for p in Path('/root/tts_models/').iterdir() if p.is_dir()]
 
     def get_models(self):
         models = []
-        for m in [str(p) for p in Path('/root/tts_models/piper-voices/en/en_US/amy').glob('*onnx') if not p.is_dir()]:
+        for m in [str(p) for p in Path('/root/tts_models').glob('*onnx') if not p.is_dir()]:
             name, level, language = self.get_name(m)
             models.append(TTSModel(**{'model': m, 'config': f'{m}.json', 'name': name, 'language': language, 'level': level}))
         self.model_storage = models
         return models
 
     def _find_model_named(self, name: str, language: str = 'en_US', level: str = 'low'):
-        if self.model_storage is None:
+        if self.model_storage is None: 
             self.get_models()
-        models = {m.name: m for m in self.model_storage}
+        models = {m.name:m for m in self.model_storage}
         close = []
         exact = [m for m in self.model_storage if m.name == name and m.language == language and m.level == level]
         if len(exact) > 0:
@@ -81,11 +81,11 @@ class TTS:
                 if model.name == match and model.language == language and model.level == level:
                     return match
                 else:
-                    if model.name == match and model.language == language:
+                    if model.name == match and model.language == language: 
                         close.append(model)
         if len(close) > 0:
             return close[0]
-        else:
+        else: 
             raise ValueError("No model found for that query")
 
     def get_voice(self, name: str, language: str = 'en_US', level: str = 'low'):
@@ -93,25 +93,25 @@ class TTS:
         return f"{m.language}-{m.name}-{m.level}"
 
     def get_name(self, path: str):
-        obj = path.split('-', 1)
+        obj = path.split('-',1)
         language = obj[0].split('/')[-1]
         name, level = obj[1].split('-')
-        level = level.split('.', 1)[0]
+        level = level.split('.',1)[0]
         return name, level, language
 
     async def get_model_names_all(self):
-        return orjson.loads(await read_file("/root/tts_models/piper-voices/en/en_US/amy/voices.json", "rb"))
+        return orjson.loads(await read_file("/root/tts_models/voices.json", "rb"))
 
     def get_model_files(self, name: str):
-        p = [m for m in Path('/root/tts_models/piper-voices/en/en_US/amy').iterdir()]
-        if "/root/tts_models/piper-voices/en/en_US/amy" in name:
+        p = [m for m in Path('/root/tts_models').iterdir()]
+        if "/root/tts_models" in name: 
             f = [d for d in Path(name).iterdir()]
-        else:
-            f = [d for d in Path(f'/root/tts_models/piper-voices/en/en_US/amy/{name}/{p[0]}').iterdir()]
+        else: 
+            f = [d for d in Path(f'/root/tts_models/{name}/{p[0]}').iterdir()]
         return [str(k) for k in Path(f[0]).iterdir() if "onnx" in str(k)]
 
     def download_models(self):
-        return get_voices(download_dir='/root/tts_models/piper-voices/en/en_US/amy', update_voices=True)
+        return get_voices(download_dir = '/root/tts_models', update_voices = True)
 
     async def delete_soon(self, fp: str, ttl: int = 100) -> bool:
         async def delete(fp: str, ttl: int):
@@ -132,11 +132,11 @@ class TTS:
         config = None
         model = None
         for file in files:
-            if file.endswith('.json'):
+            if file.endswith('.json'): 
                 config = file
-            else:
+            else: 
                 model = file
-        self.models[name] = {'model': model, 'config': config}
+        self.models[name] = {'model': model,'config': config}
         return self.models[name]
 
     def find_model(self, name: str, level: str = 'low', language: str = 'en_US'):
@@ -148,12 +148,12 @@ class TTS:
 
     async def do_tts(self, model: str, text: str, output_dir: Optional[str] = "/data/tts"):
         output_dir = f"/root/{BASE_DIR}{output_dir}"
-        if "/root/tts_models/piper-voices/en/en_US/amy" not in model:
-            model = f"/root/tts_models/piper-voices/en/en_US/amy/{model}"
+        if "/root/tts_models/" not in model:
+            model = f"/root/tts_models/{model}"
         if ".onnx" not in model:
             model = f"{model}.onnx"
         filename = f"{output_dir}/{tuuid()}.mp3"
         cmd = f"""echo '{text}' | piper \
-  --model {model} \
+  --model /root/tts_models/en_US-amy-low.onnx \
   --output_file {filename}"""
         return await execute(cmd, filename)
