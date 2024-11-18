@@ -39,7 +39,7 @@ class BotStatistics(commands.Cog):
         embed = discord.Embed(
             title="Bot Statistics",
             description="Daily statistics for the bot's activity.",
-            color=self.bot.co  # Change this to your desired color
+            color=self.bot.color  # Change this to your desired color
         )
         embed.add_field(name="Servers Joined", value=f"{self.stats['servers_joined']}", inline=True)
         embed.add_field(name="Servers Left", value=f"{self.stats['servers_left']}", inline=True)
