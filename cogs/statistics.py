@@ -16,6 +16,7 @@ class BotStatistics(commands.Cog):
             "servers_left": 0,
             "users_gained": 0,
             "users_lost": 0,
+            "total_users": 0,  # Track the total users across all servers
         }
 
         # Track member counts for all servers
@@ -35,13 +36,14 @@ class BotStatistics(commands.Cog):
     def save_stats(self):
         """Save current statistics to the JSON file."""
         with open(self.stats_file, "w") as file:
-            json.dump(self.stats, file)
+            json.dump(self.stats, file, indent=4)
 
     @commands.Cog.listener()
     async def on_ready(self):
         """Initialize member counts for all servers when the bot is ready."""
         for guild in self.bot.guilds:
             self.server_member_counts[guild.id] = guild.member_count
+            self.stats["total_users"] += guild.member_count  # Update total user count
         print("Server member counts initialized.")
 
     @commands.Cog.listener()
@@ -50,6 +52,7 @@ class BotStatistics(commands.Cog):
         self.stats["servers_joined"] += 1
         self.server_member_counts[guild.id] = guild.member_count
         self.stats["users_gained"] += guild.member_count
+        self.stats["total_users"] += guild.member_count  # Add to total users
         self.save_stats()
 
     @commands.Cog.listener()
@@ -58,6 +61,7 @@ class BotStatistics(commands.Cog):
         if guild.id in self.server_member_counts:
             self.stats["servers_left"] += 1
             self.stats["users_lost"] += self.server_member_counts[guild.id]
+            self.stats["total_users"] -= self.server_member_counts[guild.id]  # Subtract from total users
             del self.server_member_counts[guild.id]
         self.save_stats()
 
@@ -72,6 +76,7 @@ class BotStatistics(commands.Cog):
             self.server_member_counts[guild_id] += 1
 
         self.stats["users_gained"] += 1
+        self.stats["total_users"] += 1  # Increment total user count across all servers
         self.save_stats()
 
     @commands.Cog.listener()
@@ -86,6 +91,7 @@ class BotStatistics(commands.Cog):
                 self.server_member_counts[guild_id] -= 1
 
         self.stats["users_lost"] += 1
+        self.stats["total_users"] -= 1  # Decrease total user count across all servers
         self.save_stats()
 
     @commands.command()
@@ -106,6 +112,7 @@ class BotStatistics(commands.Cog):
         embed.add_field(name="Servers Left", value=f"{self.stats['servers_left']}", inline=True)
         embed.add_field(name="Users Gained", value=f"{self.stats['users_gained']}", inline=True)
         embed.add_field(name="Users Lost", value=f"{self.stats['users_lost']}", inline=True)
+        embed.add_field(name="Total Users", value=f"{self.stats['total_users']}", inline=True)
         embed.add_field(name="Total Uptime", value=uptime_str, inline=False)
         embed.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.avatar.url)
 
