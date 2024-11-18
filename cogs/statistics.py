@@ -8,7 +8,7 @@ class BotStatistics(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.bot_start_time = datetime.datetime.utcnow()  # Track when the bot started
-        self.stats_file = "bot_stats.json"  # JSON file to store statistics
+        self.stats_file = "/root/greed/data/stats.json"  # JSON file to store statistics
 
         # Initialize statistics
         self.stats = {
