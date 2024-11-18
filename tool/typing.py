@@ -4,7 +4,6 @@ from discord.ext import commands
 
 
 def _typing_done_callback(fut: asyncio.Future) -> None:
-    # just retrieve any exception and call it a day
     try:
         fut.exception()
     except (asyncio.CancelledError, Exception):
@@ -16,36 +15,34 @@ class Typing:
         self.loop: asyncio.AbstractEventLoop = ctx._state.loop
         self.messageable: discord.Message = ctx.message
         self.command: commands.Command = ctx.command
-        self.bot = ctx.bot
+        self.bot: commands.Bot = ctx.bot
         self.guild: discord.Guild = ctx.guild
         self.author: discord.Member = ctx.author
         self.channel: discord.TextChannel = ctx.channel
-        self.ctx = ctx
+        self.ctx: commands.Context = ctx
+        self.task: asyncio.Task[None] = None
 
     async def wrapped_typer(self) -> None:
-        await self.channel._state.http.send_typing(self.channel.id)
+        await self.channel.trigger_typing()
 
     def __await__(self):
         return self.wrapped_typer().__await__()
 
     async def do_typing(self) -> None:
-        typing = self.channel._state.http.send_typing
-
         while True:
+            await self.channel.trigger_typing()
             await asyncio.sleep(5)
-            await typing(self.channel.id)
 
     async def __aenter__(self) -> None:
-        await self.channel._state.http.send_typing(self.channel.id)
-        self.task: asyncio.Task[None] = self.loop.create_task(self.do_typing())
+        await self.channel.trigger_typing()
+        self.task = self.loop.create_task(self.do_typing())
         self.task.add_done_callback(_typing_done_callback)
 
     async def __aexit__(
         self,
-        exc_type,
-        exc,
-        traceback,
+        exc_type: type[BaseException],
+        exc: BaseException,
+        tb: asyncio.TracebackType,
     ) -> None:
-        if hasattr(self, "task"):
+        if self.task:
             self.task.cancel()
-        return
