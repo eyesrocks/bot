@@ -360,6 +360,16 @@ class Greed(Bot):
     async def channel_count(self) -> int:
         return sum(i for i in await self.ipc.roundtrip("get_channel_count"))
 
+    async def get_channel(self, id: int) -> Optional[discord.TextChannel]:
+        channel = self.bot.get_channel(id)
+        if channel:
+            return channel
+        channels = await self.ipc.roundtrip("get_channel", channel_id=id)
+        for ch_data in channels:
+            if ch_data:
+                return self.transformers.transform_channel(ch_data)
+        return None
+
     @property
     def invite_url(self, client_id: Optional[int] = None) -> str:
         if self.user.id == 1188859107701166161 and self.guilds_maxed is True:

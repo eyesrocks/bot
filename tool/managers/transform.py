@@ -1,4 +1,4 @@
-from discord import Member, Guild, User, Client
+from discord import Member, Guild, User, Client, TextChannel, VoiceChannel, CategoryChannel
 from typing import Union, Optional, Dict, Any, List
 
 def asDict(obj, max_depth=5) -> dict:
@@ -93,3 +93,19 @@ class Transformers:
             data = asDict(member)
             data["guild"] = self.transform_guild(member.guild)
             return data
+    
+    def transform_channel(
+        self, channel: Union[TextChannel, VoiceChannel, CategoryChannel, dict]
+    ) -> Optional[Union[Dict[Any, Any], TextChannel, VoiceChannel, CategoryChannel]]:
+        if isinstance(channel, dict):
+            channel_type = channel.get("type")
+            if channel_type == 0:
+                return TextChannel(state=self._connection, guild=None, data=channel)
+            elif channel_type == 2:
+                return VoiceChannel(state=self._connection, guild=None, data=channel)
+            elif channel_type == 4:
+                return CategoryChannel(state=self._connection, guild=None, data=channel)
+            else:
+                raise ValueError(f"Unsupported channel type: {channel_type}")
+        else:
+            return asDict(channel)

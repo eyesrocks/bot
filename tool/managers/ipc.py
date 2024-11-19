@@ -180,3 +180,9 @@ class IPC:
             return [asDict(guild) for guild in user.mutual_guilds]
 
 
+    async def get_channel(self, source: str, channel_id: int):
+        channel = self.bot.get_channel(channel_id)
+        if channel:
+            return self.transformers.transform_channel(channel)
+        else:
+            return None
