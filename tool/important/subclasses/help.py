@@ -159,8 +159,8 @@ class HelpSelectMenu(discord.ui.Select):
 def generate(ctx: Context, c: Command, example: str = "", usage=False) -> str:
     params = " ".join(f"<{param}>" for param in c.clean_params.keys())
     if usage:
-        ex = f"\n> [**Example:**](https://greed.my) **{example}**" if example else ""
-        return f"> [**Syntax:**](https://greed.my) **{ctx.prefix}{c.qualified_name} {params}**{ex}"
+        ex = f"\n> Example: {example}" if example else ""
+        return f"> Syntax: {ctx.prefix}{c.qualified_name} {params}{ex}"
     return f"{'view ' if len(c.clean_params.keys()) == 0 else 'change '}the {c.name.lower()}{' for ' + c.qualified_name.lower().split(' ')[-1] + 's' if len(c.qualified_name.lower().split(' ')) > 2 else ''}"
 
 def chunks(array: List, chunk_size: int) -> Generator[List, None, None]:
@@ -263,7 +263,7 @@ class MyHelpCommand(commands.HelpCommand):
                         flag_value = "number" if flag.get("converter", None) == int else "true/false" if flag.get("converter", None) == bool else "text"
                         m = f"(default: `{flag['default']}`)" if flag.get("default") else ""
                         f = f"{flag.get('description')} " if flag.get("description") else ""
-                        d.append(f"> [**{flag_name.title()}:**](https://greed.my) **{f}{flag_value} {m}**")
+                        d.append(f" ```ruby\n{flag_name.title()}: {f}{flag_value} {m}```")
                 embed.add_field(name="Flags", value="".join(f"{_}\n" for _ in d), inline=True)
             aliases = ", ".join(f"{a}" for a in command.aliases) or "N/A"
             embed.set_footer(text=f"Aliases: {aliases}・Module: {command.cog_name.replace('.py','')}・{i}/{len(commands)}")
@@ -306,7 +306,7 @@ class MyHelpCommand(commands.HelpCommand):
                     flag_value = "number" if flag.get("converter", None) == int else "true/false" if flag.get("converter", None) == bool else "text"
                     m = f"(default: `{flag['default']}`)" if flag.get("default") else ""
                     f = f"{flag.get('description')} " if flag.get("description") else ""
-                    d.append(f"> [**{flag_name.title()}:**](https://greed.my) **{f}{flag_value} {m}**")
+                    d.append(f"> {flag_name.title()}: {f}{flag_value} {m}")
             embed.add_field(name="Flags", value="".join(f"{_}\n" for _ in d), inline=True)
         aliases = ", ".join(f"{a}" for a in command.aliases) or "N/A"
         embed.set_footer(text=f"Aliases: {aliases}・Module: {command.cog_name.replace('.py','')}")
