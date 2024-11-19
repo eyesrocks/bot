@@ -1334,8 +1334,13 @@ class Information(commands.Cog):
             )
 
             for i, booster in enumerate(premium_subscribers, start=1):
+                boost_count = await self.bot.db.fetchval(
+                    "SELECT COUNT(*) FROM boosts WHERE user_id = $1 AND guild_id = $2",
+                    booster.id,
+                    ctx.guild.id,
+                )
                 rows.append(
-                    f"``{i}.``**{booster.name} ** - {discord.utils.format_dt(booster.premium_since, style='R')} "
+                    f"``{i}.``**{booster.name}** - {discord.utils.format_dt(booster.premium_since, style='R')} (Boosted {boost_count} times)"
                 )
 
         embeds = []
@@ -1377,7 +1382,7 @@ class Information(commands.Cog):
             embeds.append(
                 discord.Embed(
                     color=self.bot.color, description="**This guild has no boosters**"
-                ).set_author(name=ctx.author.name, icon_url=ctx.author.display_avatarl)
+                ).set_author(name=ctx.author.name, icon_url=ctx.author.display_avatar)
             )
 
         await ctx.alternative_paginate(embeds)
