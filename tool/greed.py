@@ -360,7 +360,7 @@ class Greed(Bot):
     async def channel_count(self) -> int:
         return sum(i for i in await self.ipc.roundtrip("get_channel_count"))
 
-    async def get_channel(self, id: int) -> Optional[discord.TextChannel]:
+    async def get_channels(self, id: int) -> Optional[discord.TextChannel]:
         channel = self.bot.get_channel(id)
         if channel:
             return channel
