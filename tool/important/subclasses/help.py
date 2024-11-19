@@ -253,7 +253,7 @@ class MyHelpCommand(commands.HelpCommand):
             else:
                 example = ""
             embed.description = brief
-            embed.add_field(name="Usage", value=generate(ctx, command, example, True), inline=False)
+            embed.add_field(name="Usage", value=f"```ruby\n{generate(ctx, command, example, True)}\n```", inline=False)
             if flags := command.parameters:
                 d = []
                 descriptions = []
@@ -274,7 +274,7 @@ class MyHelpCommand(commands.HelpCommand):
                 color=0xffffff,
                 title=f'**Need help with {group.qualified_name}?**',
                 url='https://greed.my/Commands',
-                description=f"<:settings_icon:1302207796737085533> **Usage**\n> **{group.qualified_name}** has {len([i for i in group.walk_commands()])} sub commands that can be used.To view all commands for **{group.qualified_name}**, Use the help menu below or visit our [**website**](https://greed.my/)",
+                description=f"<:settings_icon:1302207796737085533> **Usage**\n> **{group.qualified_name}** has {len([i for i in group.walk_commands()])} sub commands that can be used. To view all commands for **{group.qualified_name}**, use the help menu below or visit our [**website**](https://greed.my/)",
             ),
             view=HelpInterface(self.context.bot, embeds)
         )
@@ -296,7 +296,7 @@ class MyHelpCommand(commands.HelpCommand):
             embed.add_field(name="Permissions", value=f"`{perms[0].replace('_',' ').title()}`", inline=True)
         example = command.example.replace(",", self.context.prefix) if command.example else self.get_example(command)
         embed.description = brief
-        embed.add_field(name="Usage", value=generate(ctx, command, example, True), inline=False)
+        embed.add_field(name="Usage", value=f"```ruby\n{generate(ctx, command, example, True)}\n```", inline=False)
         if flags := command.parameters:
             d = []
             descriptions = []
