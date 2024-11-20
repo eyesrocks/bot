@@ -10,20 +10,12 @@ from tool.important.subclasses.parser import Script
 from cogs.servers import EmbedConverter
 from tool.greed import Greed
 from loguru import logger
-# class EmbedConverter(commands.Converter):
-#     async def convert(self, ctx: Context, code: str):
-#         try:
-#             script = Script(code, ctx.author)
-#             await script.compile()
-#         except Exception as e:
-#             raise e
-#         return code
 
 
 class Vanity(commands.Cog):
     def __init__(self, bot: Greed):
         self.bot = bot
-        
+
     @commands.group(
         name="vanity",
 #         brief="Reward users with a role for repping the vanity",
