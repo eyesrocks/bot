@@ -119,7 +119,7 @@ class Vanity(commands.Cog):
             color=discord.Color.green(),  # You can change the color of the embed
         )
 
-       try:
+        try:
         # Send the embed to the channel
            await channel.send(embed=embed)
     except Exception as e:
