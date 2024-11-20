@@ -115,7 +115,7 @@ class Vanity(commands.Cog):
     # Create the embed
         embed = discord.Embed(
            title="Vanity URL Changed",  # Title of the embed
-        description=message,  # The main body of the embed (the message)
+            description=message,  # The main body of the embed (the message)
         color=discord.Color.green(),  # You can change the color of the embed
     )
 
