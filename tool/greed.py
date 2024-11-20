@@ -117,6 +117,7 @@ class Greed(Bot):
             case_insensitive=True,
             owner_ids=config["owners"],
             anti_cloudflare_ban=True,
+            chunk_guilds_at_startup=False,
             enable_debug_events=True,
             delay_ready=True,
             help_command=MyHelpCommand(),
