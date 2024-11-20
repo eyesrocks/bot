@@ -103,7 +103,7 @@ class Vanity(commands.Cog):
 
         # Fetch the TextChannel object from the channel_id
         channel = self.bot.get_channel(channel_id)
-        if not channel:  # Handle cases where the channel is invalid or deleted
+        if not channel:  
             logger.error(f"Channel with ID {channel_id} not found")
             return
 
