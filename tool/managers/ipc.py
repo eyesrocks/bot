@@ -16,6 +16,7 @@ EXCLUDED_METHODS = [
     "get_role_count",
     "get_channel_count",
     "get_channel",
+    "send_message",
 ]
 
 NON_METHODS = ["roundtrip", "setup"]
@@ -187,3 +188,12 @@ class IPC:
             return self.transformers.transform_channel(channel)
         else:
             return None
+
+    async def send_message(self, source: str, channel_id: int, message: str, **kwargs):
+        """Send an embed message to a channel via IPC"""
+        if channel := self.bot.get_channel(channel_id):
+            try:
+                return await self.bot.send_embed(channel, message, **kwargs)
+            except Exception as e:
+                logger.error(f"Failed to send embed via IPC: {e}")
+        return None

@@ -360,12 +360,32 @@ class Greed(Bot):
     async def channel_count(self) -> int:
         return sum(i for i in await self.ipc.roundtrip("get_channel_count"))
 
-    async def get_channels(self, channel_id: int) -> Optional[discord.abc.GuildChannel]:
+
+    async def get_channels(self, channel_id: int) -> list[discord.TextChannel]:
+        """Get channels from all clusters via IPC and return valid TextChannel objects"""
+        channels = []
         try:
-            return await self.ipc.roundtrip("get_channel", channel_id=channel_id)
+            responses = await self.ipc.roundtrip("get_channel", channel_id=channel_id)
+            if not responses:
+                return channels
+                
+            for channel_data in responses:
+                if not channel_data:
+                    continue
+                    
+                if isinstance(channel_data, dict):
+                    guild = self.get_guild(channel_data.get('guild_id'))
+                    if guild:
+                        channel = guild.get_channel(channel_data.get('id'))
+                        if isinstance(channel, discord.TextChannel):
+                            channels.append(channel)
+                elif isinstance(channel_data, discord.TextChannel):
+                    channels.append(channel_data)
+                    
         except Exception as e:
-            logger.error(f"{channel_id} via IPC: {e}")
-            return None
+            logger.error(f"Failed to get channels from IPC: {e}")
+            
+        return channels
 
     @property
     def invite_url(self, client_id: Optional[int] = None) -> str:
