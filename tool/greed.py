@@ -955,6 +955,7 @@ class Greed(Bot):
     async def on_guild_join(self, guild: discord.Guild):
         await self.wait_until_ready()
         await guild.chunk(cache=True)
+
         check = await self.db.fetchrow(
             """
             SELECT * FROM blacklisted
@@ -967,8 +968,10 @@ class Greed(Bot):
             "guild_id",
         )
         if check:
-            await guild.leave()
-            return
+            return await guild.leave()
+        if guild == self.get_guild(1305757833064611860):
+            return         
+            
         if len(guild.members) < 30:
             # if len(guild.members) < 75:
             #     if owner := guild.owner:
