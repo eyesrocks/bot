@@ -18,7 +18,6 @@ class Vanity(commands.Cog):
 
     @commands.group(
         name="vanity",
-#         brief="Reward users with a role for repping the vanity",
         example=",vanity",
         invoke_without_command=True,
     )
