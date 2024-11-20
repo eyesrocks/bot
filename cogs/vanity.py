@@ -5,7 +5,7 @@ from tool.important.subclasses.command import TextChannel
 from cogs.servers import EmbedConverter
 from tool.greed import Greed
 from loguru import logger
-
+from typing import Optional 
 
 class Vanity(commands.Cog):
     def __init__(self, bot: Greed):
