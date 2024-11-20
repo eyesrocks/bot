@@ -23,7 +23,6 @@ from loguru import logger
 class Vanity(commands.Cog):
     def __init__(self, bot: Greed):
         self.bot = bot
-
     @commands.group(
         name="vanity",
 #         brief="Reward users with a role for repping the vanity",
