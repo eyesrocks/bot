@@ -252,11 +252,12 @@ class Script:
         return template
 
     async def compile(self: Self) -> None:
-        if not hasattr(self, "_compiled_pattern"):
-            self._compiled_pattern = compile(r"(?P<key>\w+):(?P<value>.+?)(?=\n|$)")
-
+        """
+        Compiles the template into structured data for an embed. Supports processing
+        keys like 'footer', 'author', 'button', and 'field' with specific formatting rules.
+        """
         self.template = self.template.replace(r"\n", "\n").replace("\\n", "\n")
-        matches = self._compiled_pattern.finditer(self.template)
+        matches = self.pattern.findall(self.template)
 
         def parse_footer(value: str):
             """Parses footer data."""
@@ -302,8 +303,10 @@ class Script:
             self.data["embed"]["fields"].append(field)
 
         for match in matches:
-            key = match.group("key")
-            value = match.group("value").strip()
+            parts = match.split(":", 1)
+            if len(parts) != 2:
+                continue
+            key, value = parts[0], parts[1].strip()
             if key == "footer":
                 parse_footer(value)
             elif key == "author":
