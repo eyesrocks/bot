@@ -110,11 +110,11 @@ class Vanity(commands.Cog):
         vanity = str(vanity) if vanity else "unknown"
 
         # Replace placeholders in the message
-        message = (f"Vanity **{vanity}** has been dropped").replace("{vanity}", vanity)
+        message = (msg or f"Vanity {vanity} has been dropped").replace("{vanity}", vanity)
 
     # Create the embed
         embed = discord.Embed(
-            title="new vanity",  # Title of the embed
+            title="Vanity URL Changed",  # Title of the embed
             description=message,  # The main body of the embed (the message)
             color=self.bot.color,  # You can change the color of the embed
         )
