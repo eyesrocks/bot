@@ -109,7 +109,7 @@ class Vanity(commands.Cog):
 
         vanity = str(vanity) if vanity else "unknown"
 
-        # Replace placeholders in the message
+
         message = (msg or f"Vanity **{vanity}** has been dropped").replace("{vanity}", vanity)
         
         message = message.replace("{description:", "").replace("}", "")
