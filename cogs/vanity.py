@@ -112,6 +112,7 @@ class Vanity(commands.Cog):
         # Replace placeholders in the message
         message = (msg or f"Vanity **{vanity}** has been dropped").replace("{vanity}", vanity)
         
+        message = message.replace("{description:", "").replace("}", "")
     # Create the embed
         embed = discord.Embed(
             description=message,  # The main body of the embed (the message)
