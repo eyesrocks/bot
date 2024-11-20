@@ -121,7 +121,5 @@ class Vanity(commands.Cog):
 
 
 
-
-
 async def setup(bot):
     await bot.add_cog(Vanity(bot))
