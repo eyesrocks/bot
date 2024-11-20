@@ -113,7 +113,7 @@ class Vanity(commands.Cog):
         message = (msg or f"Vanity **{vanity}** has been dropped").replace("{vanity}", vanity)
         
         message = message.replace("{description:", "").replace("}", "")
-    # Create the embed
+   
         embed = discord.Embed(
             title="new vanity",
             description=message,  
