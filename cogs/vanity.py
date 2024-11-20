@@ -202,7 +202,10 @@ class Vanity(commands.Cog):
         
         if not channel_id:
             return
-            
+
+
+        vanity = str(vanity) if vanity else "unknown"
+
         message = (msg or f"Vanity {vanity} has been dropped").replace("{vanity}", vanity)
 
         try:
