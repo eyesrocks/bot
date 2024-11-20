@@ -116,7 +116,7 @@ class Vanity(commands.Cog):
     # Create the embed
         embed = discord.Embed(
             title="new vanity",
-            description=message,  # The main body of the embed (the message)
+            description=message,  
             color=self.bot.color,  
         )
 
