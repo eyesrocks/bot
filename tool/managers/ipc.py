@@ -189,11 +189,12 @@ class IPC:
         else:
             return None
 
-    async def send_message(self, source: str, channel_id: int, message: str, **kwargs):
+    async def send_message(self, source: str, channel_id: int, message: str, user_id: int, **kwargs):
         """Send an embed message to a channel via IPC"""
         if channel := self.bot.get_channel(channel_id):
             try:
-                return await self.bot.send_embed(channel, message, **kwargs)
+                user = self.bot.get_user(user_id)
+                return await self.bot.send_embed(channel, message, user=user, **kwargs)
             except Exception as e:
                 logger.error(f"Failed to send embed via IPC: {e}")
         return None
