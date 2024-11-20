@@ -14,7 +14,8 @@ EXCLUDED_METHODS = [
     "get_user_count",
     "get_guild_count",
     "get_role_count",
-    "get_channel_count"   
+    "get_channel_count",
+    "get_channel",
 ]
 
 NON_METHODS = ["roundtrip", "setup"]
