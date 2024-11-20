@@ -121,7 +121,7 @@ class Vanity(commands.Cog):
 
        try:
         # Send the embed to the channel
-        await channel.send(embed=embed)
+           await channel.send(embed=embed)
     except Exception as e:
         logger.error(f"Failed to send vanity notification: {e}")
 
