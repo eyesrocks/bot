@@ -119,11 +119,11 @@ class Vanity(commands.Cog):
             color=discord.Color.green(),  # You can change the color of the embed
         )
 
-        try:
-            await channel.send(message)  # Send the message to the channel
-        except Exception as e:
-            logger.error(f"Failed to send vanity notification: {e}")
-
+    try:
+        # Send the embed to the channel
+        await channel.send(embed=embed)
+    except Exception as e:
+        logger.error(f"Failed to send vanity notification: {e}")
 
 async def setup(bot):
     await bot.add_cog(Vanity(bot))
