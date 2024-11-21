@@ -1679,7 +1679,7 @@ class Information(commands.Cog):
 
 
     @commands.command()
-    async def buy(self, ctx):
+    async def purchase(self, ctx):
         """Send an embed with purchase options and buttons."""
         
         # Create the embed
