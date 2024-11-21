@@ -1697,7 +1697,7 @@ class Information(commands.Cog):
         )
 
         # Create buttons for Monthly and Lifetime
-        monthly_button = Button(label="Monthly - $11.50", style=discord.ButtonStyle.green, custom_id="monthly")
+        monthly_button = Button(label="Monthly - $3.50", style=discord.ButtonStyle.green, custom_id="monthly")
         lifetime_button = Button(label="Lifetime - $31", style=discord.ButtonStyle.blurple, custom_id="lifetime")
 
         # Define a view with the buttons
