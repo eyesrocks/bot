@@ -1684,7 +1684,7 @@ class Information(commands.Cog):
         
         # Create the embed
         embed = discord.Embed(
-            title="Purchase Subscription",
+            title="Purchase Wrath",
             description=(
                 "Purchase $6 one time or $3.50 monthly.\n\n"
                 "If you're interested in purchasing a subscription for a Discord server of your choice, "
