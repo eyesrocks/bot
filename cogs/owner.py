@@ -566,7 +566,7 @@ class Owner(commands.Cog):
           embed = discord.Embed(
               title="**Help**",  # Title of the embed
               description="<:luma_info:1302336751599222865> **support: [/pomice](https://discord.gg/pomice)**\n<a:loading:1302351366584270899> **site: [greed](http://greed.my)**\n\n Use **,help [command name]** or select a category from the dropdown.",
-              color=0xffffff,  # Embed color (you can change it)
+              color=0x36393f,  # Embed color (you can change it)
           )
 
           # Set the author for the embed (bot's username and avatar)
