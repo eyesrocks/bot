@@ -91,9 +91,9 @@ class HelpModal(discord.ui.Modal, title="Help"):
             name = interaction.data["components"][0]["components"][0]["value"]
             command = find_command(self.bot, name)
             if not command:
-                await interaction.message.edit(embed=Embed(color=0xffffff, description=f"no command could be found close to `{name}`"), view=BotHelpView(self.bot, self.ctx))
+                await interaction.message.edit(embed=Embed(color=0x36393f, description=f"no command could be found close to `{name}`"), view=BotHelpView(self.bot, self.ctx))
                 return await interaction.response.defer()
-            embed = Embed(color=0xffffff, timestamp=datetime.datetime.now())
+            embed = Embed(color=0x36393f, timestamp=datetime.datetime.now())
             embed.set_author(name=self.ctx.author.display_name, icon_url=self.ctx.author.display_avatar.url)
             embed.set_image(url=f"https://greed.my/{command.qualified_name.replace(' ', '_')}.png?{tuuid()}")
             await interaction.message.edit(view=BotHelpView(self.bot, self.ctx), embed=embed)
@@ -188,7 +188,7 @@ class CommandSelect(discord.ui.Select):
         commands_list = self.get_commands_by_category(selected_category)
         embed = discord.Embed(
             title=f"**Commands in {selected_category}**",
-            color=0xffffff,
+            color=0x36393f,
             description="\n".join(f"**{cmd}**" for cmd in commands_list) or "No commands available in this category."
         )
         embed.set_thumbnail(url=self.view.bot.user.avatar.url)
@@ -218,7 +218,7 @@ class MyHelpCommand(commands.HelpCommand):
         embed = discord.Embed(
             title="Help",
             description="<:luma_info:1302336751599222865> **support: [/pomice](https://discord.gg/pomice)**\n<a:loading:1302351366584270899> **site: [greed](http://greed.my)**\n\n Use **,help [command name]** or select a category from the dropdown",
-            color=0xffffff,
+            color=0x36393f,
         )
         embed.set_author(name=self.context.bot.user.name, icon_url=self.context.bot.user.avatar)
         
@@ -238,13 +238,13 @@ class MyHelpCommand(commands.HelpCommand):
         if retry_after := await self.context.bot.glory_cache.ratelimited(f"rl:user_commands{self.context.author.id}", 2, 4):
             raise commands.CommandOnCooldown(None, retry_after, None)
 
-        embed = Embed(color=0xffffff, timestamp=datetime.datetime.now())
+        embed = Embed(color=0x36393f, timestamp=datetime.datetime.now())
         ctx = self.context
         commands = [c for c in group.walk_commands()] + [group]
         commands = [c for c in commands if check_command(c)]
         embeds = {}
         for i, command in enumerate(commands, start=1):
-            embed = Embed(color=0xffffff, timestamp=datetime.datetime.now())
+            embed = Embed(color=0x36393f, timestamp=datetime.datetime.now())
             brief = command.brief or generate(ctx, command)
             params = ", ".join(f"{c}" for c in command.clean_params.keys()).replace("_", ", ")
             embed.add_field(name="Parameters", value=params, inline=True)
@@ -271,7 +271,7 @@ class MyHelpCommand(commands.HelpCommand):
             embeds[command.qualified_name] = {"embed": embed, "name": command.qualified_name, "description": command.brief}
         await self.context.send(
             embed=Embed(
-                color=0xffffff,
+                color=0x36393f,
                 title=f'**Need help with {group.qualified_name}?**',
                 url='https://greed.my/Commands',
                 description=f"<:settings_icon:1302207796737085533> **Usage**\n> **{group.qualified_name}** has {len([i for i in group.walk_commands()])} sub commands that can be used. To view all commands for **{group.qualified_name}**, use the help menu below or visit our [**website**](https://greed.my/)",
@@ -283,7 +283,7 @@ class MyHelpCommand(commands.HelpCommand):
         if retry_after := await self.context.bot.glory_cache.ratelimited(f"rl:user_commands{self.context.author.id}", 2, 4):
             raise commands.CommandOnCooldown(None, retry_after, None)
 
-        embed = Embed(color=0xffffff, timestamp=datetime.datetime.now())
+        embed = Embed(color=0x36393f, timestamp=datetime.datetime.now())
         aliases = ", ".join(command.aliases)
         embed.set_author(name=self.context.author.display_name, icon_url=self.context.author.display_avatar.url)
         ctx = self.context

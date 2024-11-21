@@ -21,6 +21,7 @@ from aiohttp import ContentTypeError
 from tool.important.subclasses.color import get_dominant_color, color_info  # type: ignore
 from discord import Interaction, app_commands  # type: ignore
 from discord.app_commands import Choice
+from discord.ui import Button, View
 from discord.utils import chunk_list  # noqa: F401
 from typing import Union, Optional, List, Annotated  # type: ignore
 from tool.greed import Greed  # type: ignore

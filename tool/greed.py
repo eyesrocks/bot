@@ -110,7 +110,7 @@ class Greed(Bot):
             activity=discord.Activity(
                 type=discord.ActivityType.custom,
                     name=" ",
-                    state="/pomice",
+                    state="discord.gg/pomice",
             ),
             strip_after_prefix=True,
             intents=config["intents"],
@@ -139,7 +139,7 @@ class Greed(Bot):
         self.rival = RivalAPI(self)
         self.snipes = Snipe(self)
         self.avatar_limit = 50
-        self.color = 0x456BB2
+        self.color = 0x36393f
         self.afks = {}
         self.command_dict = None
         self.transformers = Transformers(self)
