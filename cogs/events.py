@@ -542,7 +542,7 @@ class Events(commands.Cog):
         author_afk_since: datetime = afk_data["date"]
         welcome_message = (f":wave_tone3: {message.author.mention}: **Welcome back**, "
                            f"you went away {discord.utils.format_dt(author_afk_since, style='R')}")
-        embed = discord.Embed(description=welcome_message, color=0xffffff)
+        embed = discord.Embed(description=welcome_message, color=0x36393f)
         await context.send(embed=embed)
 
         if message.author.id in self.bot.afks:
@@ -841,7 +841,7 @@ class Events(commands.Cog):
                     ):
                         embed = discord.Embed(
                             description=f"{message.author.mention}: {user.mention} is AFK: **{user_afk['status']} ** - {humanize.naturaltime(datetime.now() - user_afk['date'])}",
-                            color=0xffffff,
+                            color=0x36393f,
                         )
                         await context.send(embed=embed)
         if timeframe := await self.bot.db.fetchval(

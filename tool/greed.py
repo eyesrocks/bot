@@ -110,7 +110,7 @@ class Greed(Bot):
             activity=discord.Activity(
                 type=discord.ActivityType.custom,
                     name=" ",
-                    state="discord.gg/pomice",
+                    state=",purchase|/pomice",
             ),
             strip_after_prefix=True,
             intents=config["intents"],
