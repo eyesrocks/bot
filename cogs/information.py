@@ -1711,7 +1711,7 @@ class Information(commands.Cog):
         # Define the button click events
         async def button_callback(interaction):
             if interaction.custom_id == "monthly":
-                await interaction.response.send_message("You selected the Monthly plan ($11.50). Please open a ticket to proceed.", ephemeral=True)
+                await interaction.response.send_message("You selected the Monthly plan ($3.50). Please open a ticket to proceed.", ephemeral=True)
             elif interaction.custom_id == "lifetime":
                 await interaction.response.send_message("You selected the Lifetime plan ($31). Please open a ticket to proceed.", ephemeral=True)
 
