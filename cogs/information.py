@@ -1678,6 +1678,46 @@ class Information(commands.Cog):
             return await ctx.reply(embed=embed, view=view)
 
 
+    @commands.command()
+    async def buy(self, ctx):
+        """Send an embed with purchase options and buttons."""
+        
+        # Create the embed
+        embed = discord.Embed(
+            title="Purchase Subscription",
+            description=(
+                "Purchase $31 one-time or $11.50 monthly.\n\n"
+                "If you're interested in purchasing a subscription for a Discord server of your choice, "
+                "please open a ticket below to buy or transfer a subscription.\n\n"
+                "Prices and the available payment methods are listed here.\n\n"
+                "Please do not ask to pay with Discord Nitro, or to negotiate the price. "
+                "You will be either banned or just ignored."
+            ),
+            color=discord.Color.blue()
+        )
+
+        # Create buttons for Monthly and Lifetime
+        monthly_button = Button(label="Monthly - $11.50", style=discord.ButtonStyle.green, custom_id="monthly")
+        lifetime_button = Button(label="Lifetime - $31", style=discord.ButtonStyle.blurple, custom_id="lifetime")
+
+        # Define a view with the buttons
+        view = View()
+        view.add_item(monthly_button)
+        view.add_item(lifetime_button)
+
+        # Send the embed with the buttons
+        await ctx.send(embed=embed, view=view)
+
+        # Define the button click events
+        async def button_callback(interaction):
+            if interaction.custom_id == "monthly":
+                await interaction.response.send_message("You selected the Monthly plan ($11.50). Please open a ticket to proceed.", ephemeral=True)
+            elif interaction.custom_id == "lifetime":
+                await interaction.response.send_message("You selected the Lifetime plan ($31). Please open a ticket to proceed.", ephemeral=True)
+
+        # Add button callback to each button
+        monthly_button.callback = button_callback
+        lifetime_button.callback = button_callback
 
 
 
