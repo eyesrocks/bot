@@ -1693,7 +1693,7 @@ class Information(commands.Cog):
                 "Please do not ask to pay with Discord Nitro, or to negotiate the price. "
                 "You will be either banned or just ignored."
             ),
-            color=self.color
+            color=self.color,
         )
 
         # Create buttons for Monthly and Lifetime
