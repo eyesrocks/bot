@@ -50,7 +50,7 @@ class WebServer(Cog):
         data = [
             {
                 "uptime": self.bot.startup_time.timestamp(),
-                "latency": round(shard.latency * 1000),
+                "latency": round(shard.latency * 1000) if shard.latency != float('inf') else None,
                 "servers": len([g for g in self.bot.guilds if g.shard_id == shard_id]),
                 "users": sum(len(g.members) for g in self.bot.guilds if g.shard_id == shard_id),
                 "shard": shard_id,
