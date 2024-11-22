@@ -24,7 +24,7 @@ body::before {
   width: 200%;
   height: 200%;
   background: 
-    radial-gradient(circle at 25% 40%, rgba(25, 95, 169, 0.6), transparent 50%),
+    radial-gradient(circle at 25% 40%, rgba(36, 89, 99, 0.6), transparent 50%),
     radial-gradient(circle at 75% 60%, rgba(41, 41, 41, 0.589), transparent 100%),
     radial-gradient(circle at 50% 30%, rgba(9, 9, 10, 0.957), transparent 40%),
     radial-gradient(circle at 85% 20%, rgba(5, 5, 5, 0.882), transparent 60%),

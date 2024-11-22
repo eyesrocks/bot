@@ -36,24 +36,26 @@ def has_permissions(**permissions):
         if ctx.author.id in ctx.bot.owner_ids or ctx.author.guild_permissions.administrator:
             return True
 
-        missing_permissions = [
-            perm for perm, value in permissions.items()
-            if value and not getattr(ctx.author.guild_permissions, perm, False)
-        ]
+        missing_permissions = {
+            perm for perm, required in permissions.items()
+            if required and not getattr(ctx.author.guild_permissions, perm, False)
+        }
 
         if missing_permissions:
-            mroles = {r.id for r in ctx.author.roles if r.is_assignable()}
-            data = await ctx.bot.db.fetch(
+            role_ids = {role.id for role in ctx.author.roles if role.is_assignable()}
+            fakeperms = await ctx.bot.db.fetch(
                 "SELECT role_id, perms FROM fakeperms WHERE guild_id = $1",
                 ctx.guild.id,
             )
-            for role_id, perms in data:
-                if role_id in mroles:
-                    for perm in perms.split(","):
-                        missing_permissions.discard(perm.strip())
+
+            for role_id, perms in fakeperms:
+                if role_id in role_ids:
+                    perms = {perm.strip() for perm in perms.split(",")}
+                    missing_permissions -= perms
 
         if missing_permissions:
-            raise commands.MissingPermissions(missing_permissions)
+            raise commands.MissingPermissions(list(missing_permissions))
+
         return True
 
     return commands.check(predicate)

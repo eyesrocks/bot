@@ -1646,7 +1646,35 @@ class Information(commands.Cog):
             return await ctx.reply(embed=embed, view=view)
 
 
+    @commands.command()
+    async def purchase(self, ctx):
+        """Send an embed with purchase options and buttons."""
+        
+        # Create the embed
+        embed = discord.Embed(
+            title="Purchase Subscription",
+            description=(
+                "Purchase $6 one time or $3.50 monthly.\n\n"
+                "If you're interested in purchasing a subscription for a Discord server of your choice, "
+                "please open a ticket below to buy or if you purchased a server subscription\n\n"
+                "Prices and the available payment methods are listed here.\n\n"
+                "Please do not ask to pay with Discord Nitro, or to negotiate the price. "
+                "You will be either banned or just ignored."
+            ),
+            color=self.bot.color,
+        )
 
+        # Create buttons for Monthly and Lifetime with custom URLs
+        monthly_button = Button(label="Monthly - $3.50", style=discord.ButtonStyle.green, url="https://buy.stripe.com/aEUdUJc8w3uf6qsfZ7")
+        lifetime_button = Button(label="Lifetime - $6", style=discord.ButtonStyle.blurple, url="https://buy.stripe.com/4gw3g52xW4yj2acdR0e")
+
+        # Define a view with the buttons
+        view = View()
+        view.add_item(monthly_button)
+        view.add_item(lifetime_button)
+
+        # Send the embed with the buttons
+        await ctx.send(embed=embed, view=view)
 
 
 
