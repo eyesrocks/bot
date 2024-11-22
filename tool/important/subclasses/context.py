@@ -734,9 +734,9 @@ class Context(commands.Context):
             if config.get("fail_color"):
                 color = discord.Color.from_str(config["fail_color"])
             else:
-                color = 0x2a8000
+                color = 0xa00000
         else:
-            color = 0x2a8000
+            color = 0xa00000
             emoji = "<:UB_X_Icon:1306875714426900531>"
         embed = discord.Embed(
             color=color, description=f"{emoji} {self.author.mention}: {text}"
