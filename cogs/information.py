@@ -1664,7 +1664,7 @@ class Information(commands.Cog):
             color=self.bot.color,
         )
 
-        # Create buttons for Monthly and Lifetime with custom URLs
+
         monthly_button = Button(label="Monthly - $3.50", style=discord.ButtonStyle.green, url="https://buy.stripe.com/aEUdUJc8w3uf6qsfZ7")
         lifetime_button = Button(label="Lifetime - $6", style=discord.ButtonStyle.blurple, url="https://buy.stripe.com/4gw3g52xW4yj2acdR0e")
 
