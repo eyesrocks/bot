@@ -1668,7 +1668,6 @@ class Information(commands.Cog):
         monthly_button = Button(label="Monthly - $3.50", style=discord.ButtonStyle.green, url="https://buy.stripe.com/aEUdUJc8w3uf6qsfZ7")
         lifetime_button = Button(label="Lifetime - $6", style=discord.ButtonStyle.blurple, url="https://buy.stripe.com/4gw3g52xW4yj2acdR0e")
 
-        # Define a view with the buttons
         view = View()
         view.add_item(monthly_button)
         view.add_item(lifetime_button)
