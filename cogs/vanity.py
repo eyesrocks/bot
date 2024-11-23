@@ -34,6 +34,9 @@ class Vanity(commands.Cog):
         )
         return await ctx.success(f"**Vanity channel** set to {channel.mention}")
 
+
+
+
     @vanity.command(
         name="view",
         aliases=["config", "cfg", "settings"],
