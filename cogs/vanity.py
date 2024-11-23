@@ -34,18 +34,6 @@ class Vanity(commands.Cog):
         )
         return await ctx.success(f"**Vanity channel** set to {channel.mention}")
 
-    @vanity.command(
-        name="message",
-        brief="Set the message",
-        example=",vanity message {embed}{description: thanks for repping {user.mention}}"
-    )
-    async def vanity_message(self, ctx: Context, *, message: EmbedConverter):
-        await self.bot.db.execute(
-            """UPDATE vanity SET message = $2 WHERE guild_id = $1""",
-            ctx.guild.id,
-            message,
-        )
-        await ctx.success("Vanity message has been set")
 
     @vanity.command(
         name="view",
