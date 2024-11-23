@@ -3,6 +3,9 @@ from discord import Embed, User, Guild, Member
 from discord.ext.commands import AutoShardedBot
 from typing_extensions import Self
 
+def asDict(obj: Any) -> Dict[str, Any]:
+    return obj.__dict__
+
 TransformedEmbed = Union[Dict[str, str], List[Any], str]
 
 
@@ -35,7 +38,7 @@ class Transformers:
             "color": embed.color.value if embed.color else None,
         }
 
-        if to_type == str:
+        if to_type is str:
             d = ""
             for key, value in content.items():
                 if isinstance(value, str):
@@ -45,9 +48,9 @@ class Transformers:
                         for _ in v.values():
                             d += f"{_} "
             return d
-        elif to_type == list:
+        elif to_type is list:
             return list(content.values())
-        elif to_type == dict:
+        elif to_type is dict:
             return content
         else:
             try:
