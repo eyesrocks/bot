@@ -1,23 +1,13 @@
 from tool.worker import offloaded  # type: ignore
-import io, asyncio
-from base64 import urlsafe_b64encode
-from datetime import datetime, timedelta
+import asyncio
 from typing import Optional, Union, Any, List
 from functools import partial, wraps
 from io import BytesIO
 from math import sqrt
-from pathlib import Path
-import matplotlib.pyplot as plt
-from PIL import Image, ImageDraw, ImageMath
+from PIL import Image
 import aiohttp
-import dateparser
 import discord
-import imagehash as ih
-from humanize import naturaldelta
 from loguru import logger
-from discord.ext import commands
-from wordcloud import STOPWORDS, WordCloud
-from xxhash import xxh64_hexdigest
 import concurrent.futures
 
 executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
@@ -67,9 +57,8 @@ def _collage_open(image: BytesIO, resize: Optional[bool] = False):
 
 @offloaded
 def validate_image(data: bytes):
-    import magic
 
-    magic_instance = magic.Magic()
+    # magic_instance = magic.Magic()
     image_formats = {
         "JPEG": [b"\xFF\xD8\xFF"],
         "PNG": [b"\x89\x50\x4E\x47\x0D\x0A\x1A\x0A"],
@@ -79,9 +68,9 @@ def validate_image(data: bytes):
     }
     file_header = data[:12]
     try:
-        detected_type = magic_instance.from_buffer(file_header)
+        # detected_type = magic_instance.from_buffer(file_header)
 
-        for format_name, magic_numbers in image_formats.items():
+        for magic_numbers in image_formats.items():
             for magic_number in magic_numbers:
                 if file_header.startswith(magic_number):
                     return True
@@ -100,11 +89,18 @@ async def _validate_image_(data: bytes):
 
 
 @offloaded
-def _make_bar(percentage_1, color_1, percentage_2, color_2, bar_width: int = 10, height: int = 1, corner_radius: int = 0.2) -> bytes:
+def _make_bar(
+    percentage_1: float,
+    color_1: str,
+    percentage_2: float,
+    color_2: str,
+    bar_width: int = 10,
+    height: int = 1,
+    corner_radius: float = 0.2
+) -> bytes:
     """
     Generate a bar with two colors representing two different percentages,
-    with a rounded left corner on the first segment and a rounded right corner
-    on the second segment.
+    with rounded corners on each segment.
 
     :param percentage_1: The percentage for the first color (0-100)
     :param color_1: The color for the first segment
@@ -116,25 +112,22 @@ def _make_bar(percentage_1, color_1, percentage_2, color_2, bar_width: int = 10,
     """
     import matplotlib.pyplot as plt
     from matplotlib.patches import PathPatch, Path
-    from matplotlib.path import Path
     from PIL import Image
-    import matplotlib
     from io import BytesIO
-    matplotlib.use("agg")
-    plt.switch_backend("agg")
+    import matplotlib
+    matplotlib.use("Agg")
+
     if not (0 <= percentage_1 <= 100 and 0 <= percentage_2 <= 100):
         raise ValueError("Percentages must be between 0 and 100.")
-
     if percentage_1 + percentage_2 > 100:
         raise ValueError("The sum of percentages cannot exceed 100.")
 
-    fig, ax = plt.subplots(figsize=(10, 2))
+    fig, ax = plt.subplots(figsize=(bar_width, height))
     
-    # Calculate the width of each segment
     width_1 = (percentage_1 / 100) * bar_width
     width_2 = (percentage_2 / 100) * bar_width
 
-    # Define the rounded rectangle path for the first segment (left side rounded)
+    # First segment with rounded left corners
     if width_1 > 0:
         path_data = [
             (Path.MOVETO, [corner_radius, 0]),
@@ -152,7 +145,7 @@ def _make_bar(percentage_1, color_1, percentage_2, color_2, bar_width: int = 10,
         patch = PathPatch(path, facecolor=color_1, edgecolor='none')
         ax.add_patch(patch)
 
-    # Define the rounded rectangle path for the second segment (right side rounded)
+    # Second segment with rounded right corners
     if width_2 > 0:
         path_data = [
             (Path.MOVETO, [width_1, 0]),
@@ -170,24 +163,22 @@ def _make_bar(percentage_1, color_1, percentage_2, color_2, bar_width: int = 10,
         patch = PathPatch(path, facecolor=color_2, edgecolor='none')
         ax.add_patch(patch)
 
-    # Set limits and remove axes
     ax.set_xlim(0, bar_width)
     ax.set_ylim(0, height)
     ax.axis('off')
+    
     buffer = BytesIO()
-    plt.savefig(buffer, transparent=True)
-    buffer.seek(0)
+    plt.savefig(buffer, format="png", transparent=True, bbox_inches='tight', pad_inches=0)
+    plt.close(fig)
+    
     image = Image.open(buffer).convert("RGBA")
-
-    # Get the bounding box of the non-transparent areas
     bbox = image.getbbox()
-    output_path = BytesIO()
+    output_buffer = BytesIO()
 
     if bbox:
-        # Crop the image to the bounding box
         image_cropped = image.crop(bbox)
-        image_cropped.save(output_path, format="png")
-    return output_path.getvalue()
+        image_cropped.save(output_buffer, format="PNG")
+    return output_buffer.getvalue()
 
     
 
@@ -198,7 +189,7 @@ def _make_chart(name: str, data: list, avatar: bytes) -> bytes:
     import matplotlib.pyplot as plt
     from PIL import Image, ImageDraw, ImageMath
     from humanize import naturaldelta
-    from datetime import datetime, timedelta
+    from datetime import timedelta
     from io import BytesIO
 
     matplotlib.use("agg")
@@ -271,45 +262,20 @@ async def _collage_read(image: str):
 
 
 async def collage(images: list):
-    l = []
-    from base64 import urlsafe_b64encode
-    from datetime import datetime
-    from functools import partial, wraps
-    from io import BytesIO
-    from math import sqrt
-    from pathlib import Path
+    _ = []
 
-    import aiohttp, asyncio
-    import dateparser
-    import discord
-    import imagehash as ih
-
-    from discord.ext import commands
-    from PIL import Image
-    from wordcloud import STOPWORDS, WordCloud
-    from xxhash import xxh64_hexdigest
-
+    for image in images:
+        i = await _collage_read(image)
+        if i:
+            _.append(i)
     return await __collage(images)
 
 async def collage_(images: list):
-    l = []
-    from base64 import urlsafe_b64encode
-    from datetime import datetime
-    from functools import partial, wraps
-    from io import BytesIO
-    from math import sqrt
-    from pathlib import Path
-
-    import aiohttp, asyncio
-    import dateparser
-    import discord
-    import imagehash as ih
-
-    from discord.ext import commands
-    from PIL import Image
-    from wordcloud import STOPWORDS, WordCloud
-    from xxhash import xxh64_hexdigest
-
+    _ = []
+    for image in images:
+        i = await _collage_read(image)
+        if i:
+            _.append(i)
     return await ___collage(images)
 
 @offloaded
@@ -341,7 +307,6 @@ def ___collage(_images: List[List[bytes]]) -> List[bytes]:
                 rows * 256,
             ),
         )
-        tasks = list()
         for i, image in enumerate(images):
             _collage_paste(image, i % columns, i // columns, background)
         #    await asyncio.gather(*tasks)
@@ -379,7 +344,6 @@ def __collage(images: list):
             rows * 256,
         ),
     )
-    tasks = list()
     for i, image in enumerate(images):
         _collage_paste(image, i % columns, i // columns, background)
     #    await asyncio.gather(*tasks)

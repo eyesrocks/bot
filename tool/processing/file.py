@@ -4,7 +4,6 @@ from mutagen import File as MFile
 from typing import Any
 from discord import Client, Message, TextChannel
 from tool.worker import offloaded
-from pydub import AudioSegment
 import subprocess
 from typing_extensions import Self
 import asyncio

@@ -9,7 +9,6 @@ import tuuid
 import typing
 import os
 from discord.ext.commands import CommandError
-from loguru import logger
 import aiofiles
 import subprocess
 import requests

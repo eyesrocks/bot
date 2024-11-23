@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from discord import Embed
 from typing import Union
 from discord.ui import Button
-from fast_string_match import closest_match
 
 class PlayModal(discord.ui.Modal, title="Play"):
     def __init__(self, bot):

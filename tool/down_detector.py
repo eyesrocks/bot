@@ -1,8 +1,8 @@
 from aiohttp import ClientSession
 from bs4 import BeautifulSoup
-import asyncio, re, feedparser
+import re, feedparser
 import time as t
-from typing import Optional, Union, Any, Dict, List
+from typing import Optional, Any, List
 from pydantic import BaseModel
 from discord import Embed
 

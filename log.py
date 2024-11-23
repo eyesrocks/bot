@@ -8,7 +8,6 @@ from time import sleep
 
 from limits import parse, strategies, storage
 from loguru import logger
-import coloredlogs
 
 LOG_LEVEL = os.getenv("LOG_LEVEL") or "INFO"
 LOG_LOCK = threading.Lock()

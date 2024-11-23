@@ -1,15 +1,11 @@
 from pytz import timezone  # type: ignore
-from io import BytesIO
 from discord import Member  # type: ignore
 from discord.ext.commands import Context  # type: ignore
-from asyncio import to_thread
-from rival_tools import timeit, thread  # type: ignore
+from rival_tools import timeit  # type: ignore
 from typing import List, Union, Optional
 from discord import File, Embed  # type: ignore
 from datetime import datetime
 from tool.worker import offloaded
-import plotly.graph_objects as go  # type: ignore
-import pandas as pd  # type: ignore
 
 
 def format_large(num: Union[int, float]) -> str:
