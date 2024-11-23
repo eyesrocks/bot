@@ -3232,4 +3232,890 @@ class Servers(Cog):
     @commands.has_permissions(manage_emojis=True)
     async def autoreact_add_stickers(self: "Servers", ctx: Context, reaction: Optional[Emoji]):
         """
-        Add a reaction for
+        Add a reaction for stickers
+        """
+        if not reaction:
+            await self.bot.db.exuecute("""DELETE FROM autoreact_event WHERE guild_id = $1 AND event = $2""", ctx.guild.id, "stickers")
+            self.bot.cache.autoreacts[ctx.guild.id].pop("stickers", None)
+            return await ctx.success("successfully **cleared** all sticker auto reactions")
+        reaction = str(reaction)
+        if reaction is None:
+            return await ctx.fail("**Emoji** could **not** be found")
+
+        if reaction in tuple(
+            record.reaction
+            for record in await self.bot.db.fetch(
+                "SELECT reaction FROM autoreact_event WHERE guild_id = $1 AND event = $2",
+                ctx.guild.id,
+                "stickers",
+            )
+        ):
+            return await ctx.fail("That is already an **auto-reaction** for stickers")
+
+        if (
+            await self.bot.db.fetchval(
+                "SELECT COUNT(*) FROM autoreact_event WHERE guild_id = $1 AND event = $2;",
+                ctx.guild.id,
+                "stickers",
+            )
+            > 15
+        ):
+            return await ctx.fail("**Too many reactions** for that event exist")
+        if self.bot.cache.autoreacts.get(ctx.guild.id):
+            if self.bot.cache.autoreacts[ctx.guild.id].get("stickers"):
+                self.bot.cache.autoreacts[ctx.guild.id]["stickers"].append(reaction)
+            else:
+                self.bot.cache.autoreacts[ctx.guild.id]["stickers"] = [reaction]
+        else:
+            self.bot.cache.autoreacts[ctx.guild.id] = {"stickers": [reaction]}
+
+        await self.bot.db.execute(
+            "INSERT INTO autoreact_event (guild_id, event, reaction) VALUES ($1, $2, $3);",
+            ctx.guild.id,
+            "stickers",
+            reaction,
+        )
+
+        return await ctx.success(
+            f"**Created** {reaction} as a **reaction for stickers**"
+        )
+
+    @autoreact.group(
+        name="remove",
+        brief="Remove the autoreaction for phrases said",
+        example=",reaction remove com",
+        invoke_without_command=True,
+    )
+    @commands.has_permissions(manage_emojis=True)
+    async def autoreact_remove(
+        self: "Servers", ctx: Context, trigger: str, reaction: Optional[Emoji] = None
+    ):
+        """
+        Remove a reaction from an auto-react trigger
+        """
+
+        if reaction is not None:
+            reaction = str(reaction)
+            if reaction not in tuple(
+                record.reaction
+                for record in await self.bot.db.fetch(
+                    "SELECT reaction FROM autoreact WHERE guild_id = $1 AND keyword = $2",
+                    ctx.guild.id,
+                    trigger,
+                )
+            ):
+                return await ctx.fail("**Auto-reaction** does not exist")
+
+            await self.bot.db.execute(
+                "DELETE FROM autoreact WHERE keyword = $1 AND reaction = $2;",
+                trigger,
+                reaction,
+            )
+            try:
+                self.bot.cache.autoreacts[ctx.guild.id][trigger].remove(reaction)
+            except Exception:
+                try:
+                    self.bot.cache.autoreacts[ctx.guild.id][trigger].remove(
+                        str(reaction)
+                    )
+                except Exception:
+                    pass
+
+        else:
+            await self.bot.db.execute(
+                """DELETE FROM autoreact WHERE keyword = $1 AND guild_id = $2""",
+                trigger,
+                ctx.guild.id,
+            )
+            try:
+                self.bot.cache.autoreacts[ctx.guild.id].pop(trigger)
+            except Exception:
+                pass
+
+        return await ctx.success("**Removed** that **auto-reaction**")
+
+    @autoreact_remove.command(
+        name="images",
+        brief="Remove autoreactions for images sent",
+        example=",autoreaction remove images",
+    )
+    @commands.has_permissions(manage_emojis=True)
+    async def autoreact_remove_images(self: "Servers", ctx: Context, reaction: Emoji):
+        """
+        Remove a reaction for images
+        """
+        reaction = str(reaction)
+        if reaction not in tuple(
+            record.reaction
+            for record in await self.bot.db.fetch(
+                "SELECT reaction FROM autoreact_event WHERE guild_id = $1 AND event = $2",
+                ctx.guild.id,
+                "images",
+            )
+        ):
+            return await ctx.fail("**Auto-reaction** does not exist")
+
+        await self.bot.db.execute(
+            "DELETE FROM autoreact_event WHERE guild_id = $1 AND event = $2 AND reaction = $3;",
+            ctx.guild.id,
+            "images",
+            reaction,
+        )
+        try:
+            self.bot.cache.autoreacts[ctx.guild.id]["images"].remove(reaction)
+        except Exception:
+            pass
+
+        return await ctx.success("**Removed** that **auto-reaction**")
+
+    @autoreact_remove.command(
+        name="spoilers",
+        brief="Remove autoreactions for spoilers sent",
+        example=",autoreaction remove spoilers",
+    )
+    @commands.has_permissions(manage_emojis=True)
+    async def autoreact_remove_spoilers(self: "Servers", ctx: Context, reaction: Emoji):
+        """
+        Remove a reaction for spoilers
+        """
+        reaction = str(reaction)
+        if reaction not in tuple(
+            record.reaction
+            for record in await self.bot.db.fetch(
+                "SELECT reaction FROM autoreact_event WHERE guild_id = $1 AND event = $2",
+                ctx.guild.id,
+                "spoilers",
+            )
+        ):
+            return await ctx.fail("**Auto-reaction** does not exist")
+
+        await self.bot.db.execute(
+            "DELETE FROM autoreact_event WHERE guild_id = $1 AND event = $2 AND reaction = $3;",
+            ctx.guild.id,
+            "spoilers",
+            reaction,
+        )
+        try:
+            self.bot.cache.autoreacts[ctx.guild.id]["spoilers"].remove(reaction)
+        except Exception:
+            pass
+
+        return await ctx.success("**Removed** that **auto-reaction**")
+
+    @autoreact_remove.command(
+        name="emojis",
+        brief="Remove autoreactions for emojis sent",
+        example=",autoreaction remove emojis",
+    )
+    @commands.has_permissions(manage_emojis=True)
+    async def autoreact_remove_emojis(self: "Servers", ctx: Context, reaction: Emoji):
+        """
+        Remove a reaction for emojis
+        """
+        reaction = str(reaction)
+        if reaction not in tuple(
+            record.reaction
+            for record in await self.bot.db.fetch(
+                "SELECT reaction FROM autoreact_event WHERE guild_id = $1 AND event = $2",
+                ctx.guild.id,
+                "emojis",
+            )
+        ):
+            return await ctx.fail("**Auto-reaction** does not exist")
+
+        await self.bot.db.execute(
+            "DELETE FROM autoreact_event WHERE guild_id = $1 AND event = $2 AND reaction = $3;",
+            ctx.guild.id,
+            "emojis",
+            reaction,
+        )
+        try:
+            self.bot.cache.autoreacts[ctx.guild.id]["emojis"].remove(reaction)
+        except Exception:
+            pass
+
+        return await ctx.success("**Removed** that **auto-reaction**")
+
+    @autoreact_remove.command(
+        name="stickers",
+        usage="Remove autoreactions for stickers sent",
+        example=",autoreaction remove stickers",
+    )
+    @commands.has_permissions(manage_emojis=True)
+    async def autoreact_remove_stickers(self: "Servers", ctx: Context, reaction: Emoji):
+        reaction = str(reaction)
+        if reaction not in tuple(
+            record.reaction
+            for record in await self.bot.db.fetch(
+                "SELECT reaction FROM autoreact_event WHERE guild_id = $1 AND event = $2",
+                ctx.guild.id,
+                "stickers",
+            )
+        ):
+            return await ctx.fail("**Auto-reaction** does not exist")
+        try:
+            self.bot.cache.autoreacts[ctx.guild.id]["stickers"].remove(reaction)
+        except Exception:
+            pass
+        await self.bot.db.execute(
+            "DELETE FROM autoreact_event WHERE guild_id = $1 AND event = $2 AND reaction = $3;",
+            ctx.guild.id,
+            "stickers",
+            reaction,
+        )
+
+        return await ctx.success("**Removed** that **auto-reaction**")
+
+    @autoreact.command(
+        name="clear",
+        brief="remove all autoreactions from the guild",
+        example="autoreaction clear",
+    )
+    async def autoreact_clear(
+        self: "Servers", ctx: Context, type: Optional[str] = None
+    ):
+        if not await self.bot.db.fetch(
+            "SELECT * FROM autoreact WHERE guild_id = $1", ctx.guild.id
+        ) and not await self.bot.db.fetch(
+            "SELECT * FROM autoreact_event WHERE guild_id = $1", ctx.guild.id
+        ):
+            return await ctx.fail("**Auto-reaction triggers** do not exist")
+
+        if type is not None:
+            if type.lower() not in ("images", "spoilers", "emojis", "stickers"):
+                return await ctx.fail("**Auto-reaction event** does not exist")
+
+            if not await self.bot.db.fetch(
+                "SELECT * FROM autoreact_event WHERE guild_id = $1", ctx.guild.id
+            ):
+                return await ctx.fail("**Auto-reaction event** does not exist")
+
+            if not await self.bot.db.fetch(
+                "SELECT * FROM autoreact_event WHERE guild_id = $1 AND event = $2",
+                ctx.guild.id,
+                type.lower(),
+            ):
+                return await ctx.fail("**Auto-reaction event** does not exist")
+            try:
+                self.bot.cache.autoreacts.pop(ctx.guild.id)
+            except Exception:
+                pass
+            await self.bot.db.execute(
+                "DELETE FROM autoreact_event WHERE guild_id = $1 AND event = $2;",
+                ctx.guild.id,
+                type.lower(),
+            )
+
+            return await ctx.success(
+                "**Cleared** every **auto-reaction** for that event"
+            )
+
+        if await self.bot.db.fetch(
+            "SELECT * FROM autoreact WHERE guild_id = $1", ctx.guild.id
+        ):
+            await self.bot.db.execute(
+                "DELETE FROM autoreact WHERE guild_id = $1;", ctx.guild.id
+            )
+
+        if await self.bot.db.fetch(
+            "SELECT * FROM autoreact_event WHERE guild_id = $1", ctx.guild.id
+        ):
+            await self.bot.db.execute(
+                "DELETE FROM autoreact_event WHERE guild_id = $1;", ctx.guild.id
+            )
+        try:
+            self.bot.cache.autoreacts.pop(ctx.guild.id)
+        except Exception:
+            pass
+        return await ctx.success("**Cleared** every **auto-reaction trigger**")
+
+    @autoreact.command(
+        name="removeall",
+        aliases=("deleteall",),
+        example=",autoreact removeall",
+        brief="Remove and reset every auto reaction trigger",
+    )
+    @commands.has_permissions(manage_emojis=True)
+    async def autoreact_removeall(self: "Servers", ctx: Context, trigger: str):
+        if trigger not in tuple(
+            record.keyword
+            for record in await self.bot.db.fetch(
+                "SELECT keyword FROM autoreact WHERE guild_id = $1", ctx.guild.id
+            )
+        ):
+            return await ctx.fail("**Auto-reaction trigger** does not exist")
+
+        await self.bot.db.execute(
+            "DELETE FROM autoreact WHERE guild_id = $1 AND keyword = $2;",
+            ctx.guild.id,
+            trigger,
+        )
+        try:
+            self.bot.cache.autoreacts.pop(ctx.guild.id)
+        except Exception:
+            pass
+
+        return await ctx.success("**Cleared** every **auto-reaction** for that trigger")
+
+    @autoreact.command(
+        name="list",
+        brief="View all autoreactions currenctly set for phrases",
+        example=",autoreaction list",
+    )
+    @commands.has_permissions(manage_emojis=True)
+    async def autoreact_list(self: "Servers", ctx: Context):
+        """
+        View every auto-reaction trigger
+        """
+
+        if not await self.bot.db.fetch(
+            "SELECT * FROM autoreact WHERE guild_id = $1", ctx.guild.id
+        ):
+            if not await self.bot.db.fetch(
+                "SELECT * FROM autoreact_event WHERE guild_id = $1", ctx.guild.id
+            ):
+                return await ctx.fail("**Auto-reaction triggers** does not exist")
+
+        text = []
+        keywords_covered = []
+        events = {}
+        for record in await self.bot.db.fetch(
+            "SELECT event, reaction FROM autoreact_event WHERE guild_id = $1",
+            ctx.guild.id,
+        ):
+            if record.event in events:
+                events[record.event].append(record.reaction)
+            else:
+                events[record.event] = [record.reaction]
+
+        for record in await self.bot.db.fetch(
+            "SELECT keyword, reaction FROM autoreact WHERE guild_id = $1", ctx.guild.id
+        ):
+            if record.keyword in keywords_covered:
+                continue
+
+            reactions = tuple(
+                record.reaction
+                for record in await self.bot.db.fetch(
+                    "SELECT reaction FROM autoreact WHERE guild_id = $1 AND keyword = $2",
+                    ctx.guild.id,
+                    record.keyword,
+                )
+            )
+
+            text.append(
+                f"**{record.keyword}** - Reactions: {', '.join((str(reaction)) for reaction in reactions)}"
+            )
+            logger.info(text)
+            keywords_covered.append(record.keyword)
+        for k, v in events.items():
+            text.append(
+                f"**{k}** - Reactions: {', '.join((str(reaction)) for reaction in v)}"
+            )
+        return await self.bot.dummy_paginator(
+            ctx, discord.Embed(title="Auto Reactions", color=self.bot.color), text
+        )
+        return await ctx.paginate(  # type: ignore
+            embed_creator(
+                text.getvalue(),
+                1980,
+                color=self.bot.color,
+                title=f"Auto-Reaction Triggers in '{ctx.guild.name}'",
+            )
+        )
+
+    # @autoreact.command(name="extras", aliases=("listextras", "events", "listevents"), brief='list all autoreactions set for extras (ex. images)', example=',autoreactions extras')
+    ##@commands.has_permissions(manage_emojis=True)
+    async def autoreact_listextras(self: "Servers", ctx: Context):
+        """
+        View every auto-reaction event trigger
+        """
+
+        if not await self.bot.db.fetch(
+            "SELECT * FROM autoreact_event WHERE guild_id = $1", ctx.guild.id
+        ):
+            return await ctx.fail("**Auto-reaction event triggers** does not exist")
+
+        text = StringIO()
+        events_covered = []
+
+        for record in await self.bot.db.fetch(
+            "SELECT event FROM autoreact_event WHERE guild_id = $1", ctx.guild.id
+        ):
+            if record.event in events_covered:
+                continue
+
+            reactions = tuple(
+                record.reaction
+                for record in await self.bot.db.fetch(
+                    "SELECT reaction FROM autoreact_event WHERE guild_id = $1 AND event = $2",
+                    ctx.guild.id,
+                    record.event,
+                )
+            )
+
+            text.write(
+                f"**{record.event}** - Reactions: {', '.join((b64decode(reaction.encode()).decode() if len(tuple(reaction)) > 1 else reaction) for reaction in reactions)}"
+            )
+            events_covered.append(record.event)
+
+        return await ctx.paginate(
+            embed_creator(
+                text.getvalue(),
+                1980,
+                color=self.bot.color,
+                title=f"{ctx.guild.name} Auto-Reactions",
+            )
+        )
+
+    @commands.group(
+        name="reactionrole",
+        aliases=["reactionroles", "rr", "reactrole"],
+        example=",reactionrole",
+        brief="Configure reaction role settings",
+    )
+    @commands.has_permissions(manage_roles=True)
+    async def reactionrole(self, ctx: Context):
+        if ctx.subcommand_passed is not None:  # Check if a subcommand was passed
+            return
+        return await ctx.send_help(ctx.command.qualified_name)
+
+    @reactionrole.command(
+        name="add",
+        aliases=["a", "create", "c"],
+        brief="Add a reaction role to a message",
+        example=",autoreaction add [message] [emoji] [roles]",
+    )
+    async def reactionrole_add(
+        self, ctx: Context, *, message_emoji_role: ReactionRoleConverter
+    ):
+        emoji = message_emoji_role["emoji"]
+        message = message_emoji_role["message"]
+        role = message_emoji_role["role"]
+        emoji = str(emoji)
+        if await self.bot.db.fetch(
+            """SELECT * FROM reactionrole WHERE guild_id = $1 AND channel_id = $2 AND message_id = $3 AND emoji = $4 AND role_id = $5""",
+            ctx.guild.id,
+            message.channel.id,
+            message.id,
+            emoji,
+            role.id,
+        ):
+            await self.bot.db.execute(
+                """DELETE FROM reactionrole WHERE guild_id = $1 AND channel_id = $2 AND message_id = $3 AND emoji = $4 AND role_id = $5""",
+                ctx.guild.id,
+                message.channel.id,
+                message.id,
+                emoji,
+                role.id,
+            )
+        await self.bot.db.execute(
+            """INSERT INTO reactionrole (guild_id,channel_id,message_id,emoji,role_id,message_url) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(guild_id,channel_id,message_id,emoji,role_id) DO UPDATE SET role_id = excluded.role_id""",
+            ctx.guild.id,
+            message.channel.id,
+            message.id,
+            emoji,
+            role.id,
+            message.jump_url,
+        )
+        await message.add_reaction(emoji)
+        return await ctx.success("**Reaction role** has been **added to that meesage**")
+
+    def get_emoji(self, emoji: str):
+        try:
+            emoji = emoji
+            return emoji
+        except Exception:
+            return emoji
+
+    @reactionrole.command(
+        name="remove",
+        aliases=["delete", "del", "rem", "r", "d"],
+        brief="Remove a reaction role from a message",
+        example=",reactionrole remove [message_id] [emoji]",
+    )
+    async def reactionrole_remove(
+        self,
+        ctx: Context,
+        message: discord.Message,
+        emoji: discord.Emoji | discord.PartialEmoji | str,
+    ):
+        if isinstance(emoji, (discord.Emoji, discord.PartialEmoji)):
+            emoji = str(emoji)
+        else:
+            emoji = emoji
+        await self.bot.db.execute(
+            """DELETE FROM reactionrole WHERE guild_id = $1 AND channel_id = $2 AND message_id = $3 AND emoji = $4""",
+            ctx.guild.id,
+            message.channel.id,
+            message.id,
+            emoji,
+        )
+        return await ctx.success("**Removed** the **reaction role**")
+
+    @reactionrole.command(
+        name="clear",
+        brief="Clear all reaction roles from a message",
+        example=",reactionrole clear",
+    )
+    async def reactionrole_clear(self, ctx: Context):
+        await self.bot.db.execute(
+            """DELETE FROM reactionrole WHERE guild_id = $1""", ctx.guild.id
+        )
+        return await ctx.success("**Cleared** all **reaction roles** if any exist")
+
+    @reactionrole.command(
+        name="list",
+        brief="View a list of all reaction roles set to messages",
+        example=",reactionrole list",
+    )
+    async def reactionrole_list(self, ctx: Context):
+        rows = []
+        i = 0
+        for (
+            channel_id,
+            message_id,  # type: ignore
+            emoji,
+            role_id,
+            message_url,
+        ) in await self.bot.db.fetch(
+            """SELECT channel_id,message_id,emoji,role_id,message_url FROM reactionrole WHERE guild_id = $1""",
+            ctx.guild.id,
+        ):
+            if ctx.guild.get_channel(channel_id):  # type: ignore
+                emoji = self.get_emoji(str(emoji))
+                if role := ctx.guild.get_role(role_id):
+                    i += 1
+                    rows.append(
+                        f"`{i}.` [Message]({message_url}) - {emoji} - {role.mention}"
+                    )
+        embed = discord.Embed(
+            title=f"{ctx.guild.name}'s reaction roles",
+            url=self.bot.domain,
+            color=self.bot.color,
+        )
+        if len(rows) == 0:
+            return await ctx.fail("**No reaction roles found**")
+        return await self.bot.dummy_paginator(ctx, embed, rows, 10, "reaction role")
+
+    @commands.group(
+        "autoresponder",
+        aliases=["ar", "autoresponse"],
+        example=",autoresponder",
+        brief="Configure auto responses for your server",
+        invoke_without_command=True
+    )
+    @commands.has_permissions(manage_messages=True)
+    async def autoresponder(self, ctx: Context):
+        if ctx.invoked_subcommand is None:
+            return await ctx.send_help(ctx.command.qualified_name)
+
+    @autoresponder.command(
+        name="add",
+        aliases=["a", "create"],
+        brief="Add an automatic response to given phrase",
+        example=",autoresponder add com, you're a troll",
+    )
+    async def autoresponder_add(self, ctx: Context, *, arg: Argument):
+        # if "," not in arg: return await ctx.fail('use a comma to split the trigger and response')
+
+        trigger = arg.first
+        response = arg.second
+        if ctx.guild.id in self.bot.cache.autoresponders:
+            if trigger in self.bot.cache.autoresponders[ctx.guild.id]:
+                self.bot.cache.autoresponders[ctx.guild.id][trigger] = response
+            else:
+                self.bot.cache.autoresponders[ctx.guild.id][trigger] = response
+        else:
+            self.bot.cache.autoresponders[ctx.guild.id] = {trigger: response}
+        await self.bot.db.execute(
+            """INSERT INTO autoresponder (guild_id,trig,response) VALUES($1,$2,$3) ON CONFLICT (guild_id,trig) DO UPDATE SET response = excluded.response""",
+            ctx.guild.id,
+            trigger,
+            response,
+        )
+        await ctx.success(f"**Auto-responder** ``{trigger}`` applied")
+
+    @autoresponder.command(
+        name="remove",
+        aliases=["del", "d", "r", "rem"],
+        brief="Remove an automatic response from a given phrase",
+        example=",autoresponder remove hi",
+    )
+    async def autoresponder_remove(self, ctx: Context, *, trigger: str):
+        if ctx.guild.id not in self.bot.cache.autoresponders:
+            return await ctx.fail("**Auto-Response** has not been **setup**")
+        if trigger not in self.bot.cache.autoresponders[ctx.guild.id]:
+            return await ctx.fail(
+                f"**No auto-responder** found with trigger **{trigger}**"
+            )
+        await self.bot.db.execute(
+            """DELETE FROM autoresponder WHERE guild_id = $1 AND trig = $2""",
+            ctx.guild.id,
+            trigger,
+        )
+        self.bot.cache.autoresponders[ctx.guild.id].pop(trigger)
+        return await ctx.success(
+            f"**Auto-responder** with the trigger ``{trigger}`` **Removed**"
+        )
+
+    @autoresponder.command(
+        name="clear",
+        aliases=["cl"],
+        brief="Clear all the current auto responders",
+        example=",autoresponder clear",
+    )
+    async def autoresponder_clear(self, ctx: Context):
+        await self.bot.db.execute(
+            """DELETE FROM autoresponder WHERE guild_id = $1""", ctx.guild.id
+        )
+        try:
+            self.bot.cache.autoresponders.pop(ctx.guild.id)
+        except Exception:
+            pass
+        return await ctx.success("**Cleared** all **auto-responders**")
+
+    @autoresponder.command(
+        name="list",
+        aliases=["l", "show"],
+        brief="Show a list of all current auto responses",
+        example=",autoresponder list",
+    )
+    async def autoresponder_list(self, ctx: Context):
+        rows = [
+            f"`{trig}` - `{response}`"
+            for trig, response in await self.bot.db.fetch(
+                """SELECT trig,response FROM autoresponder WHERE guild_id = $1""",
+                ctx.guild.id,
+            )
+        ]
+        if len(rows) > 0:
+            embed = discord.Embed(
+                title=f"{ctx.guild.name}'s auto-responders",
+                url=self.bot.domain,
+                color=self.bot.color,
+            )
+            await self.bot.dummy_paginator(ctx, embed, rows, 10, "autoresponder")
+        else:
+            return await ctx.fail("**Server** has no **auto-responders setup**")
+
+    @commands.group(
+        name="boost",
+        aliases=["bm", "boostmessage"],
+        brief="Configure boost messages for the server",
+        example=",boost",
+    )
+    @commands.has_permissions(manage_guild=True)
+    async def boostmsg(self, ctx: Context):
+        if ctx.subcommand_passed is not None:
+            return
+        return await ctx.send_help(ctx.command.qualified_name)
+
+    @boostmsg.command(
+        name="setup",
+        aliases=(
+            "on",
+            "enable",
+        ),
+        brief="Enable boost messages for the guild",
+        example=",boost setup",
+    )
+    @commands.has_permissions(manage_guild=True)
+    async def boostmsg_enable(self, ctx: Context) -> discord.Message:
+        if await self.bot.db.fetchrow(
+            "SELECT * FROM guild.boost WHERE guild_id = $1", ctx.guild.id
+        ):
+            return await ctx.fail("**Boost messages** are already **enabled**")
+
+        await self.bot.db.execute(
+            "INSERT INTO guild.boost (guild_id, channel_id, message) VALUES ($1, $2, $3)",
+            ctx.guild.id,
+            ctx.channel.id,
+            "Thank you for boosting the server, {user.mention}!",
+        )
+        return await ctx.success("**Enabled** boost messages")
+
+    @boostmsg.command(
+        name="reset",
+        aliases=(
+            "off",
+            "disable",
+        ),
+        brief="Disable boost messages for the guild",
+        example=",boost reset",
+    )
+    @commands.has_permissions(manage_guild=True)
+    async def boostmsg_disable(self, ctx: Context) -> discord.Message:
+        if not await self.bot.db.fetchrow(
+            "SELECT * FROM guild.boost WHERE guild_id = $1", ctx.guild.id
+        ):
+            return await ctx.fail("**Boost messages** are already **disabled**")
+
+        await self.bot.db.execute(
+            "DELETE FROM guild.boost WHERE guild_id = $1", ctx.guild.id
+        )
+        return await ctx.success("**Disabled** boost messages")
+
+    @boostmsg.command(
+        name="channel",
+        aliases=("chan",),
+        brief="Assign a channel for boost messages to be sent",
+        example=",boost channel #boostchannel",
+    )
+    @commands.has_permissions(manage_guild=True)
+    async def boostmsg_channel(
+        self, ctx: Context, channel: discord.TextChannel
+    ) -> discord.Message:
+        if not await self.bot.db.fetchrow(
+            "SELECT * FROM guild.boost WHERE guild_id = $1", ctx.guild.id
+        ):
+            return await ctx.fail("**Boost messages** are not **enabled**")
+
+        await self.bot.db.execute(
+            "UPDATE guild.boost SET channel_id = $1 WHERE guild_id = $2",
+            channel.id,
+            ctx.guild.id,
+        )
+        return await ctx.success(f"**Boost message channel** set to {channel.mention}")
+
+    @boostmsg.command(
+        name="message",
+        aliases=("msg",),
+        brief="Set the message to be sent when someone boosts the guild",
+        example=",boost message [code]",
+    )
+    @commands.has_permissions(manage_guild=True)
+    async def boostmsg_message(self, ctx: Context, *, message: str) -> discord.Message:
+        if not await self.bot.db.fetchrow(
+            "SELECT * FROM guild.boost WHERE guild_id = $1", ctx.guild.id
+        ):
+            return await ctx.fail("**Boost messages** are not **enabled**")
+        await self.bot.send_embed(ctx.channel, message, user=ctx.author)
+        await self.bot.db.execute(
+            "UPDATE guild.boost SET message = $1 WHERE guild_id = $2",
+            message,
+            ctx.guild.id,
+        )
+        return await ctx.success(f"**Boost message** set to ``{message}``")
+
+    @boostmsg.command(
+        name="view",
+        brief="View the current boost message embed code",
+        example=",boost view",
+    )
+    @commands.has_permissions(manage_guild=True)
+    async def boostmsg_view(self, ctx: Context):
+        if not (
+            message := await self.bot.db.fetchrow(
+                "SELECT message FROM guild.boost WHERE guild_id = $1", ctx.guild.id
+            )
+        ):
+            return await ctx.fail("**Boost messages** are not **enabled**")
+        return await ctx.success(f"```{message}```")
+
+    @boostmsg.command(
+        name="test", brief="Test the set boost message", example=",boost test"
+    )
+    @commands.has_permissions(manage_guild=True)
+    async def boostmsg_test(self, ctx: Context):
+        msg = copy.copy(ctx.message)
+        msg.type = discord.MessageType.premium_guild_subscription
+        msg.content = ctx.message.content.strip(ctx.prefix)
+        self.bot.dispatch("message", msg)
+        return await ctx.success("**Boost message** was sent")
+
+    @commands.group(name="thread", invoke_without_command=True)
+    async def _thread(self, ctx):
+        return await ctx.send_help(ctx.command.qualified_name)
+
+    @_thread.command(
+        name="lock", 
+        brief="Locks a thread",
+        example=",thread lock #channel"
+    )
+    async def thread_lock(self, ctx, thread: Optional[discord.Thread] = None):
+        if not thread:
+            thread = ctx.channel
+        if not isinstance(thread, discord.Thread):
+            return await ctx.fail("> This channel is not a thread!")
+
+        await thread.edit(
+            locked=True,
+            archived=True,
+            reason=f"Thread locked by moderator {ctx.author.name}"
+        )
+        return await ctx.success(f"Successfully locked {thread.name}")
+
+    @_thread.command(
+        name="unlock", 
+        brief="Unlocks a thread",
+        example=",thread unlock #channel"
+    )
+    async def thread_unlock(self, ctx, thread: Optional[discord.Thread] = None):
+        if not thread:
+            thread = ctx.channel
+        if not isinstance(thread, discord.Thread):
+            return await ctx.fail("> This channel is not a thread!")
+        
+        await thread.edit(
+            locked=False,
+            archived=False,
+            reason=f"Thread unlocked by moderator {ctx.author.name}"
+        )
+        return await ctx.success(f"Successfully unlocked {thread.name}")
+    
+    @commands.group(name="pingonjoin", aliases=["poj"], brief="Toggle ping on join", invoke_without_command=True)
+    @commands.has_permissions(manage_guild=True)
+    async def pingonjoin(self, ctx: Context):
+        return await ctx.send_help(ctx.command.qualified_name)
+    
+    @pingonjoin.command(   
+        name="enable", 
+        aliases=["on"], 
+        brief="Enable ping on join"
+    )
+    @commands.has_permissions(manage_guild=True)
+    async def pingonjoin_enable(self, ctx: Context, channel: discord.TextChannel, threshold: int = None):
+        threshold = threshold or 1
+        await self.bot.db.execute(
+            """
+            INSERT INTO pingonjoin (guild_id, channel_id, threshold) 
+            VALUES ($1, $2, $3)
+              ON CONFLICT (guild_id) 
+              DO UPDATE SET channel_id = excluded.channel_id, threshold = excluded.threshold
+            """,
+            ctx.guild.id,
+            channel.id,
+            threshold
+        )
+        return await ctx.success(f"**Ping on join** enabled in {channel.mention} with a threshold of {threshold}")
+    
+    @pingonjoin.command(
+        name="message",
+        aliases=["msg"],
+    )
+    @commands.has_permissions(manage_guild=True)
+    async def pingonjoin_message(self, ctx: Context, *, message: EmbedConverter):
+        await self.bot.db.execute(
+            "UPDATE pingonjoin SET message = $1 WHERE guild_id = $2",
+            message,
+
+            ctx.guild.id
+        )
+        return await ctx.success(f"**Ping on join** message set to {message}")
+    
+    @pingonjoin.command(
+        name="disable",
+        aliases=["off", "reset"],
+        brief="Resets ping on join module"
+    )
+    @commands.has_permissions(manage_guild=True)
+    async def pingonjoin_disable(self, ctx: Context):
+        await self.bot.db.execute(
+            "DELETE FROM pingonjoin WHERE guild_id = $1",
+            ctx.guild.id
+        )
+        return await ctx.success("**Ping on join** has been disabled")
+
+async def setup(bot: "Greed") -> None:
+    await bot.add_cog(Servers(bot))
