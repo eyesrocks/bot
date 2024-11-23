@@ -34,7 +34,23 @@ class Vanity(commands.Cog):
         )
         return await ctx.success(f"**Vanity channel** set to {channel.mention}")
 
-
+     @vanity.command(
+         name="unset",
+         brief="unset the channel for checking vanities",
+         example=",vanity unset"
+     )
+     async def vanity_unset(self, ctx):
+         # Remove the entry for this guild
+         result = await self.bot.db.execute(
+             """DELETE FROM vanity WHERE guild_id = $1""",
+             ctx.guild.id,
+         )
+         
+         # Check if a row was deleted
+         if result == "DELETE 0":
+             return await ctx.error("There is no **Vanity channel** set for this server.")
+         
+         return await ctx.success("**Vanity channel** has been unset.")
 
 
     @vanity.command(
