@@ -1,10 +1,8 @@
-from discord.ext import commands, tasks
+from discord.ext import commands
 import discord
-import asyncio
 from typing import Optional
 from discord.ext.commands import Context
 from tool.important.subclasses.command import TextChannel
-from tool.important.subclasses.parser import Script
 from cogs.servers import EmbedConverter
 from tool.greed import Greed
 from loguru import logger
