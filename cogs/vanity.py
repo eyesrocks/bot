@@ -34,7 +34,7 @@ class Vanity(commands.Cog):
         )
         return await ctx.success(f"**Vanity channel** set to {channel.mention}")
 
-     @vanity.command(
+    @vanity.command(
          name="unset",
          brief="unset the channel for checking vanities",
          example=",vanity unset"
