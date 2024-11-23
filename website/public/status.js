@@ -1,116 +1,93 @@
-// Array of shard data
-const shards = [
+// Constants
+const API_ENDPOINT = '/statusapi';
+const OFFLINE_SHARD = {
+  id: 0,
+  status: 'offline',
+  uptime: '0',
+  users: 'ALL',
+  servers: 'ALL'
+};
 
-];
+// State management
+class ShardManager {
+  constructor() {
+    this.shards = [];
+    this.gridElement = document.getElementById('shardGrid');
+  }
 
-// Function to create a shard box element
-function createShardBox(shard) {
-  const shardBox = document.createElement('div');
-  shardBox.classList.add('status-box');
+  async initialize() {
+    try {
+      const response = await fetch(API_ENDPOINT);
+      const data = await response.json();
+      
+      this.shards = this.processShardData(data);
+      this.render();
+    } catch (error) {
+      console.error('Failed to fetch shard data:', error);
+      this.handleError();
+    }
+  }
 
-  // Create the shard header with online/offline indicator
-  const header = document.createElement('div');
-  header.classList.add('status-header');
+  processShardData(data) {
+    if (data === 'OFFLINE') {
+      return [OFFLINE_SHARD];
+    }
 
-  const indicator = document.createElement('span');
-  indicator.classList.add('status-indicator');
-  if (shard.online) indicator.classList.add('online');
+    return data.flatMap(shardGroup => 
+      shardGroup.map(shard => ({
+        id: shard.shard,
+        status: 'online',
+        uptime: shard.uptime,
+        users: shard.users,
+        servers: shard.servers
+      }))
+    );
+  }
 
-  const shardId = document.createElement('span');
-  shardId.classList.add('shard-id');
-  shardId.textContent = `Shard ID: ${shard.id}`;
-
-  header.appendChild(indicator);
-  header.appendChild(shardId);
-
-  // Create content for uptime, users, and servers
-  const uptime = document.createElement('p');
-  uptime.innerHTML = `Uptime: <span class="uptime">${shard.uptime}</span>`;
-
-  const users = document.createElement('p');
-  users.innerHTML = `Users: <span class="users">${shard.users}</span>`;
-
-  const servers = document.createElement('p');
-  servers.innerHTML = `Servers: <span class="servers">${shard.servers}</span>`;
-
-  // Append all elements to the shard box
-  shardBox.appendChild(header);
-  shardBox.appendChild(uptime);
-  shardBox.appendChild(users);
-  shardBox.appendChild(servers);
-
-  return shardBox;
-}
-
-function setupShards(){
-  fetch('/statusapi')
-    .then(response => response.json())
-    .then(data => {
-      if (data === 'OFFLINE') {
-        shards.push({
-          id: 0,
-          status: "offline",
-          uptime: "0",
-          users: "ALL",
-          servers: "ALL"
-        });
-        renderShards(shards);
-        return;
-      }
-      data.forEach(shardsp => {
-        console.log(shardsp);
-        for (let i = 0; i < shardsp.length; i++) {
-          shards.push({
-            id: shardsp[i].shard,
-            status: "online",
-            uptime: shardsp[i].uptime,
-            users: shardsp[i].users,
-            servers: shardsp[i].servers
-          });
-        }
-      });
-      console.log(shards);
-      renderShards(shards);
-    });
-}
-
-function renderShards(shardData) {
-  const shardGrid = document.getElementById('shardGrid');
-  shardGrid.innerHTML = ''; // Clear existing shards
-
-  // Sort shards by shard_id in ascending order
-  const sortedShards = shardData.sort((a, b) => a.id - b.id);
-
-  sortedShards.forEach(shard => {
+  createShardElement(shard) {
     const shardSquare = document.createElement('div');
     shardSquare.classList.add('shard-square');
 
-    // Status indicator
-    const statusIndicator = document.createElement('div');
-    statusIndicator.classList.add('status-indicator');
-    statusIndicator.classList.add(shard.status === 'online' ? 'status-online' : 'status-offline');
-    shardSquare.appendChild(statusIndicator);
-
-    // Shard header
-    const shardHeader = document.createElement('div');
-    shardHeader.classList.add('shard-header');
-    shardHeader.textContent = `Shard ${shard.id}`;
-    shardSquare.appendChild(shardHeader);
-
-    // Shard info
-    const shardInfo = document.createElement('div');
-    shardInfo.classList.add('shard-info');
-    shardInfo.innerHTML = `
-      <p><strong>Uptime:</strong> ${shard.uptime}</p>
-      <p><strong>Users:</strong> ${shard.users}</p>
-      <p><strong>Servers:</strong> ${shard.servers}</p>
+    shardSquare.innerHTML = `
+      <div class="status-indicator status-${shard.status}"></div>
+      <div class="shard-header">Shard ${shard.id}</div>
+      <div class="shard-info">
+        <p><strong>Uptime:</strong> ${shard.uptime}</p>
+        <p><strong>Users:</strong> ${shard.users}</p>
+        <p><strong>Servers:</strong> ${shard.servers}</p>
+      </div>
     `;
-    shardSquare.appendChild(shardInfo);
 
-    shardGrid.appendChild(shardSquare);
-  });
+    return shardSquare;
+  }
+
+  render() {
+    if (!this.gridElement) return;
+    
+    this.gridElement.innerHTML = '';
+    const sortedShards = [...this.shards].sort((a, b) => a.id - b.id);
+    
+    const fragment = document.createDocumentFragment();
+    sortedShards.forEach(shard => {
+      fragment.appendChild(this.createShardElement(shard));
+    });
+    
+    this.gridElement.appendChild(fragment);
+  }
+
+  handleError() {
+    if (this.gridElement) {
+      this.gridElement.innerHTML = `
+        <div class="error-message">
+          Failed to load shard status. Please try again later.
+        </div>
+      `;
+    }
+  }
 }
 
-// Call the function to render shards on page load
-setupShards();
-
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', () => {
+  const manager = new ShardManager();
+  manager.initialize();
+});
