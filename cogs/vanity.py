@@ -39,7 +39,7 @@ class Vanity(commands.Cog):
          brief="unset the channel for checking vanities",
          example=",vanity unset"
      )
-     async def vanity_unset(self, ctx):
+    async def vanity_unset(self, ctx):
          # Remove the entry for this guild
          result = await self.bot.db.execute(
              """DELETE FROM vanity WHERE guild_id = $1""",
