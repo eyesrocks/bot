@@ -860,7 +860,7 @@ class Fun(commands.Cog):
             description=f"``{hex_color}``",
             color=color,
         )
-        embed.add_field(name="RGB", value=f"``(R: {color.r}, {color.g}, {color.b})``")
+        embed.add_field(name="RGB", value=f"``(R: {color.r}, G: {color.g}, {color.b})``")
         # Create an image of the hex color
         img = Image.new("RGB", (100, 100), (color.r, color.g, color.b))
         output = BytesIO()
