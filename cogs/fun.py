@@ -11,7 +11,7 @@ from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
 import textwrap
 import random
-
+import aiohttp
 
 # from greed.tool import aliases
 
