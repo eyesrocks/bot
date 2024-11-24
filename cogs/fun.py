@@ -921,7 +921,9 @@ class Fun(commands.Cog):
         )
         await ctx.send(embed=embed)
     
-    @commands.command()
+    @commands.command(
+        name=""
+    )
 
 
 
