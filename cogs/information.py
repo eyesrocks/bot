@@ -1309,7 +1309,7 @@ class Information(commands.Cog):
     @commands.command(
             name="inviteinfo",
             aliases=["ii"],
-            
+            brief="View information on an invite",
     )
 
     @commands.group(
