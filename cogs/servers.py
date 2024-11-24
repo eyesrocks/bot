@@ -1614,6 +1614,7 @@ class Servers(Cog):
         tagged = [await tag_sticker(s) for s in ctx.guild.stickers]
 
         return await ctx.success(f"**Tagged** `{len(tagged)}` stickers")
+    
 
     @Group(
         name="premiumrole",
