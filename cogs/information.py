@@ -1309,7 +1309,7 @@ class Information(commands.Cog):
                 description=f"> No messages found in this channel",
                 color=0x2C2D31,
             )
-            await ctx.warning(embed=embed)
+            await ctx.warn(embed=embed)
 
     @commands.group(
         invoke_without_command=True,
