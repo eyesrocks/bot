@@ -629,7 +629,6 @@ class Fun(commands.Cog):
 
     @commands.hybrid_command(help="roast anyone", description="fun")
     @commands.cooldown(1, 3, commands.BucketType.user)
-    @blacklist()
     async def roast(self, ctx):
         roast_list = [
             "at least my mom pretends to love me",
