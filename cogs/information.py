@@ -1307,7 +1307,7 @@ class Information(commands.Cog):
             await ctx.fail("No messages have been found in this channel.")
     
     @commands.command(
-            name=
+            name=""
     )
 
     @commands.group(
