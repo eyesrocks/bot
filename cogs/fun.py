@@ -873,6 +873,24 @@ class Fun(commands.Cog):
             description=translated_text,
         )
         await ctx.send(embed=embed)
+        @commands.command(aliases=["tr"])
+        async def translate(self, ctx: Context, language: str, *, message: str):
+            """
+            Translate a message to a specific language
+            """
+
+            try:
+                translator = GoogleTranslator(source="auto", target=language)
+                translated = await asyncio.to_thread(translator.translate, message)
+                embed = discord.Embed(
+                    color=self.bot.color,
+                    title=f"translated to {language}",
+                    description=f"```{translated}```",
+                )
+
+                await ctx.send(embed=embed)
+            except LanguageNotSupportedException:
+                return await ctx.send("This language is **not** supported")
 
 
 
