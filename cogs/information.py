@@ -1295,7 +1295,7 @@ class Information(commands.Cog):
             async for message in channel.history(limit=1, oldest_first=True):
                 link = message.jump_url
                 embed = discord.Embed(
-                    description=f"> <:icons_Correct:1265268427959046245> [First message]({link}) in {channel.mention}",
+                    description=f"> [First message]({link}) in {channel.mention}",
                     color=0x2C2D31,
                 )
                 await ctx.send(embed=embed)
