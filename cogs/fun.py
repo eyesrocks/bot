@@ -761,7 +761,7 @@ class Fun(commands.Cog):
 
     @commands.command(
         name="dominant",
-        description="Get the most "
+        description="Get the most dominant color"
     )
 
 
