@@ -1322,7 +1322,8 @@ class Information(commands.Cog):
         embed.add_field(
             name="**__General__**",
             value=f""">>> **Channel:** {invite.channel.mention}
-            
+**Guild:** {invite.guild.name}
+
 
     @commands.group(
         invoke_without_command=True,
