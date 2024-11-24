@@ -849,7 +849,7 @@ class Fun(commands.Cog):
         await message.add_reaction("<:UB_X_Icon:1306875714426900531>")
 
     @commands.command(
-        name="random"
+        name="randomhex"
     )
 
 
