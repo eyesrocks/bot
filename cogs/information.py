@@ -1369,7 +1369,8 @@ class Information(commands.Cog):
             description="View all invites in the server",
     )
     async def invites(self, ctx):
-        
+        invites = await ctx.guild.invites()
+        if not invites:
 
     @commands.group(
         invoke_without_command=True,
