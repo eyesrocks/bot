@@ -1625,17 +1625,16 @@ class Servers(Cog):
         if not stickers:
             return await ctx.fail("There are no stickers in this server.")
 
-        embeds = []
+        embed = discord.Embed(
+            title="Stickers",
+            description="",
+            color=self.bot.color,
+        )
         for sticker in stickers:
-            embed = discord.Embed(
-                title=sticker.name,
-                description=f"Sticker ID: {sticker.id}",
-                color=self.bot.color,
-            )
+            embed.description += f"{sticker.name} - Sticker ID: {sticker.id}\n"
             embed.set_image(url=sticker.url)
-            embeds.append(embed)
 
-        await self.bot.paginate(ctx, embeds, rows=[])
+        await self.bot.paginate(ctx, [embed], rows=[])
 
     @Group(
         name="premiumrole",
