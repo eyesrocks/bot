@@ -6,7 +6,7 @@ import random
 import discord
 import asyncio
 from datetime import datetime, timedelta
-from googletrans import Translator
+from googletrans import Translator 
 from typing import Optional
 from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
@@ -214,7 +214,7 @@ class Fun(commands.Cog):
         )
         mes = await ctx.send(embed=embed, content="".join(emojis))
         await mes.add_reaction(self.blacktea.emoji)
-        for _ in range(11):
+        for i in range(11):
             # Print the current list of emojis
             new_content = "".join(emojis)
 
@@ -619,12 +619,13 @@ class Fun(commands.Cog):
             user = ctx.author
             size = random.randint(1, 50)
             ppsize = ""
-            ppsize = "=" * size
-            embed = discord.Embed(
-                title=f"{user}'s pp size",
-                description=f"8{ppsize}D",
-                colour=self.bot.color,
-            )
+            for _i in range(size):
+                ppsize += "="
+                embed = discord.Embed(
+                    title=f"{user}'s pp size",
+                    description=f"8{ppsize}D",
+                    colour=self.bot.color,
+                )
             await ctx.send(embed=embed)
 
     @commands.hybrid_command(help="roast anyone", description="fun")
@@ -735,7 +736,7 @@ class Fun(commands.Cog):
     @commands.hybrid_command(help="ask the :8ball: anything", aliases=["8ball"], description="fun", usage="<member>")
     @commands.cooldown(1, 3, commands.BucketType.user)
     async def eightball(self, ctx, *, question):
-    async def eightball(self, ctx):
+        responses  = ["It is certain.",
                     "It is decidedly so.",
                     "Without a doubt.",
                     "Yes - definitely.",
