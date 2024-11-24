@@ -785,6 +785,7 @@ class Fun(commands.Cog):
         name="rotate",
         description="Rotate an image by a specified angle",
         aliases=["rotateimage"],
+        
     )
 
 
