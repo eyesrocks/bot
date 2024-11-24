@@ -1293,7 +1293,7 @@ class Information(commands.Cog):
             channel = ctx.channel
 
         try:
-            
+            async for message in channel
             
     @commands.group(
         invoke_without_command=True,
