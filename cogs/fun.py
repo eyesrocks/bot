@@ -871,6 +871,10 @@ class Fun(commands.Cog):
         await ctx.send(embed=embed, file=file)
         output.close()
 
+    @commands.command(
+        name=""
+    )
+
 
 
 
