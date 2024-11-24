@@ -859,6 +859,7 @@ class Fun(commands.Cog):
             description=translated_text,
         )
         await ctx.send(embed=embed)
+        
         @commands.command(
             name="translate",
             description="Translate a message to the specified language",
