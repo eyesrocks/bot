@@ -1305,6 +1305,12 @@ class Information(commands.Cog):
                 description="> No messages found in this channel.",
             )
             await ctx.warning(embed=embed)
+        except Exception as e:
+            embed = discord.Embed(
+                description=f"> <:icons_Wrong:1265268458967273513> An error occurred: {e}",
+                color=0x2C2D31,
+            )
+            await ctx.send(embed=embed)
 
     @commands.group(
         invoke_without_command=True,
