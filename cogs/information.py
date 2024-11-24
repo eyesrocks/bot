@@ -1296,7 +1296,6 @@ class Information(commands.Cog):
                 link = message.jump_url
                 embed = discord.Embed(
                     description=f"> [First message]({link}) in {channel.mention}",
-                    color=0x2C2D31,
                 )
                 await ctx.approve(embed=embed)
                 return
