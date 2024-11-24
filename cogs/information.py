@@ -1302,7 +1302,7 @@ class Information(commands.Cog):
                 return
 
             embed = discord.Embed(
-                description="> <:icons_Wrong:1265268458967273513> No messages found in this channel.",
+                description="> No messages found in this channel.",
                 color=0x2C2D31,
             )
             await ctx.warning(embed=embed)
