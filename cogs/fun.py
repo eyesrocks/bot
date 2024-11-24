@@ -761,7 +761,7 @@ class Fun(commands.Cog):
 
     @commands.command(
         name="dominant",
-        description="Get the most dominant color"
+        description="Get the most dominant color in a users"
     )
 
 
