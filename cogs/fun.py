@@ -875,6 +875,7 @@ class Fun(commands.Cog):
         name="rps",
         brief="Play rock, paper, scissors",
     )
+    
 
 
 
