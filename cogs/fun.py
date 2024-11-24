@@ -762,8 +762,9 @@ class Fun(commands.Cog):
     @commands.command(
         name="dominant",
         description="Get the most dominant color in a users avatar",
-        
+        aliases=["dom"],
     )
+    
 
 
 async def setup(bot):
