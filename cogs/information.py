@@ -1817,7 +1817,7 @@ class Information(commands.Cog):
     )
     async def support(self, ctx):
         """Get the support server invite link."""
-        await ctx.success("[greed support](https://discord.gg/pomice)")
+        await ctx.success("[greed ticket support](https://discord.gg/pomice)")
 
 
 
