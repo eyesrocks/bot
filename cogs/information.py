@@ -1311,7 +1311,7 @@ class Information(commands.Cog):
             aliases=["ii"],
             brief="View information on an invite",
     )
-    async def inviteinfo(self, )
+    async def inviteinfo(self, c)
 
     @commands.group(
         invoke_without_command=True,
