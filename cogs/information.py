@@ -1301,9 +1301,9 @@ class Information(commands.Cog):
                         description=f"> [First message]({link}) in {channel.mention}\n\n**Message content**:\n{message.content}",
                     )
                     await ctx.success(embed=embed)
-                    return  # Exit after sending the embed
+                    return
 
-            # If no messages are found
+
             await ctx.fail("No messages found in this channel.")
         except Exception as e:
             await ctx.fail(f"Failed to retrieve messages from this channel. Error: {str(e)}")
