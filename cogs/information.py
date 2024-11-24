@@ -1295,7 +1295,7 @@ class Information(commands.Cog):
         try:
             async for message in channel.history(limit=1, oldest_first=True):
                 link = message.jump_url
-                
+                return await ctx.send(f"**[First message in {channel.mention}]({link})**")
             
     @commands.group(
         invoke_without_command=True,
