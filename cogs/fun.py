@@ -853,6 +853,7 @@ class Fun(commands.Cog):
         brief="Generate a random hex color",
         aliases=["rhex"],
     )
+    
 
 
 
