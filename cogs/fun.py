@@ -851,7 +851,7 @@ class Fun(commands.Cog):
     @commands.command(
         name="randomhex",
         brief="Generate a random hex color",
-        
+        aliases=["hex"],
     )
 
 
