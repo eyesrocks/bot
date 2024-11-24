@@ -1618,18 +1618,8 @@ class Servers(Cog):
     @sticker.command(
         name="list",
         brief="List all the stickers in the server",
+        
     )
-    async def sticker_list(self, ctx: Context):
-        stickers = ctx.guild.stickers
-        if not stickers:
-            return await ctx.fail("There are no stickers in this server.")
-
-        rows = [f"{sticker.name} - Sticker ID: {sticker.id}" for sticker in stickers]
-        embed = discord.Embed(
-            title="Stickers",
-            color=self.bot.color,
-        )
-        await self.bot.dummy_paginator(ctx, embed, rows)
 
     @Group(
         name="premiumrole",
