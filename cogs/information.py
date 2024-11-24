@@ -1292,7 +1292,6 @@ class Information(commands.Cog):
             channel = ctx.channel
 
         try:
-            # Fetch the first message from the channel's history
             async for message in channel.history(limit=1, oldest_first=True):
                 if message:
                     link = message.jump_url
