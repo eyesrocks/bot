@@ -6,7 +6,7 @@ import random
 import discord
 import asyncio
 from datetime import datetime, timedelta
-from googletrans import Translator
+import aiohttp
 from typing import Optional
 from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
@@ -839,12 +839,24 @@ class Fun(commands.Cog):
         description="Translate a message to the specified language",
     )
     async def translate(self, ctx, language: str, *, message: str):
-        translator = Translator()
-        translated = translator.translate(message, dest=language)
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                "https://translate.googleapis.com/translate_a/single",
+                params={
+                    "client": "gtx",
+                    "sl": "auto",
+                    "tl": language,
+                    "dt": "t",
+                    "q": message,
+                },
+            ) as response:
+                result = await response.json()
+                translated_text = result[0][0][0]
+
         embed = discord.Embed(
             color=self.bot.color,
-            title=f"Translated to {translated.dest}",
-            description=translated.text,
+            title=f"Translated to {language}",
+            description=translated_text,
         )
         await ctx.send(embed=embed)
 
