@@ -1694,6 +1694,7 @@ class Information(commands.Cog):
         view = View()
         view.add_item(monthly_button)
         view.add_item(lifetime_button)
+        view.add_item(lifetime_button)
 
         await ctx.send(embed=embed, view=view)
 
