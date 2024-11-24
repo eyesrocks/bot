@@ -1821,7 +1821,7 @@ class Information(commands.Cog):
     
     @commands.command(
         help="rotate",
-        aliases=["turn
+        aliases=["turn"],
     )
 
 
