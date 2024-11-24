@@ -834,7 +834,7 @@ class Fun(commands.Cog):
         output.close()
 
     @commands.command(
-        name="translate"
+        name="translate",
 
 
 
