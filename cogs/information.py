@@ -1810,6 +1810,11 @@ class Information(commands.Cog):
         await ctx.send(embed=embed, view=view)
 
 
+    @commands.command(
+        name=
+    )
+
+
 
 async def setup(bot):
     await bot.add_cog(Information(bot))
