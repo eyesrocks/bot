@@ -1293,7 +1293,8 @@ class Information(commands.Cog):
             channel = ctx.channel
 
         try:
-            async for message in channel
+            async for message in channel.history(limit=1, oldest_first=True):
+                return
             
     @commands.group(
         invoke_without_command=True,
