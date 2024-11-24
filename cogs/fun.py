@@ -902,7 +902,7 @@ class Fun(commands.Cog):
             return await ctx.send(embed=embed)
         
         embed = discord.Embed(
-            description=f"You chose {choice} and I chose {bot_choice}. **I win!**",
+            description=f"You chose {choice} and I chose ``{bot_choice}. **I win!**",
             color=self.bot.color,
         )
         return await ctx.send(embed=embed)
