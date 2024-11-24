@@ -2334,7 +2334,6 @@ class Moderation(Cog):
 
         await ctx.message.delete()
         await self.delete_message_list(ctx, limit, check)
-
     
 
 
