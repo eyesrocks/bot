@@ -857,9 +857,9 @@ class Fun(commands.Cog):
         color = discord.Color(random.randint(0, 0xFFFFFF))
         embed = discord.Embed(
             description=f"``{color}``",
-            
             color=color,
         )
+        set
         await ctx.send(embed=embed)
 
 
