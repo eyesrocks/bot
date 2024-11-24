@@ -1822,7 +1822,7 @@ class Information(commands.Cog):
     @commands.command(
         help="rotate",
         aliases=["turn"],
-        brief="rotate 
+        brief="rotate an image by a provided
     )
 
 
