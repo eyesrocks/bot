@@ -219,7 +219,7 @@ class Miscellaneous(Cog):
          members = ctx.guild.members
      
      # Filter out bots if you want to exclude them
-        human_members = [member for member in members if not member.bot]
+         human_members = [member for member in members if not member.bot]
      
      # Check if there are human members available
      if not human_members:
