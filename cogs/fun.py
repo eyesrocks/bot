@@ -759,7 +759,9 @@ class Fun(commands.Cog):
         embed=discord.Embed(color=0x2B2D31, description= f" :8ball: {random.choice(responses)}")
         await ctx.reply(embed=embed, mention_author=False)
 
-    @commands.command()
+    @commands.command(
+        name=
+    )
 
 
 async def setup(bot):
