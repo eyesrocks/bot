@@ -1298,6 +1298,7 @@ class Information(commands.Cog):
                     embed = discord.Embed(
                         title="First Message",
                         description=f"> [First message]({link}) in {channel.mention}\n\n**Message content**:\n{message.content}",
+                        color
                     )
                     await ctx.send(embed=embed)
                     return
