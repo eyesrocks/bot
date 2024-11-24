@@ -8,7 +8,7 @@ import asyncio
 from datetime import datetime, timedelta
 import aiohttp
 from typing import Optional
-from deep_translator import GoogleTranslator
+from deep_translator import GoogleTranslator, LanguageNotSupportedException
 from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
 import textwrap
