@@ -1308,7 +1308,7 @@ class Information(commands.Cog):
     
     @commands.command(
             name="inviteinfo",
-            
+            aliases=["ii
     )
 
     @commands.group(
