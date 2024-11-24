@@ -840,40 +840,29 @@ class Fun(commands.Cog):
         description="Translate a message to the specified language",
     )
     async def translate(self, ctx, language: str, *, message: Optional[str] = None):
-        # Check if the provided language is valid
-        valid_languages = ['en', 'es', 'fr', 'de', 'it', 'pt', 'ja', 'ko', 'zh', 'ru']  # You can extend this list
-        if language not in valid_languages:
-            return await ctx.send("Invalid language code. Please provide a valid language code.")
-
-        # Handle if no message is provided
         if message is None:
             msg = ctx.message.reference
             if msg is None:
-                return await ctx.send("No message or reference provided.")
-            message = await ctx.fetch_message(msg.message_id)
+                return await ctx.send("No message or reference provided")
+            id = msg.message_id
+            message = await ctx.fetch_message(id)
             message = message.content
 
-        # Perform translation
         async with aiohttp.ClientSession() as session:
-            try:
-                async with session.get(
-                    "https://translate.googleapis.com/translate_a/single",
-                    params={
-                        "client": "gtx",
-                        "sl": "auto",  # Auto-detect source language
-                        "tl": language,  # Target language
-                        "dt": "t",  # Type of translation (text)
-                        "q": message,  # The message to translate
-                    },
-                ) as response:
-                    result = await response.json()
-                    translated_text = result[0][0][0]
-                    source_language = result[2]
+            async with session.get(
+                "https://translate.googleapis.com/translate_a/single",
+                params={
+                    "client": "gtx",
+                    "sl": "auto",
+                    "tl": language,
+                    "dt": "t",
+                    "q": message,
+                },
+            ) as response:
+                result = await response.json()
+                translated_text = result[0][0][0]
+                source_language = result[2]
 
-            except Exception as e:
-                return await ctx.send(f"An error occurred while trying to translate: {e}")
-
-        # Send the translated text in an embed
         embed = discord.Embed(
             color=self.bot.color,
             title=f"Translated from {source_language} to {language}",
