@@ -1366,7 +1366,7 @@ class Information(commands.Cog):
 
     @commands.command(
             name=invites,
-            description="View all 
+            description="View all invites in the server",
     )
 
     @commands.group(
