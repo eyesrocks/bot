@@ -1303,7 +1303,6 @@ class Information(commands.Cog):
                     await ctx.success(embed=embed)
                     return
 
-
             await ctx.fail("No messages found in this channel.")
         except Exception as e:
             await ctx.fail(f"Failed to retrieve messages from this channel. Error: {str(e)}")
