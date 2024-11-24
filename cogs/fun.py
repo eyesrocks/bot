@@ -922,34 +922,13 @@ class Fun(commands.Cog):
         )
         await ctx.send(embed=embed)
     
-class YourCog(commands.Cog):
-    def __init__(self, bot):
-        self.bot = bot
-        self.wyr_questions = []  # You can populate this if needed
-
     @commands.command(
         name="wyr",
         brief="Play a game of Would You Rather",
         aliases=["wouldyourather"],
     )
     async def wyr(self, ctx):
-        # API request
-        url = "https://would-you-rather.p.rapidapi.com/wyr/random"
-        headers = {
-            "x-rapidapi-key": "dd42e94a21msh04bda572c6da553p127a95jsnf367d0e280bb",
-            "x-rapidapi-host": "would-you-rather.p.rapidapi.com"
-        }
-
-        # Use aiohttp to fetch the API data asynchronously
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    question = data.get("question", "No question available.")
-                else:
-                    question = "Sorry, couldn't fetch a question at the moment."
-
-        # Create and send the embed with the question
+        question = random.choice(self.wyr_questions)
         embed = discord.Embed(
             description=question,
             color=self.bot.color,
