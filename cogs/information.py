@@ -1283,7 +1283,17 @@ class Information(commands.Cog):
 
         await ctx.send(embed=embed)
 
-    
+    @commands.command(
+        name="firstmessage",
+        brief="Go back to the first message in the channel",
+        example=",firstmessage",
+    )
+    async def firstmessage(self, ctx: Context):
+        first_message = await ctx.channel.history(limit=1, oldest_first=True).flatten()
+        if first_message:
+            await ctx.send(f"The first message in this channel is [here]({first_message[0].jump_url})")
+        else:
+            await ctx.send("No messages found in this channel.")
     @commands.group(
         invoke_without_command=True,
         example=",boosters",
