@@ -214,23 +214,32 @@ class Miscellaneous(Cog):
         self.bot.afks[ctx.author.id] = {"date": datetime.now(), "status": str(status)}
         return await ctx.success(f"**You're now afk** with the status: `{status[:25]}`")
 
-    @commands.command(name="ramdomuser")
+    @commands.command()
     async def randomuser(self, ctx):
-     # Get the list of all members in the server
+        # Log the total number of members in the guild
+        print(f"Total members in guild: {len(ctx.guild.members)}")
+        
+        # Get the list of all members in the server
         members = ctx.guild.members
-     
-     # Filter out bots if you want to exclude them
-        human_members = [member for member in members if not member.bot]
-     
-     # Check if there are human members available
-        if not human_members:
-              await ctx.send("No human members found in the server.")
-              return
 
-     # Pick a random member
+        # Filter out bots if you want to exclude them
+        human_members = [member for member in members if not member.bot]
+
+        # Log the number of human members
+        print(f"Total human members (excluding bots): {len(human_members)}")
+
+        # Check if there are human members available
+        if not human_members:
+            await ctx.send("No human members found in the server.")
+            return
+
+        # Pick a random member
         chosen_member = random.choice(human_members)
 
-     # Send the selected member's username
+        # Log the chosen user's name
+        print(f"Chosen user: {chosen_member.name}")
+
+        # Send the selected member's username
         await ctx.send(f"Randomly selected user: {chosen_member.name}")
 
     @commands.command(
