@@ -836,6 +836,7 @@ class Fun(commands.Cog):
     @commands.command(
         name="translate",
         description="Translate a message to the specified language",
+        
 
 
 
