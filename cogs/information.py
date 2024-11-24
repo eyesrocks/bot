@@ -1310,7 +1310,7 @@ class Information(commands.Cog):
                 description=f"> <:icons_Wrong:1265268458967273513> An error occurred: {e}",
                 color=0x2C2D31,
             )
-            await ctx.send(embed=embed)
+            await ctx.warning(embed=embed)
 
     @commands.group(
         invoke_without_command=True,
