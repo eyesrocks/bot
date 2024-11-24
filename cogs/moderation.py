@@ -2340,6 +2340,7 @@ class Moderation(Cog):
         brief="Mass delete messages after a certain message",
         example=",purge after 1234567890816737212 100",
     )
+    
 
     @commands.command(
         name="cleanup",
