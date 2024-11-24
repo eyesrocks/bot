@@ -224,7 +224,7 @@ class Miscellaneous(Cog):
      # Check if there are human members available
          if not human_members:
               await ctx.send("No human members found in the server.")
-          return
+              return
 
      # Pick a random member
      chosen_member = random.choice(human_members)
