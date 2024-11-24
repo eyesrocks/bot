@@ -941,7 +941,7 @@ class Fun(commands.Cog):
             async with session.get(url, headers=headers) as response:
                 if response.status == 200:
                     data = await response.json()
-                    question = data.get("question", "No question available.")
+                    question = data[0].get("question", "No question available.")
                 else:
                     question = "Sorry, couldn't fetch a question at the moment."
 
