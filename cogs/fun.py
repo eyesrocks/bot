@@ -835,12 +835,12 @@ class Fun(commands.Cog):
         output.close()
 
 
-    @commands.command(
-        name="translate",
-        description="Translate a message to the specified language",
-    )
-    async def translate(self, ctx, language: str, *, message: Optional[str] = None):
-        if message is None:
+        @commands.command(
+            name="translate",
+            description="Translate a message to the specified language",
+        )
+        async def translate(self, ctx, language: str, *, message: Optional[str] = None):
+            if message is None:
             msg = ctx.message.reference
             if msg is None:
                 return await ctx.send("No message or reference provided")
@@ -848,27 +848,26 @@ class Fun(commands.Cog):
             message = await ctx.fetch_message(id)
             message = message.content
 
-        async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession() as session:
             async with session.get(
                 "https://translate.googleapis.com/translate_a/single",
                 params={
-                    "client": "gtx",
-                    "sl": "auto",
-                    "tl": language,
-                    "dt": "t",
-                    "q": message,
+                "client": "gtx",
+                "sl": "auto",
+                "tl": language,
+                "dt": "t",
+                "q": message,
                 },
             ) as response:
                 result = await response.json()
                 translated_text = result[0][0][0]
-                source_language = result[2]
 
-        embed = discord.Embed(
+            embed = discord.Embed(
             color=self.bot.color,
-            title=f"Translated from {source_language} to {language}",
+            title=f"Translated to {language}",
             description=translated_text,
-        )
-        await ctx.send(embed=embed)
+            )
+            await ctx.send(embed=embed)
 
 
 
