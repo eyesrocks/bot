@@ -1294,6 +1294,7 @@ class Information(commands.Cog):
             await ctx.send(f"The first message in this channel is [here]({first_message[0].jump_url})")
         else:
             await ctx.send("No messages found in this channel.")
+            
     @commands.group(
         invoke_without_command=True,
         example=",boosters",
