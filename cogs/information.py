@@ -1813,7 +1813,7 @@ class Information(commands.Cog):
     @commands.command(
         name="support",
         aliases=["supportserver"],
-        
+        brief="Get the support server invite",
     )
 
 
