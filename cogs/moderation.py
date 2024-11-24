@@ -1988,7 +1988,7 @@ class Moderation(Cog):
             return await ctx.fail(
                 f"There are **no roles** to restore to {member.mention}"
             )
-    @commands.
+        
 
     @commands.command(name="strip", aliases=["stripstaff"], brief="Remove all roles from a user in a guild")
     @commands.has_permissions(manage_roles=True)
