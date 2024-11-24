@@ -1292,18 +1292,18 @@ class Information(commands.Cog):
             channel = ctx.channel
 
         try:
-            async for message in channel.history(limit=1, oldest_first=True):
-                link = message.jump_url
+            first_message = await channel.history(limit=1, oldest_first=True).flatten()
+            if first_message:
+                link = first_message[0].jump_url
                 embed = discord.Embed(
                     description=f"> [First message]({link}) in {channel.mention}",
                     color=0x2C2D31,
                 )
                 await ctx.success(embed=embed)
-                return
-
-            await ctx.fail("No messages found in this channel.")
+            else:
+                await ctx.fail("No messages found in this channel.")
         except Exception:
-            await ctx.fail("No messages found in this channel.")
+            await ctx.fail("Failed to retrieve messages from this channel.")
 
     @commands.group(
         invoke_without_command=True,
