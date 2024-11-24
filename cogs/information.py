@@ -1307,12 +1307,21 @@ class Information(commands.Cog):
             await ctx.fail("No messages have been found in this channel.")
     
     @commands.command(
-            name="inviteinfo",
-            aliases=["ii"],
-            brief="View information on an invite",
+        name="inviteinfo",
+        aliases=["ii"],
+        brief="View information on an invite",
     )
-    async def inviteinfo(self, ctx, invite: discord.Invite):
+    async def inviteinfo(self, ctx, invite: str):
         """View information on an invite"""
+
+        # Check if the invite is a full URL or just the code
+        if not invite.startswith("https://discord.gg/"):
+            invite = f"https://discord.gg/{invite}"
+
+        try:
+            invite = await self.bot.fetch_invite(invite)
+        except discord.NotFound:
+            return await ctx.fail("Invalid invite URL or code.")
 
         embed = discord.Embed(
             title=f"Invite information for {invite.code}",
@@ -1321,7 +1330,10 @@ class Information(commands.Cog):
 
         embed.add_field(
             name="**__Invite__**",
-            value=f>>> **Code:** {invite.code}\n\n**URL:** [Invite]({invite.url}\n\n**Channel:** {invite.channel.mention}\n\n**Guild:** {invite.guild.name}",)
+            value=f">>> **Code:** {invite.code}\n\n**URL:** [Invite]({invite.url})\n\n**Channel:** {invite.channel.mention}\n\n**Guild:** {invite.guild.name}",
+        )
+
+        await ctx.send(embed=embed)
 
     @commands.group(
         invoke_without_command=True,
