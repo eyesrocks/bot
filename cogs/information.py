@@ -1368,6 +1368,8 @@ class Information(commands.Cog):
             name=invites,
             description="View all invites in the server",
     )
+    async def invites(self, ctx):
+        
 
     @commands.group(
         invoke_without_command=True,
