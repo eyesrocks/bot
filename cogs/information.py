@@ -1295,6 +1295,7 @@ class Information(commands.Cog):
         try:
             async for message in channel.history(limit=1, oldest_first=True):
                 link = message.jump_url
+                
             
     @commands.group(
         invoke_without_command=True,
