@@ -2334,22 +2334,7 @@ class Moderation(Cog):
 
         await ctx.message.delete()
         await self.delete_message_list(ctx, limit, check)
-    
-    @purge.command(
-        name="after",
-        brief="Mass delete messages after a certain message",
-        example=",purge after 1310264347041202298 100",
-    )
-    async def purge_after(self, ctx: Context, message: discord.Message, limit: int = 10):
-        async with self.locks[ctx.channel.id]:
-            now = discord.utils.utcnow() - datetime.timedelta(days=14)
-            messages = [
-                m
-                async for m in ctx.channel.history(after=message)
-                if int(m.created_at.timestamp()) > int(now.timestamp())
-            ]
-            if len(messages) > 0:
-                messages = messages[:limit]
+
     
 
 
