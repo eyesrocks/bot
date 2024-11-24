@@ -1831,6 +1831,42 @@ class Information(commands.Cog):
             image = image.rotate(degrees, expand=True)
             image.save("rotated.png")
             await ctx.send(file=discord.File("rotated.png"))
+            @commands.command(
+                name="rotate",
+                aliases=["turn"],
+                brief="Rotate an image by a provided degree",
+                usage=",rotate <degrees> [image]",
+                example=",rotate 90",
+            )
+            async def rotate(self, ctx: Context, degrees: int, url: Optional[str] = None):
+                """Rotate an image by a provided degree."""
+                if url:
+                    if not re.match(DISCORD_FILE_PATTERN, url):
+                        raise CommandError("The URL provided doesn't match the **Discord** regex!")
+                    async with self.bot.session.get(url) as response:
+                        image = Image.open(BytesIO(await response.content.read()))
+                elif ctx.message.attachments:
+                    attachment = ctx.message.attachments[0]
+                    if not attachment.content_type or not attachment.content_type.startswith("image"):
+                        raise CommandError("The attachment provided must be an image file.")
+                    image = Image.open(BytesIO(await attachment.read()))
+                elif ctx.message.reference:
+                    ref_message = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+                    if ref_message.attachments:
+                        attachment = ref_message.attachments[0]
+                        if not attachment.content_type or not attachment.content_type.startswith("image"):
+                            raise CommandError("The attachment provided must be an image file.")
+                        image = Image.open(BytesIO(await attachment.read()))
+                    else:
+                        raise CommandError("The referenced message does not contain an image.")
+                else:
+                    raise CommandError("You must provide an image URL, attach an image, or reply to a message with an image.")
+
+                image = image.rotate(degrees, expand=True)
+                buffer = BytesIO()
+                image.save(buffer, format="PNG")
+                buffer.seek(0)
+                await ctx.send(file=discord.File(buffer, "rotated.png"))
 
 
 
