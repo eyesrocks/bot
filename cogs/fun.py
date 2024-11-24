@@ -929,7 +929,6 @@ class Fun(commands.Cog):
         aliases=["wouldyourather"],
     )
     async def wyr(self, ctx):
-        # API request
         url = "https://would-you-rather.p.rapidapi.com/wyr/random"
         headers = {
             "x-rapidapi-key": "dd42e94a21msh04bda572c6da553p127a95jsnf367d0e280bb",
