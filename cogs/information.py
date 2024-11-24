@@ -1345,7 +1345,6 @@ class Information(commands.Cog):
                   f"**ID:** {invite.guild.id}\n"
                   f"**Created:** {discord.utils.format_dt(invite.guild.created_at, style='F')}\n"
                   f"**Members:** {invite.approximate_member_count if hasattr(invite, 'approximate_member_count') else 'N/A'}\n"
-                  f"**Online Members:** {sum(1 for member in invite.guild.members if member.status != discord.Status.offline)}\n"
                   f"**Verification Level:** {invite.guild.verification_level}",
             inline=False,
         )
