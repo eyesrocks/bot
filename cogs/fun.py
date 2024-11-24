@@ -945,7 +945,6 @@ class Fun(commands.Cog):
                 else:
                     question = "Sorry, couldn't fetch a question at the moment."
 
-        # Create and send the embed with the question
         embed = discord.Embed(
             description=question,
             color=self.bot.color,
