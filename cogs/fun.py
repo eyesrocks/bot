@@ -773,8 +773,10 @@ class Fun(commands.Cog):
         # Filter out grayscale colors
         colorful_colors = [color for color in colors if len(set(color[1])) > 1]
         dominant_color = max(colorful_colors, key=lambda item: item[0])[1]
+        hex_color = "#{:02x}{:02x}{:02x}".format(*dominant_color)
         embed = discord.Embed(
             color=discord.Color.from_rgb(*dominant_color),
+            description=f"{user.mention}'s dominant color is {hex_color}",
         )
         embed.set_thumbnail(url=str(avatar))
         await ctx.send(embed=embed)
