@@ -861,11 +861,12 @@ class Fun(commands.Cog):
             ) as response:
                 result = await response.json()
                 translated_text = result[0][0][0]
+                source_language = result[2]
 
         embed = discord.Embed(
-        color=self.bot.color,
-        title=f"Translated to {language}",
-        description=translated_text,
+            color=self.bot.color,
+            title=f"Translated from {source_language} to {language}",
+            description=translated_text,
         )
         await ctx.send(embed=embed)
 
