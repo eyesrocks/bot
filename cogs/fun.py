@@ -923,6 +923,7 @@ class Fun(commands.Cog):
     
     @commands.command(
         name="wyr",
+        brief="Play a game of Would You Rather",
         
     )
 
