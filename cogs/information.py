@@ -1283,7 +1283,7 @@ class Information(commands.Cog):
 
         await ctx.send(embed=embed)
 
-    @commands.command(name="firstmessage"
+    @commands.command(name="firstmessage", brief="View the first message in a channel")
     @commands.group(
         invoke_without_command=True,
         example=",boosters",
