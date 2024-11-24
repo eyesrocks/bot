@@ -1839,7 +1839,6 @@ class Information(commands.Cog):
             )
             embed.set_thumbnail(url=avatar_url)
             embed.set_image(url=avatar_url)
-            embed.set_author(name=ctx.author.name, icon_url=ctx.author.display_avatar)
 
             await ctx.send(embed=embed)
         except Exception as e:
