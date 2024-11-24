@@ -1635,7 +1635,7 @@ class Servers(Cog):
             embed.set_image(url=sticker.url)
             embeds.append(embed)
 
-        await self.bot.paginate(ctx, embeds)
+        await self.bot.paginate(ctx, embeds, rows=[])
 
     @Group(
         name="premiumrole",
