@@ -1617,6 +1617,7 @@ class Servers(Cog):
     
     @sticker.command(
         name="list",
+        brief="List all the stickers in the server",
         
     )
 
