@@ -1390,7 +1390,8 @@ class Information(commands.Cog):
                         color=self.bot.color,
                         description="\n".join(page),
                     )
-                    .set_footer(text=f"Page {len(embeds) + 1}/{(len(rows) + 9) // 10}", icon_url=ctx.guild.icon.url if ctx.guild.icon else None)
+                    .set_author(name=ctx.author.name, icon_url=ctx.author.display_avatar)
+                    .set_footer(text=f"Page {len(embeds) + 1}/{(len(rows) + 9) // 10}")
                 )
                 page = []
             page.append(row)
@@ -1403,7 +1404,7 @@ class Information(commands.Cog):
                     description="\n".join(page),
                 )
                 .set_author(name=ctx.author.name, icon_url=ctx.author.display_avatar)
-                .set_footer(text=f"Page {len(embeds) + 1}/{(len(rows) + 9) // 10}", icon_url=ctx.guild.icon.url if ctx.guild.icon else None)
+                .set_footer(text=f"Page {len(embeds) + 1}/{(len(rows) + 9) // 10}")
             )
 
         if not embeds:
@@ -1411,7 +1412,6 @@ class Information(commands.Cog):
                 discord.Embed(
                     color=self.bot.color, description="**No invites found in this server**"
                 ).set_author(name=ctx.author.name, icon_url=ctx.author.display_avatar)
-                .set_footer(icon_url=ctx.guild.icon.url if ctx.guild.icon else None)
             )
 
         await ctx.paginate(embeds)
