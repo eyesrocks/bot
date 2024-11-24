@@ -1322,6 +1322,7 @@ class Information(commands.Cog):
         embed.add_field(
             name="**__Invite__**",
             value=f""">>> **Code:** {invite.code}
+            
 
     @commands.group(
         invoke_without_command=True,
