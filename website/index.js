@@ -19,7 +19,6 @@ app.get('/:page', (req, res) => {
   });
 });
 
-// API route for status
 app.get('/statusapi', async (req, res) => {
   const urls = [
     'http://localhost:8493/status',
