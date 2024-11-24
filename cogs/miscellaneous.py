@@ -214,7 +214,7 @@ class Miscellaneous(Cog):
         return await ctx.success(f"**You're now afk** with the status: `{status[:25]}`")
 
    @commands.command()
-async def randomuser(ctx):
+   async def randomuser(ctx):
      # Get the list of all members in the server
      members = ctx.guild.members
      
