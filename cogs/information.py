@@ -1303,7 +1303,6 @@ class Information(commands.Cog):
 
             embed = discord.Embed(
                 description="> No messages found in this channel.",
-                color=0x2C2D31,
             )
             await ctx.warning(embed=embed)
         except Exception as e:
