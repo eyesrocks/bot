@@ -1819,18 +1819,7 @@ class Information(commands.Cog):
         """Get the support server invite link."""
         await ctx.success("**[greed support](https://discord.com/channels/1301617147964821524/1302829884900376577)**")
     
-    @commands.command(
-        help="rotate",
-        aliases=["turn"],
-        brief="rotate an image by a provided degree",
-    )
-    async def rotate(self, ctx, degrees: int, url: str):
-        """Rotate an image by a provided degree."""
-        async with self.bot.session.get(url) as response:
-            image = Image.open(BytesIO(await response.content.read()))
-            image = image.rotate(degrees, expand=True)
-            image.save("rotated.png")
-            await ctx.send(file=discord.File("rotated.png"))
+
 
 
 
