@@ -1328,13 +1328,25 @@ class Information(commands.Cog):
 
         embed.add_field(
             name="**__Invite & Channel__**",
-            value=f">>> **Code:** {invite.code}\n**URL:** [Invite]({invite.url})\n**Channel:** {invite.channel.mention if invite.channel else 'N/A'}",
+            value=f">>> **Code:** {invite.code}\n"
+                  f"**URL:** [Invite]({invite.url})\n"
+                  f"**Channel:** {invite.channel.name} (ID: {invite.channel.id})\n"
+                  f"**Channel Created:** {discord.utils.format_dt(invite.channel.created_at, style='F')}\n"
+                  f"**Invite Expiration:** {discord.utils.format_dt(invite.expires_at, style='F') if invite.expires_at else 'Never'}\n"
+                  f"**Inviter:** {invite.inviter.mention if invite.inviter else 'N/A'}\n"
+                  f"**Temporary:** {'Yes' if invite.temporary else 'No'}\n"
+                  f"**In Use:** {'Yes' if invite.uses else 'No'}",
             inline=False,
         )
 
         embed.add_field(
             name="**__Guild__**",
-            value=f">>> **Name:** {invite.guild.name}\n**ID:** {invite.guild.id}",
+            value=f">>> **Name:** {invite.guild.name}\n"
+                  f"**ID:** {invite.guild.id}\n"
+                  f"**Created:** {discord.utils.format_dt(invite.guild.created_at, style='F')}\n"
+                  f"**Members:** {invite.guild.member_count}\n"
+                  f"**Online Members:** {sum(1 for member in invite.guild.members if member.status != discord.Status.offline)}\n"
+                  f"**Verification Level:** {invite.guild.verification_level}",
             inline=False,
         )
 
