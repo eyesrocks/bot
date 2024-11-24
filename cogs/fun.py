@@ -838,7 +838,16 @@ class Fun(commands.Cog):
         brief="Create a quick yes/no poll",
         aliases=["qpoll"],
     )
-    
+    async def quickpoll(self, ctx, *, question):
+        embed = discord.Embed(
+            title="Quick Poll",
+            description=question,
+            color=self.bot.color,
+        )
+        embed.set_footer(text=f"Poll created by {ctx.author}")
+        message = await ctx.send(embed=embed)
+        await message.add_reaction("👍")
+        await message.add_reaction("👎")
 
 
 
