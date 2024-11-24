@@ -1328,8 +1328,15 @@ class Information(commands.Cog):
 
         embed.add_field(
             name="**__Invite__**",
-            value=f">>> **Code:** {invite.code}\n\n**URL:** [Invite]({invite.url})\n\n**Channel:** {invite.channel.mention}\n\n**Guild:** {invite.guild.name}",
+            value=f">>> **Code:** {invite.code}\n\n**URL:** [Invite]({invite.url})\n\n**Guild:** {invite.guild.name}",
         )
+
+        if invite.channel:
+            embed.add_field(
+                name="**__Channel__**",
+                value=f"{invite.channel.mention}",
+                inline=False,
+            )
 
         await ctx.send(embed=embed)
 
