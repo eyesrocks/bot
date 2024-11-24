@@ -1371,6 +1371,7 @@ class Information(commands.Cog):
     async def invites(self, ctx):
         invites = await ctx.guild.invites()
         if not invites:
+            return await ctx.fail("No invites found in this server.")
 
     @commands.group(
         invoke_without_command=True,
