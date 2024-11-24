@@ -1220,7 +1220,7 @@ class Servers(Cog):
 
     @system.command(
         name="sticker",
-        alaises=("stickers",),
+        aliases=("stickers",),
         brief="auto reply to the welcome system message",
         example=",settings system sticker true",
     )
