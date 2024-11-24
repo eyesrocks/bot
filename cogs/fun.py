@@ -922,7 +922,7 @@ class Fun(commands.Cog):
         await ctx.send(embed=embed)
     
     @commands.command(
-        name=""
+        name="wyr"
     )
 
 
