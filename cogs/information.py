@@ -1296,7 +1296,6 @@ class Information(commands.Cog):
                 if message:
                     link = message.jump_url
                     embed = discord.Embed()
-                    )
                     await ctx.success("> [First message]({link}) in {channel.mention}\n\n**Message content**:\n{message.content}", embed=embed)
                     return
 
