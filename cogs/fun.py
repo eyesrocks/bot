@@ -6,6 +6,7 @@ import random
 import discord
 import asyncio
 from datetime import datetime, timedelta
+from googletrans import Translator
 from typing import Optional
 from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
