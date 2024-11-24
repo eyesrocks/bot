@@ -835,6 +835,7 @@ class Fun(commands.Cog):
 
     @commands.command(
         name="translate",
+        
 
 
 
