@@ -857,7 +857,7 @@ class Fun(commands.Cog):
         color = discord.Color(random.randint(0, 0xFFFFFF))
         hex_color = "#{:02x}{:02x}{:02x}".format(color.r, color.g, color.b)
         embed = discord.Embed(
-            description=f"``{hex_color}``",
+            description=f"``{hex_color}``\n",
             color=color,
         )
         embed.add_field(name="RGB", value=f"``({color.r}, {color.g}, {color.b})``")
