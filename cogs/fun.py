@@ -764,7 +764,17 @@ class Fun(commands.Cog):
         description="Get the most dominant color in a users avatar",
         aliases=["dom"],
     )
-    async def
+    async def dominant(self, ctx, user: discord.Member = None):
+        user = user or ctx.author
+        avatar = user.avatar.with_format("png")
+        async with self.bot.session.get(str(avatar)) as resp:
+            image = await resp.read()
+        color = await self.bot.rival.dominant_color(image)
+        embed = discord.Embed(
+            title=f"Most dominant color in {user}'s avatar",
+            color=color,
+        )
+        await ctx.send(embed=embed)
 
 
 async def setup(bot):
