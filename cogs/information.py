@@ -1311,7 +1311,17 @@ class Information(commands.Cog):
             aliases=["ii"],
             brief="View information on an invite",
     )
-    async def inviteinfo(self, c)
+    async def inviteinfo(self, ctx, invite: discord.Invite):
+        """View information on an invite"""
+
+        embed = discord.Embed(
+            title=f"Invite information for {invite.code}",
+            color=self.bot.color,
+        )
+
+        embed.add_field(
+            name="**__Invite__**",
+            value=f""">>> **Code:** {invite.code}
 
     @commands.group(
         invoke_without_command=True,
