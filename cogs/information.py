@@ -1815,6 +1815,7 @@ class Information(commands.Cog):
         aliases=["supportserver"],
         brief="Get the support server invite",
     )
+    
 
 
 
