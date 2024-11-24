@@ -1815,7 +1815,9 @@ class Information(commands.Cog):
         aliases=["supportserver"],
         brief="Get the support server invite",
     )
-    
+    async def support(self, ctx):
+        """Get the support server invite link."""
+        await ctx.send("https://discord.gg/invite")
 
 
 
