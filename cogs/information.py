@@ -1295,7 +1295,7 @@ class Information(commands.Cog):
             # Fetch the first message from the channel's history
             async for message in channel.history(limit=1, oldest_first=True):
                 if message:
-                    link = message.jump_url  # The link to the first message
+                    link = message.jump_url
                     embed = discord.Embed(
                         title="First Message",
                         description=f"> [First message]({link}) in {channel.mention}\n\n**Message content**:\n{message.content}",
