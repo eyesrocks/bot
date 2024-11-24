@@ -872,7 +872,8 @@ class Fun(commands.Cog):
         output.close()
 
     @commands.command(
-        name="rps"
+        name="rps",
+        
     )
 
 
