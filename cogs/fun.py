@@ -734,7 +734,6 @@ class Fun(commands.Cog):
 
     @commands.hybrid_command(help="ask the :8ball: anything", aliases=["8ball"], description="fun", usage="<member>")
     @commands.cooldown(1, 3, commands.BucketType.user)
-    @blacklist()
     async def eightball(self, ctx, *, question):
         responses  = ["It is certain.",
                     "It is decidedly so.",
