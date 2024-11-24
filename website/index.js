@@ -5,16 +5,6 @@ const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch
 
 app.use(express.static('public'));
 
-app.get('/:page', (req, res) => {
-  const page = req.params.page;
-  const filePath = path.join(__dirname, 'public', `${page}.html`);
-  res.sendFile(filePath, (err) => {
-    if (err) {
-      res.status(404).send('Page not found');
-    }
-  });
-});
-
 app.get('/statusapi', async (req, res) => {
   const urls = [
     'http://localhost:8493/status',
@@ -29,6 +19,16 @@ app.get('/statusapi', async (req, res) => {
     res.json("OFFLINE");
   }
 });
+app.get('/:page', (req, res) => {
+  const page = req.params.page;
+  const filePath = path.join(__dirname, 'public', `${page}.html`);
+  res.sendFile(filePath, (err) => {
+    if (err) {
+      res.status(404).send('Page not found');
+    }
+  });
+});
+
 
 app.listen(3008, () => {
   console.log('Server running at http://localhost:3008/');

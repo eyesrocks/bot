@@ -920,6 +920,8 @@ class Fun(commands.Cog):
             color=self.bot.color,
         )
         await ctx.send(embed=embed)
+    
+    @commands.command()
 
 
 
