@@ -1326,26 +1326,34 @@ class Information(commands.Cog):
             color=self.bot.color,
         )
 
+        invite_info = [
+            f"**Code:** {invite.code}",
+            f"**URL:** [Invite]({invite.url})",
+            f"**Channel:** {invite.channel.name} (ID: {invite.channel.id})",
+            f"**Channel Created:** {discord.utils.format_dt(invite.channel.created_at, style='F')}",
+            f"**Invite Expiration:** {discord.utils.format_dt(invite.expires_at, style='F') if invite.expires_at else 'Never'}",
+            f"**Inviter:** {invite.inviter.mention if invite.inviter else 'N/A'}",
+            f"**Temporary:** {'Yes' if invite.temporary else 'No'}",
+            f"**In Use:** {'Yes' if invite.uses else 'No'}"
+        ]
+
+        guild_info = [
+            f"**Name:** {invite.guild.name}",
+            f"**ID:** {invite.guild.id}",
+            f"**Created:** {discord.utils.format_dt(invite.guild.created_at, style='F')}",
+            f"**Members:** {invite.approximate_member_count if hasattr(invite, 'approximate_member_count') else 'N/A'}",
+            f"**Verification Level:** {invite.guild.verification_level}"
+        ]
+
         embed.add_field(
             name="**__Invite & Channel__**",
-            value=f">>> **Code:** {invite.code}\n"
-                  f"**URL:** [Invite]({invite.url})\n"
-                  f"**Channel:** {invite.channel.name} (ID: {invite.channel.id})\n"
-                  f"**Channel Created:** {discord.utils.format_dt(invite.channel.created_at, style='F')}\n"
-                  f"**Invite Expiration:** {discord.utils.format_dt(invite.expires_at, style='F') if invite.expires_at else 'Never'}\n"
-                  f"**Inviter:** {invite.inviter.mention if invite.inviter else 'N/A'}\n"
-                  f"**Temporary:** {'Yes' if invite.temporary else 'No'}\n"
-                  f"**In Use:** {'Yes' if invite.uses else 'No'}",
+            value="\n".join([info for info in invite_info if "N/A" not in info]),
             inline=True,
         )
 
         embed.add_field(
             name="**__Guild__**",
-            value=f">>> **Name:** {invite.guild.name}\n"
-                  f"**ID:** {invite.guild.id}\n"
-                  f"**Created:** {discord.utils.format_dt(invite.guild.created_at, style='F')}\n"
-                  f"**Members:** {invite.approximate_member_count if hasattr(invite, 'approximate_member_count') else 'N/A'}\n"
-                  f"**Verification Level:** {invite.guild.verification_level}",
+            value="\n".join([info for info in guild_info if "N/A" not in info]),
             inline=True,
         )
 
