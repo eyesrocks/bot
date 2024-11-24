@@ -1820,7 +1820,8 @@ class Information(commands.Cog):
         await ctx.success("**[greed support](https://discord.com/channels/1301617147964821524/1302829884900376577)**")
 
     @commands.command(
-        name="dominant"
+        name="dominant",
+        
     
 
 
