@@ -1298,19 +1298,19 @@ class Information(commands.Cog):
                     description=f"> [First message]({link}) in {channel.mention}",
                     color=0x2C2D31,
                 )
-                await ctx.approve(embed=embed)
+                await ctx.send(embed=embed)
                 return
 
             embed = discord.Embed(
                 description="> No messages found in this channel.",
             )
             await ctx.warning(embed=embed)
-        except Exception:
+        except Exception as e:
             embed = discord.Embed(
                 description=f"> No messages found in this channel.",
                 color=0x2C2D31,
             )
-            await ctx.warning("Warning", embed=embed)
+            await ctx.warning(embed=embed)
 
     @commands.group(
         invoke_without_command=True,
