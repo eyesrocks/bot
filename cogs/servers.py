@@ -1618,7 +1618,6 @@ class Servers(Cog):
     @sticker.command(
         name="list",
         brief="List all the stickers in the server",
-
     )
     async def sticker_list(self, ctx: Context):
         stickers = ctx.guild.stickers
@@ -1632,7 +1631,8 @@ class Servers(Cog):
         )
         for sticker in stickers:
             embed.description += f"{sticker.name} - Sticker ID: {sticker.id}\n"
-            embed.set_image(url=sticker.url)
+
+        embed.set_image(url=stickers[0].url if stickers else None)
 
         await self.bot.paginate(ctx, embed, rows=embed.description.split('\n'))
 
