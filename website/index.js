@@ -10,8 +10,6 @@ app.use(express.static('public'));
 app.get('/:page', (req, res) => {
   const page = req.params.page;
   const filePath = path.join(__dirname, 'public', `${page}.html`);
-  
-  // Send the corresponding HTML file if it exists
   res.sendFile(filePath, (err) => {
     if (err) {
       res.status(404).send('Page not found');
