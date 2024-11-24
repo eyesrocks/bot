@@ -837,6 +837,7 @@ class Fun(commands.Cog):
         name="recolor",
         description="Recolor an image to a specified hex color",
     )
+    
 
 
 
