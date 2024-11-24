@@ -1336,7 +1336,7 @@ class Information(commands.Cog):
                   f"**Inviter:** {invite.inviter.mention if invite.inviter else 'N/A'}\n"
                   f"**Temporary:** {'Yes' if invite.temporary else 'No'}\n"
                   f"**In Use:** {'Yes' if invite.uses else 'No'}",
-            inline=False,
+            inline=True,
         )
 
         embed.add_field(
