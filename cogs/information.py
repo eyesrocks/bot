@@ -1323,7 +1323,6 @@ class Information(commands.Cog):
             return await ctx.fail("Invalid invite URL or code.")
 
         embed = discord.Embed(
-            title=f"Invite information for {invite.code}",
             color=self.bot.color,
         )
 
