@@ -1365,43 +1365,40 @@ class Information(commands.Cog):
         await ctx.send(embed=embed)
 
     @commands.command(
-            name=invites,
-            description="View all invites in the server",
+        name="invites",
+        description="View all invites in the server",
     )
     async def invites(self, ctx):
         invites = await ctx.guild.invites()
         if not invites:
             return await ctx.fail("No invites found in this server.")
-            invites = await ctx.guild.invites()
-            if not invites:
-                return await ctx.fail("No invites found in this server.")
 
-            invites = sorted(invites, key=lambda invite: invite.created_at, reverse=True)
+        invites = sorted(invites, key=lambda invite: invite.created_at, reverse=True)
 
-            rows = []
-            for i, invite in enumerate(invites, start=1):
-                inviter = invite.inviter.mention if invite.inviter else "Unknown"
-                created_at = discord.utils.format_dt(invite.created_at, style='R')
-                rows.append(f"`{i}.` **{invite.code}** - {inviter} - {created_at}")
+        rows = []
+        for i, invite in enumerate(invites, start=1):
+            inviter = invite.inviter.mention if invite.inviter else "Unknown"
+            created_at = discord.utils.format_dt(invite.created_at, style='R')
+            rows.append(f"`{i}.` **{invite.code}** - {inviter} - {created_at}")
 
-            embeds = []
-            page = []
-            for i, row in enumerate(rows, start=1):
-                if i % 10 == 0 and i > 0:
+        embeds = []
+        page = []
+        for i, row in enumerate(rows, start=1):
+            if i % 10 == 0 and i > 0:
                 embeds.append(
                     discord.Embed(
-                    color=self.bot.color,
-                    title=f"Invites in {ctx.guild.name}",
-                    description="\n".join(page),
+                        color=self.bot.color,
+                        title=f"Invites in {ctx.guild.name}",
+                        description="\n".join(page),
                     )
                     .set_author(name=ctx.author.name, icon_url=ctx.author.display_avatar)
                     .set_footer(text=f"Page {len(embeds) + 1}/{(len(rows) + 9) // 10}")
                 )
                 page = []
-                page.append(row)
+            page.append(row)
 
-            if page:
-                embeds.append(
+        if page:
+            embeds.append(
                 discord.Embed(
                     color=self.bot.color,
                     title=f"Invites in {ctx.guild.name}",
@@ -1409,16 +1406,16 @@ class Information(commands.Cog):
                 )
                 .set_author(name=ctx.author.name, icon_url=ctx.author.display_avatar)
                 .set_footer(text=f"Page {len(embeds) + 1}/{(len(rows) + 9) // 10}")
-                )
+            )
 
-            if not embeds:
-                embeds.append(
+        if not embeds:
+            embeds.append(
                 discord.Embed(
                     color=self.bot.color, description="**No invites found in this server**"
                 ).set_author(name=ctx.author.name, icon_url=ctx.author.display_avatar)
-                )
+            )
 
-            await ctx.paginate(embeds)
+        await ctx.paginate(embeds)
         
 
     @commands.group(
