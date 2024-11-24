@@ -811,7 +811,27 @@ class Fun(commands.Cog):
         name="compress",
         description="Compress an image to reduce its size",
     )
-    
+    async def compress(self, ctx, message: Optional[discord.Message] = None):
+        if message is None:
+            msg = ctx.message.reference
+            if msg is None:
+                return await ctx.send("No message or reference provided")
+            id = msg.message_id
+            message = await ctx.fetch_message(id)
+
+        if not message.attachments:
+            return await ctx.send("No media found in the message")
+
+        url = message.attachments[0].url
+        async with self.bot.session.get(url) as resp:
+            image = await resp.read()
+        img = Image.open(BytesIO(image))
+        output = BytesIO()
+        img.save(output, format="JPEG", quality=10, optimize=True)
+        output.seek(0)
+        file = discord.File(output, filename="compressed.jpg")
+        await ctx.send(file=file)
+        output.close()
 
 
 
