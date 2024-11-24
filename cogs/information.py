@@ -1824,7 +1824,13 @@ class Information(commands.Cog):
         aliases=["turn"],
         brief="rotate an image by a provided degree",
     )
-    
+    async def rotate(self, ctx, degrees: int, url: str):
+        """Rotate an image by a provided degree."""
+        async with self.bot.session.get(url) as response:
+            image = Image.open(BytesIO(await response.content.read()))
+            image = image.rotate(degrees, expand=True)
+            image.save("rotated.png")
+            await ctx.send(file=discord.File("rotated.png"))
 
 
 
