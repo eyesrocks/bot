@@ -833,7 +833,7 @@ class Fun(commands.Cog):
         await ctx.send(file=file)
         output.close()
 
-    @commands.command
+        =
 
 
 
