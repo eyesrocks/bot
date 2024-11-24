@@ -1292,9 +1292,9 @@ class Information(commands.Cog):
             channel = ctx.channel
 
         try:
-            first_message = await channel.history(limit=1, oldest_first=True).flatten()
+            first_message = await channel.history(limit=1, oldest_first=True).next()
             if first_message:
-                link = first_message[0].jump_url
+                link = first_message.jump_url
                 embed = discord.Embed(
                     description=f"> [First message]({link}) in {channel.mention}",
                     color=0x2C2D31,
