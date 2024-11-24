@@ -841,12 +841,12 @@ class Fun(commands.Cog):
     )
     async def translate(self, ctx, language: str, *, message: Optional[str] = None):
         if message is None:
-        msg = ctx.message.reference
-        if msg is None:
-            return await ctx.send("No message or reference provided")
-        id = msg.message_id
-        message = await ctx.fetch_message(id)
-        message = message.content
+            msg = ctx.message.reference
+            if msg is None:
+                return await ctx.send("No message or reference provided")
+            id = msg.message_id
+            message = await ctx.fetch_message(id)
+            message = message.content
 
         async with aiohttp.ClientSession() as session:
         async with session.get(
