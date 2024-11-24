@@ -837,6 +837,7 @@ class Fun(commands.Cog):
         name="translate",
         description="Translate a message to the specified language",
     )
+    
 
 
 
