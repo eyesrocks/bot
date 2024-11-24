@@ -833,6 +833,10 @@ class Fun(commands.Cog):
         await ctx.send(file=file)
         output.close()
 
+    @commands.command(
+        name
+    )
+
 
 
 async def setup(bot):
