@@ -1299,7 +1299,7 @@ class Information(commands.Cog):
                         title="First Message",
                         description=f"> [First message]({link}) in {channel.mention}\n\n**Message content**:\n{message.content}",
                     )
-                    await ctx.success("> [First message]({link}) in {channel.mention}\n\n**Message content**:\n{message.content}", embed=embed)
+                    await ctx.success("First message found", embed=embed)
                     return
 
             await ctx.fail("No messages found in this channel.")
