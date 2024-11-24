@@ -1830,7 +1830,7 @@ class Information(commands.Cog):
 
         try:
             dominant_color = await get_dominant_color(avatar_url)
-            hex_color = f"#{int(dominant_color, 16):02x}{int(dominant_color, 16):02x}{int(dominant_color, 16):02x}"
+            hex_color = dominant_color
 
             embed = discord.Embed(
                 title=f"{user.name}'s Dominant Color",
