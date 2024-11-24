@@ -926,7 +926,13 @@ class Fun(commands.Cog):
         brief="Play a game of Would You Rather",
         aliases=["wouldyourather"],
     )
-    
+    async def wyr(self, ctx):
+        question = random.choice(self.wyr_questions)
+        embed = discord.Embed(
+            description=question,
+            color=self.bot.color,
+        )
+        await ctx.send(embed=embed)
 
 
 
