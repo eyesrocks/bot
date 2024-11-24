@@ -835,7 +835,7 @@ class Fun(commands.Cog):
 
     @commands.command(
         name="quickpoll",
-        des
+        desc
 
 
 
