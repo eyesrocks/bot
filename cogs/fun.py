@@ -859,7 +859,7 @@ class Fun(commands.Cog):
             description=f"``{color}``",
             color=color,
         )
-        set
+        set_thumbnail()
         await ctx.send(embed=embed)
 
 
