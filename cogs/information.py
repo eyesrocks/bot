@@ -1327,16 +1327,21 @@ class Information(commands.Cog):
         )
 
         embed.add_field(
-            name="**__Invite__**",
-            value=f">>> **Code:** {invite.code}\n**URL:** [Invite]({invite.url})\n**Guild:** {invite.guild.name}",
+            name="**__Invite & Channel__**",
+            value=f">>> **Code:** {invite.code}\n**URL:** [Invite]({invite.url})\n**Channel:** {invite.channel.mention if invite.channel else 'N/A'}",
+            inline=False,
         )
 
-        if invite.channel:
-            embed.add_field(
-                name="**__Channel__**",
-                value=f"{invite.channel.mention}",
-                inline=False,
-            )
+        embed.add_field(
+            name="**__Guild__**",
+            value=f">>> **Name:** {invite.guild.name}\n**ID:** {invite.guild.id}",
+            inline=False,
+        )
+
+        if invite.guild.icon:
+            embed.set_thumbnail(url=invite.guild.icon.url)
+
+        embed.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.display_avatar.url)
 
         await ctx.send(embed=embed)
 
