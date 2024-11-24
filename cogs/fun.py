@@ -809,6 +809,7 @@ class Fun(commands.Cog):
 
     @commands.command(
         name="compress",
+        description="Compress an image to reduce its size",
         
     )
 
