@@ -887,7 +887,7 @@ class Fun(commands.Cog):
         bot_choice = random.choice(choices)
         if choice == bot_choice:
             embed = discord.Embed(
-                description=f"Both players chose ``{choice}. It's a tie!",
+                description=f"Both players chose ``{choice}``. It's a tie!",
                 color=self.bot.color,
             )
             return await ctx.send(embed=embed)
