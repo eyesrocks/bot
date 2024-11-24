@@ -761,7 +761,7 @@ class Fun(commands.Cog):
 
     @commands.command(
         name="dominant",
-        description="Get the most dominant color in a user's avatar",
+        brief="Get the most dominant color in a user's avatar",
         aliases=["dom"],
     )
     async def dominant(self, ctx, user: discord.Member = None):
