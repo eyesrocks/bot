@@ -1288,15 +1288,12 @@ class Information(commands.Cog):
         brief="Go back to the first message in the channel",
         example=",firstmessage",
     )
-    async def firstmessage(self, ctx: Context, channel: TextChannel = None):
-        if channel is None:
-            channel = ctx.channel
-
-        try:
-            async for message in channel.history(limit=1, oldest_first=True):
-                link = message.jump_url
-                return await ctx.send(f"**[First message in {channel.mention}]({link})**")
-            
+    async def firstmessage(self, ctx: Context):
+        first_message = await ctx.channel.history(limit=1, oldest_first=True).flatten()
+        if first_message:
+            await ctx.send(f"The first message in this channel is [here]({first_message[0].jump_url})")
+        else:
+            await ctx.send("No messages found in this channel.")
     @commands.group(
         invoke_without_command=True,
         example=",boosters",
