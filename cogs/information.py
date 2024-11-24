@@ -1824,7 +1824,7 @@ class Information(commands.Cog):
         aliases=["dominantcolor"],
         brief="Get the dominant color of a users avatar",
     )
-    async def dominant 
+    async def dominant
     
 
 
