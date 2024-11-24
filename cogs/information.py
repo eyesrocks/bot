@@ -1292,7 +1292,7 @@ class Information(commands.Cog):
         if channel is None:
             channel = ctx.channel
 
-        
+        try
             
     @commands.group(
         invoke_without_command=True,
