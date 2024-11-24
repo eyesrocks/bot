@@ -1614,27 +1614,6 @@ class Servers(Cog):
         tagged = [await tag_sticker(s) for s in ctx.guild.stickers]
 
         return await ctx.success(f"**Tagged** `{len(tagged)}` stickers")
-    
-    @sticker.command(
-        name="list",
-        brief="List all the stickers in the server",
-        
-    )
-    async def sticker_list(self: "Servers", ctx: Context):
-        """
-        List all stickers in the server
-        """
-        if not ctx.guild.stickers:
-            return await ctx.fail("There aren't any **stickers** in this server.")
-
-        embed = discord.Embed(
-            title=f"{ctx.guild.name}'s Stickers",
-            color=self.bot.color,
-        )
-        for sticker in ctx.guild.stickers:
-            embed.add_field(name=sticker.name, value=f"ID: {sticker.id}", inline=False)
-
-        return await ctx.send(embed=embed)
 
     @Group(
         name="premiumrole",
