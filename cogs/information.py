@@ -1328,7 +1328,7 @@ class Information(commands.Cog):
 
         embed.add_field(
             name="**__Invite__**",
-            value=f">>> **Code:** {invite.code}\n**URL:** [Invite]({invite.url})\n\**Guild:** {invite.guild.name}",
+            value=f">>> **Code:** {invite.code}\n**URL:** [Invite]({invite.url})\n**Guild:** {invite.guild.name}",
         )
 
         if invite.channel:
