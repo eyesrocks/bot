@@ -846,7 +846,7 @@ class Fun(commands.Cog):
         )
         embed.set_footer(text=f"Poll created by {ctx.author}")
         message = await ctx.send(embed=embed)
-        await message.add_reaction("✅")
+        await message.add_reaction("<:UB_Check_Icon:1306875712782864445>")
         await message.add_reaction("👎")
 
 
