@@ -1818,6 +1818,10 @@ class Information(commands.Cog):
     async def support(self, ctx):
         """Get the support server invite link."""
         await ctx.success("**[greed support](https://discord.com/channels/1301617147964821524/1302829884900376577)**")
+    
+    @commands.command(
+        help="rotate",
+    )
 
 
 
