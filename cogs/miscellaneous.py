@@ -214,7 +214,7 @@ class Miscellaneous(Cog):
         self.bot.afks[ctx.author.id] = {"date": datetime.now(), "status": str(status)}
         return await ctx.success(f"**You're now afk** with the status: `{status[:25]}`")
 
-    @commands.command()
+    @commands.command(name=)
     async def randomuser(ctx):
      # Get the list of all members in the server
          members = ctx.guild.members
