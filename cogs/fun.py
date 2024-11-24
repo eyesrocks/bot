@@ -873,7 +873,7 @@ class Fun(commands.Cog):
 
     @commands.command(
         name="rps",
-        
+        brief="Play rock, paper, scissors",
     )
 
 
