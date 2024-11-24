@@ -909,6 +909,7 @@ class Fun(commands.Cog):
     
     @commands.command(
         name="choose",
+        brief="Choose between multiple options",
         
     )
 
