@@ -2336,7 +2336,8 @@ class Moderation(Cog):
         await self.delete_message_list(ctx, limit, check)
     
     @purge.command(
-        name="after"
+        name="after",
+        
     )
 
     @commands.command(
