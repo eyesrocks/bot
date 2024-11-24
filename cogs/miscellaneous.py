@@ -223,7 +223,7 @@ class Miscellaneous(Cog):
         human_members = [member for member in members if not member.bot]
      
      # Check if there are human members available
-         if not human_members:
+        if not human_members:
               await ctx.send("No human members found in the server.")
               return
 
