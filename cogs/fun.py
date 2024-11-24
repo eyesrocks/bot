@@ -912,7 +912,14 @@ class Fun(commands.Cog):
         brief="Choose between multiple options",
         aliases=["pick"],
     )
-    
+    async def choose(self, ctx, *, options: commands.clean_content):
+        choices = options.split(",")
+        choice = random.choice(choices)
+        embed = discord.Embed(
+            description=f"I choose: **{choice.strip()}**",
+            color=self.bot.color,
+        )
+        await ctx.send(embed=embed)
 
 
 
