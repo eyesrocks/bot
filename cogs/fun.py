@@ -769,11 +769,11 @@ class Fun(commands.Cog):
         avatar = user.avatar.with_format("png")
         async with self.bot.session.get(str(avatar)) as resp:
             image = await resp.read()
-        color = Image.open(BytesIO(image)).convert("RGB").getcolors(maxcolors=1000000)
-        color = max(color, key=lambda item: item[0])[1]
+        colors = Image.open(BytesIO(image)).convert("RGB").getcolors(maxcolors=1000000)
+        dominant_color = max(colors, key=lambda item: item[0])[1]
         embed = discord.Embed(
             title=f"Most dominant color in {user}'s avatar",
-            color=color,
+            color=discord.Color.from_rgb(*dominant_color),
         )
         await ctx.send(embed=embed)
 
