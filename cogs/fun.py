@@ -855,11 +855,20 @@ class Fun(commands.Cog):
     )
     async def randomhex(self, ctx):
         color = discord.Color(random.randint(0, 0xFFFFFF))
+        hex_color = "#{:02x}{:02x}{:02x}".format(color.r, color.g, color.b)
         embed = discord.Embed(
-            description=f"``{color}``",
+            description=f"``{hex_color}``",
             color=color,
         )
-        await ctx.send(embed=embed)
+        # Create an image of the hex color
+        img = Image.new("RGB", (100, 100), (color.r, color.g, color.b))
+        output = BytesIO()
+        img.save(output, format="PNG")
+        output.seek(0)
+        file = discord.File(output, filename="color.png")
+        embed.set_thumbnail(url="attachment://color.png")
+        await ctx.send(embed=embed, file=file)
+        output.close()
 
 
 
