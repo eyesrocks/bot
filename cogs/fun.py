@@ -781,7 +781,9 @@ class Fun(commands.Cog):
         embed.set_thumbnail(url=str(avatar))
         await ctx.send(embed=embed)
 
-    @commands.command(name)
+    @commands.command(
+        name=""
+    )
 
 
 async def setup(bot):
