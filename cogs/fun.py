@@ -10,7 +10,6 @@ from typing import Optional
 from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
 import textwrap
-import requests
 
 # from greed.tool import aliases
 
@@ -934,24 +933,6 @@ class Fun(commands.Cog):
             color=self.bot.color,
         )
         await ctx.send(embed=embed)
-        url = "https://would-you-rather.p.rapidapi.com/wyr/random"
-        headers = {
-            "x-rapidapi-key": "dd42e94a21msh04bda572c6da553p127a95jsnf367d0e280bb",
-            "x-rapidapi-host": "would-you-rather.p.rapidapi.com"
-        }
-
-        response = requests.get(url, headers=headers)
-        data = response.json()
-
-        if response.status_code == 200 and "question" in data:
-            question = data["question"]
-            embed = discord.Embed(
-                description=question,
-                color=self.bot.color,
-            )
-            await ctx.send(embed=embed)
-        else:
-            await ctx.send("Failed to fetch a Would You Rather question.")
 
 
 
