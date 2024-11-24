@@ -10,6 +10,7 @@ from typing import Optional
 from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
 import textwrap
+from webcolors import rgb_to_name, CSS3_HEX_TO_NAMES
 
 # from greed.tool import aliases
 
@@ -856,8 +857,26 @@ class Fun(commands.Cog):
     async def randomhex(self, ctx):
         color = discord.Color(random.randint(0, 0xFFFFFF))
         hex_color = "#{:02x}{:02x}{:02x}".format(color.r, color.g, color.b)
+        rgb_color = f"RGB: ({color.r}, {color.g}, {color.b})"
+        
+        # Function to get the color name
+        def get_color_name(rgb):
+            try:
+                return rgb_to_name(rgb)
+            except ValueError:
+                min_colors = {}
+                for key, name in CSS3_HEX_TO_NAMES.items():
+                    r_c, g_c, b_c = webcolors.hex_to_rgb(key)
+                    rd = (r_c - rgb[0]) ** 2
+                    gd = (g_c - rgb[1]) ** 2
+                    bd = (b_c - rgb[2]) ** 2
+                    min_colors[(rd + gd + bd)] = name
+                return min_colors[min(min_colors.keys())]
+
+        color_name = get_color_name((color.r, color.g, color.b))
+
         embed = discord.Embed(
-            description=f"``{hex_color}``",
+            description=f"Hex: ``{hex_color}``\n{rgb_color}\nName: {color_name}",
             color=color,
         )
         # Create an image of the hex color
