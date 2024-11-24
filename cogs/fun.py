@@ -834,7 +834,8 @@ class Fun(commands.Cog):
         output.close()
 
     @commands.command(
-        name="quickpoll"
+        name="quickpoll",
+        
 
 
 
