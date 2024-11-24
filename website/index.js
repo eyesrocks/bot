@@ -1,12 +1,10 @@
 const express = require('express');
-const path = require('path'); // Import 'path' to work with file paths
+const path = require('path');
 const app = express();
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
-// Serve static files without needing .html extensions
 app.use(express.static('public'));
 
-// Route to serve clean URLs for static .html files
 app.get('/:page', (req, res) => {
   const page = req.params.page;
   const filePath = path.join(__dirname, 'public', `${page}.html`);

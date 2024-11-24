@@ -906,6 +906,11 @@ class Fun(commands.Cog):
             color=self.bot.color,
         )
         return await ctx.send(embed=embed)
+    
+    @commands.command(
+        name="choose",
+        
+    )
 
 
 
