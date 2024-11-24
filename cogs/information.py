@@ -1822,7 +1822,7 @@ class Information(commands.Cog):
     @commands.command(
         name="dominant",
         aliases=["dominantcolor"],
-        brief="Get the dominant color of an ",
+        brief="Get the dominant color of a users avatar",
     
 
 
