@@ -1314,7 +1314,6 @@ class Information(commands.Cog):
     async def inviteinfo(self, ctx, invite: str):
         """View information on an invite"""
 
-        # Check if the invite is a full URL or just the code
         if not invite.startswith("https://discord.gg/"):
             invite = f"https://discord.gg/{invite}"
 
