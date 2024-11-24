@@ -1285,7 +1285,7 @@ class Information(commands.Cog):
 
     @commands.command(
         name="firstmessage",
-        description="Get a link for the first message in a channel",
+        brief="Get a link for the first message in a channel",
     )
     async def firstmessage(self, ctx: Context, channel: discord.TextChannel = None):
         if channel is None:
