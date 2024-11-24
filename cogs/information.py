@@ -1283,31 +1283,31 @@ class Information(commands.Cog):
 
         await ctx.send(embed=embed)
 
-@commands.command(
-    name="firstmessage",
-    description="Get a link for the first message in a channel",
-)
-async def firstmessage(self, ctx: Context, channel: discord.TextChannel = None):
-    if channel is None:
-        channel = ctx.channel
+    @commands.command(
+        name="firstmessage",
+        description="Get a link for the first message in a channel",
+    )
+    async def firstmessage(self, ctx: Context, channel: discord.TextChannel = None):
+        if channel is None:
+            channel = ctx.channel
 
-    try:
-        # Fetch the first message from the channel's history
-        async for message in channel.history(limit=1, oldest_first=True):
-            if message:
-                link = message.jump_url  # The link to the first message
-                embed = discord.Embed(
-                    title="First Message",
-                    description=f"> [First message]({link}) in {channel.mention}\n\n**Message content**:\n{message.content}",
-                    color=discord.Color.green()
-                )
-                await ctx.success(embed=embed)
-                return  # Exit after sending the embed
+        try:
+            # Fetch the first message from the channel's history
+            async for message in channel.history(limit=1, oldest_first=True):
+                if message:
+                    link = message.jump_url  # The link to the first message
+                    embed = discord.Embed(
+                        title="First Message",
+                        description=f"> [First message]({link}) in {channel.mention}\n\n**Message content**:\n{message.content}",
+                        color=discord.Color.green()
+                    )
+                    await ctx.success(embed=embed)
+                    return  # Exit after sending the embed
 
-        # If no messages are found
-        await ctx.fail("No messages found in this channel.")
-    except Exception as e:
-        await ctx.fail(f"Failed to retrieve messages from this channel. Error: {str(e)}")
+            # If no messages are found
+            await ctx.fail("No messages found in this channel.")
+        except Exception as e:
+            await ctx.fail(f"Failed to retrieve messages from this channel. Error: {str(e)}")
 
     @commands.group(
         invoke_without_command=True,
