@@ -8,7 +8,6 @@ import asyncio
 from datetime import datetime, timedelta
 import aiohttp
 from typing import Optional
-from deep_translator import GoogleTranslator, LanguageNotSupportedException
 from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
 import textwrap
@@ -850,48 +849,25 @@ class Fun(commands.Cog):
             message = message.content
 
         async with aiohttp.ClientSession() as session:
-            try:
-                async with session.get(
-                    "https://translate.googleapis.com/translate_a/single",
-                    params={
-                        "client": "gtx",
-                        "sl": "auto",
-                        "tl": language,
-                        "dt": "t",
-                        "q": message,
-                    },
-                ) as response:
-                    if response.status != 200:
-                        return await ctx.send("Failed to translate the message.")
-                    result = await response.json()
-                    translated_text = result[0][0][0]
-            except Exception as e:
-                return await ctx.send(f"An error occurred: {e}")
+            async with session.get(
+                "https://translate.googleapis.com/translate_a/single",
+                params={
+                    "client": "gtx",
+                    "sl": "auto",
+                    "tl": language,
+                    "dt": "t",
+                    "q": message,
+                },
+            ) as response:
+                result = await response.json()
+                translated_text = result[0][0][0]
 
         embed = discord.Embed(
-            color=self.bot.color,
-            title=f"Translated to {language}",
-            description=translated_text,
+        color=self.bot.color,
+        title=f"Translated to {language}",
+        description=translated_text,
         )
         await ctx.send(embed=embed)
-        @commands.command(aliases=["tr"])
-        async def translate(self, ctx: Context, language: str, *, message: str):
-            """
-            Translate a message to a specific language
-            """
-
-            try:
-                translator = GoogleTranslator(source="auto", target=language)
-                translated = await asyncio.to_thread(translator.translate, message)
-                embed = discord.Embed(
-                    color=self.bot.color,
-                    title=f"translated to {language}",
-                    description=f"```{translated}```",
-                )
-
-                await ctx.send(embed=embed)
-            except LanguageNotSupportedException:
-                return await ctx.send("This language is **not** supported")
 
 
 
