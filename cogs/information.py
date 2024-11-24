@@ -1296,8 +1296,9 @@ class Information(commands.Cog):
                 link = message.jump_url
                 embed = discord.Embed(
                     description=f"> [First message]({link}) in {channel.mention}",
+                    color=0x2C2D31,
                 )
-                await ctx.success(embed=embed)
+                await ctx.send(embed=embed)
                 return
 
             embed = discord.Embed(
@@ -1309,7 +1310,7 @@ class Information(commands.Cog):
                 description=f"> No messages found in this channel",
                 color=0x2C2D31,
             )
-            await ctx.fail(embed=embed)
+            await ctx.warning(embed=embed)
 
     @commands.group(
         invoke_without_command=True,
