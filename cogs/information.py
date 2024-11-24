@@ -1288,7 +1288,8 @@ class Information(commands.Cog):
         brief="Go back to the first message in the channel",
         example=",firstmessage",
     )
-    async def firstmessage(self, ctx: Context, channel: TextChannel
+    async def firstmessage(self, ctx: Context, channel: TextChannel = None):
+        
             
     @commands.group(
         invoke_without_command=True,
