@@ -878,15 +878,34 @@ class Fun(commands.Cog):
     async def rps(self, ctx, choice: str):
         choices = ["rock", "paper", "scissors"]
         if choice not in choices:
-            return await ctx.send(f"Invalid choice. Choose from: {', '.join(choices)}")
+            embed = discord.Embed(
+                description=f"Invalid choice. Choose from: {', '.join(choices)}",
+                color=self.bot.color,
+            )
+            return await ctx.send(embed=embed)
+        
         bot_choice = random.choice(choices)
         if choice == bot_choice:
-            return await ctx.send(f"Both players chose {choice}. It's a tie!")
+            embed = discord.Embed(
+                description=f"Both players chose {choice}. It's a tie!",
+                color=self.bot.color,
+            )
+            return await ctx.send(embed=embed)
+        
         if (choice == "rock" and bot_choice == "scissors") or (
             choice == "paper" and bot_choice == "rock"
         ) or (choice == "scissors" and bot_choice == "paper"):
-            return await ctx.send(f"You chose {choice} and I chose {bot_choice}. You win!")
-        return await ctx.send(f"You chose {choice} and I chose {bot_choice}. I win!")
+            embed = discord.Embed(
+                description=f"You chose {choice} and I chose {bot_choice}. You win!",
+                color=self.bot.color,
+            )
+            return await ctx.send(embed=embed)
+        
+        embed = discord.Embed(
+            description=f"You chose {choice} and I chose {bot_choice}. I win!",
+            color=self.bot.color,
+        )
+        return await ctx.send(embed=embed)
 
 
 
