@@ -1283,7 +1283,7 @@ class Information(commands.Cog):
 
         await ctx.send(embed=embed)
 
-    @
+    
     @commands.group(
         invoke_without_command=True,
         example=",boosters",
