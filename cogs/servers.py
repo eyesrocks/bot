@@ -1634,7 +1634,7 @@ class Servers(Cog):
             embed.description += f"{sticker.name} - Sticker ID: {sticker.id}\n"
             embed.set_image(url=sticker.url)
 
-        await self.bot.paginate(ctx, [embed], rows=[])
+        await self.bot.paginate(ctx, embed, rows=embed.description.split('\n'))
 
     @Group(
         name="premiumrole",
