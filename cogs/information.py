@@ -1323,7 +1323,7 @@ class Information(commands.Cog):
             name="**__General__**",
             value=f""">>> **Channel:** {invite.channel.mention}
 **Guild:** {invite.guild.name}
-
+**Code:** {invite.code}
 
     @commands.group(
         invoke_without_command=True,
