@@ -1285,16 +1285,34 @@ class Information(commands.Cog):
 
     @commands.command(
         name="firstmessage",
-        brief="Go back to the first message in the channel",
-        example=",firstmessage",
+        description="Get a link for the first message in a channel",
     )
-    async def firstmessage(self, ctx: Context):
-        first_message = await ctx.channel.history(limit=1, oldest_first=True).flatten()
-        if first_message:
-            await ctx.send(f"The first message in this channel is [here]({first_message[0].jump_url})")
-        else:
-            await ctx.send("No messages found in this channel.")
-            
+    async def firstmessage(self, ctx: Context, channel: discord.TextChannel = None):
+        if channel is None:
+            channel = ctx.channel
+
+        try:
+            async for message in channel.history(limit=1, oldest_first=True):
+                link = message.jump_url
+                embed = discord.Embed(
+                    description=f"> <:icons_Correct:1265268427959046245> [First message]({link}) in {channel.mention}",
+                    color=0x2C2D31,
+                )
+                await ctx.send(embed=embed)
+                return
+
+            embed = discord.Embed(
+                description="> <:icons_Wrong:1265268458967273513> No messages found in this channel.",
+                color=0x2C2D31,
+            )
+            await ctx.send(embed=embed)
+        except Exception as e:
+            embed = discord.Embed(
+                description=f"> <:icons_Wrong:1265268458967273513> An error occurred: {e}",
+                color=0x2C2D31,
+            )
+            await ctx.send(embed=embed)
+
     @commands.group(
         invoke_without_command=True,
         example=",boosters",
