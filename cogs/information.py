@@ -1821,6 +1821,7 @@ class Information(commands.Cog):
     
     @commands.command(
         help="rotate",
+        bri
     )
 
 
