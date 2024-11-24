@@ -1292,7 +1292,7 @@ class Information(commands.Cog):
             channel = ctx.channel
 
         try:
-            first_message = await channel.history(limit=1, oldest_first=True).next()
+            first_message = (await channel.history(limit=1, oldest_first=True).flatten())[0]
             if first_message:
                 link = first_message.jump_url
                 embed = discord.Embed(
