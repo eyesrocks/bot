@@ -835,20 +835,20 @@ class Fun(commands.Cog):
         output.close()
 
 
-    @commands.command(
-        name="translate",
-        description="Translate a message to the specified language",
-    )
-    async def translate(self, ctx, language: str, *, message: Optional[str] = None):
-        if message is None:
-            msg = ctx.message.reference
-            if msg is None:
-                return await ctx.send("No message or reference provided")
-            id = msg.message_id
-            message = await ctx.fetch_message(id)
-            message = message.content
+        @commands.command(
+            name="translate",
+            description="Translate a message to the specified language",
+        )
+        async def translate(self, ctx, language: str, *, message: Optional[str] = None):
+            if message is None:
+                msg = ctx.message.reference
+                if msg is None:
+                    return await ctx.send("No message or reference provided")
+                id = msg.message_id
+                message = await ctx.fetch_message(id)
+                message = message.content
 
-        async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession() as session:
                 async with session.get(
                     "https://translate.googleapis.com/translate_a/single",
                     params={
@@ -861,21 +861,13 @@ class Fun(commands.Cog):
                 ) as response:
                     result = await response.json()
                     translated_text = result[0][0][0]
-                    detected_language = result[2]  # Detect the source language
-    
+
             embed = discord.Embed(
                 color=self.bot.color,
-                title=f"Translated from {detected_language} to {language}",
+                title=f"Translated to {language}",
                 description=translated_text,
             )
             await ctx.send(embed=embed)
-
-        embed = discord.Embed(
-            color=self.bot.color,
-            title=f"Translated to {language}",
-            description=translated_text,
-        )
-        await ctx.send(embed=embed)
 
 
 
