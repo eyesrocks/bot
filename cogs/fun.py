@@ -785,7 +785,14 @@ class Fun(commands.Cog):
         name="rotate",
         description="Rotate an image by a specified angle",
     )
-    
+    async def rotate(self, ctx, angle: int, url: str):
+        async with self.bot.session.get(url) as resp:
+            image = await resp.read()
+        img = Image.open(BytesIO(image)).rotate(angle, expand=True)
+        output = BytesIO()
+        img.save(output, format="PNG")
+        output.seek(0)
+        await ctx.send(file=discord.File(output, filename="rotated.png"))
 
 
 async def setup(bot):
