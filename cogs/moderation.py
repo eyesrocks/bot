@@ -2350,7 +2350,7 @@ class Moderation(Cog):
             ]
             if len(messages) > 0:
                 messages = messages[:limit]
-        
+    
 
 
     @commands.command(
