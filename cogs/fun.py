@@ -792,7 +792,10 @@ class Fun(commands.Cog):
         output = BytesIO()
         img.save(output, format="PNG")
         output.seek(0)
-        await ctx.send(file=discord.File(output, filename="rotated.png"))
+        message = await ctx.send(file=discord.File(output, filename="rotated.png"))
+        await asyncio.sleep(10)  # Wait for 10 seconds before deleting
+        await message.delete()
+        output.close()  # Close the BytesIO object to free up memory
 
 
 async def setup(bot):
