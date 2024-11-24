@@ -1811,7 +1811,8 @@ class Information(commands.Cog):
 
 
     @commands.command(
-        name="support"
+        name="support",
+        
     )
 
 
