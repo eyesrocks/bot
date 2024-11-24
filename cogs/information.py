@@ -1822,6 +1822,7 @@ class Information(commands.Cog):
     @commands.command(
         name="dominant",
         aliases=["dominantcolor"],
+        
     
 
 
