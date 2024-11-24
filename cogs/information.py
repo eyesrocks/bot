@@ -1824,24 +1824,7 @@ class Information(commands.Cog):
         aliases=["dominantcolor"],
         brief="Get the dominant color of a users avatar",
     )
-    async def dominant(self, ctx, user: discord.User = None):
-        user = user or ctx.author
-
-        async with ctx.typing():
-            async with self.bot.session.get(str(user.display_avatar)) as response:
-                image = await response.read()
-
-            color = await self.bot.loop.run_in_executor(None, get_dominant_color, image)
-
-        embed = discord.Embed(
-            title=f"{user.name}'s dominant color",
-            description=f"**Hex:** {color}",
-            color=int(color, 16),
-        )
-
-        embed.set_thumbnail(url=user.display_avatar)
-
-        await ctx.send(embed=embed)
+    async def dominant
     
 
 
