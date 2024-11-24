@@ -936,7 +936,6 @@ class Fun(commands.Cog):
             "x-rapidapi-host": "would-you-rather.p.rapidapi.com"
         }
 
-        # Use aiohttp to fetch the API data asynchronously
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers) as response:
                 if response.status == 200:
