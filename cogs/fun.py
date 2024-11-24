@@ -731,5 +731,9 @@ class Fun(commands.Cog):
         embed=discord.Embed(color=0x2B2D31, description= f"{random.choice(roast_list)}")
         await ctx.reply(embed=embed, mention_author=False)
 
+
+
+
+
 async def setup(bot):
     await bot.add_cog(Fun(bot))
