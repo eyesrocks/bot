@@ -875,7 +875,18 @@ class Fun(commands.Cog):
         name="rps",
         brief="Play rock, paper, scissors",
     )
-    
+    async def rps(self, ctx, choice: str):
+        choices = ["rock", "paper", "scissors"]
+        if choice not in choices:
+            return await ctx.send(f"Invalid choice. Choose from: {', '.join(choices)}")
+        bot_choice = random.choice(choices)
+        if choice == bot_choice:
+            return await ctx.send(f"Both players chose {choice}. It's a tie!")
+        if (choice == "rock" and bot_choice == "scissors") or (
+            choice == "paper" and bot_choice == "rock"
+        ) or (choice == "scissors" and bot_choice == "paper"):
+            return await ctx.send(f"You chose {choice} and I chose {bot_choice}. You win!")
+        return await ctx.send(f"You chose {choice} and I chose {bot_choice}. I win!")
 
 
 
