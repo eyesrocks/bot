@@ -1308,6 +1308,7 @@ class Information(commands.Cog):
     
     @commands.command(
             name="inviteinfo",
+            
     )
 
     @commands.group(
