@@ -2338,7 +2338,7 @@ class Moderation(Cog):
     @purge.command(
         name="after",
         brief="Mass delete messages after a certain message",
-        
+        example=",purge after 1234567890 100",
     )
 
     @commands.command(
