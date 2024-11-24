@@ -1824,7 +1824,26 @@ class Information(commands.Cog):
         aliases=["dominantcolor"],
         brief="Get the dominant color of a users avatar",
     )
-    async def dominant
+    async def dominant(self, ctx: Context, user: Optional[Union[discord.Member, discord.User]] = commands.Author):
+        user = user or ctx.author
+        avatar_url = user.display_avatar.url
+
+        try:
+            dominant_color = await get_dominant_color(avatar_url)
+            hex_color = f"#{dominant_color:02x}{dominant_color:02x}{dominant_color:02x}"
+
+            embed = discord.Embed(
+                title=f"{user.name}'s Dominant Color",
+                description=f"**Hex:** {hex_color}",
+                color=dominant_color
+            )
+            embed.set_thumbnail(url=avatar_url)
+            embed.set_image(url=avatar_url)
+            embed.set_author(name=ctx.author.name, icon_url=ctx.author.display_avatar)
+
+            await ctx.send(embed=embed)
+        except Exception as e:
+            await ctx.fail(f"Failed to get dominant color: {str(e)}")
     
 
 
