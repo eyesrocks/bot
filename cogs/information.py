@@ -1822,7 +1822,7 @@ class Information(commands.Cog):
     @commands.command(
         name="dominant",
         aliases=["dominantcolor"],
-        brief="Get the dominant color of a users avatar",
+        brief="Get the dominant color of a user's avatar",
     )
     async def dominant(self, ctx: Context, user: Optional[Union[discord.Member, discord.User]] = commands.Author):
         user = user or ctx.author
@@ -1830,7 +1830,7 @@ class Information(commands.Cog):
 
         try:
             dominant_color = await get_dominant_color(avatar_url)
-            hex_color = dominant_color
+            hex_color = f"#{dominant_color:06x}"
 
             embed = discord.Embed(
                 title=f"{user.name}'s Dominant Color",
