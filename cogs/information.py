@@ -1824,6 +1824,7 @@ class Information(commands.Cog):
         aliases=["turn"],
         brief="rotate an image by a provided degree",
     )
+    
 
 
 
