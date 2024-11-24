@@ -1321,8 +1321,7 @@ class Information(commands.Cog):
 
         embed.add_field(
             name="**__Invite__**",
-            value=f""">>> **Code:** {invite.code}
-**URL:** [Invite]({invite.url})
+            value=f""">>> **Code:** {invite.code}\n\n**URL:** [Invite]({invite.url})
 
     @commands.group(
         invoke_without_command=True,
