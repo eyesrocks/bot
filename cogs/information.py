@@ -1237,7 +1237,7 @@ class Information(commands.Cog):
 
     @commands.command(
         name="roleinfo",
-        description="Shows information on a role",
+        brief="Shows information on a role",
         example=",roleinfo admin",
         usage="<role>",
     )
