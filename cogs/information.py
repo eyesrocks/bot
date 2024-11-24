@@ -1388,7 +1388,6 @@ class Information(commands.Cog):
                 embeds.append(
                     discord.Embed(
                         color=self.bot.color,
-                        title=f"Invites in {ctx.guild.name}",
                         description="\n".join(page),
                     )
                     .set_author(name=ctx.author.name, icon_url=ctx.author.display_avatar)
