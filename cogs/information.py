@@ -1299,12 +1299,12 @@ class Information(commands.Cog):
                         title="First Message",
                         description=f"> [First message]({link}) in {channel.mention}\n\n**Message content**:\n{message.content}",
                     )
-                    await ctx.success(embed=embed)
+                    await ctx.success("First message found", embed=embed)
                     return
 
             await ctx.fail("No messages found in this channel.")
-        except Exception as e:
-            await ctx.fail(f"No messages have been found in this channel.")
+        except Exception:
+            await ctx.fail("No messages have been found in this channel.")
 
     @commands.group(
         invoke_without_command=True,
