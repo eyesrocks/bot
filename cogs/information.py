@@ -1365,7 +1365,8 @@ class Information(commands.Cog):
         await ctx.send(embed=embed)
 
     @commands.command(
-            name=invites
+            name=invites,
+            
     )
 
     @commands.group(
