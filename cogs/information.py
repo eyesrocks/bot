@@ -1305,12 +1305,12 @@ class Information(commands.Cog):
                 description="> No messages found in this channel.",
             )
             await ctx.warning(embed=embed)
-        except Exception as e:
+        except Exception:
             embed = discord.Embed(
                 description=f"> No messages found in this channel.",
                 color=0x2C2D31,
             )
-            await ctx.warning(embed=embed)
+            await ctx.warning("Warning", embed=embed)
 
     @commands.group(
         invoke_without_command=True,
