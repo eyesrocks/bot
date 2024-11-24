@@ -1419,7 +1419,7 @@ class Information(commands.Cog):
                 )
 
             await ctx.paginate(embeds)
-            
+        
 
     @commands.group(
         invoke_without_command=True,
