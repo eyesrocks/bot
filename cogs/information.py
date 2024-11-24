@@ -1149,7 +1149,7 @@ class Information(commands.Cog):
 
     @commands.command(
         name="roles",
-        description="View the server roles",
+        brief="View the server roles",
         example=",roles",
         aliases=["rolelist"],
     )
