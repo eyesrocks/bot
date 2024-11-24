@@ -10,6 +10,7 @@ from typing import Optional
 from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
 import textwrap
+import requests
 
 # from greed.tool import aliases
 
