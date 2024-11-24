@@ -840,7 +840,6 @@ class Fun(commands.Cog):
     )
     async def quickpoll(self, ctx, *, question):
         embed = discord.Embed(
-            title="Quick Poll",
             description=question,
             color=self.bot.color,
         )
