@@ -1289,7 +1289,7 @@ class Information(commands.Cog):
         example=",firstmessage",
     )
     async def firstmessage(self, ctx: Context, channel: TextChannel = None):
-        
+        if channel is None:
             
     @commands.group(
         invoke_without_command=True,
