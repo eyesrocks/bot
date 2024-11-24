@@ -1618,8 +1618,24 @@ class Servers(Cog):
     @sticker.command(
         name="list",
         brief="List all the stickers in the server",
-        
+
     )
+    async def sticker_list(self, ctx: Context):
+        stickers = ctx.guild.stickers
+        if not stickers:
+            return await ctx.fail("There are no stickers in this server.")
+
+        embeds = []
+        for sticker in stickers:
+            embed = discord.Embed(
+                title=sticker.name,
+                description=f"Sticker ID: {sticker.id}",
+                color=self.bot.color,
+            )
+            embed.set_image(url=sticker.url)
+            embeds.append(embed)
+
+        await self.bot.paginate(ctx, embeds)
 
     @Group(
         name="premiumrole",
