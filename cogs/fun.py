@@ -835,7 +835,7 @@ class Fun(commands.Cog):
 
     @commands.command(
         name="quickpoll",
-        brief
+        brief="Create a quick yes/no poll",
 
 
 
