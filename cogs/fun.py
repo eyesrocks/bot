@@ -760,7 +760,8 @@ class Fun(commands.Cog):
         await ctx.reply(embed=embed, mention_author=False)
 
     @commands.command(
-        name="dominant"
+        name="dominant",
+        
     )
 
 
