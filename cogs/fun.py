@@ -928,7 +928,23 @@ class Fun(commands.Cog):
         aliases=["wouldyourather"],
     )
     async def wyr(self, ctx):
-        question = random.choice(self.wyr_questions)
+        # API request
+        url = "https://would-you-rather.p.rapidapi.com/wyr/random"
+        headers = {
+            "x-rapidapi-key": "dd42e94a21msh04bda572c6da553p127a95jsnf367d0e280bb",
+            "x-rapidapi-host": "would-you-rather.p.rapidapi.com"
+        }
+
+        # Use aiohttp to fetch the API data asynchronously
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    question = data.get("question", "No question available.")
+                else:
+                    question = "Sorry, couldn't fetch a question at the moment."
+
+        # Create and send the embed with the question
         embed = discord.Embed(
             description=question,
             color=self.bot.color,
