@@ -784,8 +784,6 @@ class Fun(commands.Cog):
     @commands.command(
         name="rotate",
         description="Rotate an image by a specified angle",
-        aliases=["rotateimage"],
-        
     )
 
 
