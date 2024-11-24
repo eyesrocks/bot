@@ -778,7 +778,6 @@ class Fun(commands.Cog):
             color=discord.Color.from_rgb(*dominant_color),
             description=f"{user.mention}'s dominant color is ``{hex_color}``",
         )
-        embed.set_thumbnail(url=str(avatar))
         await ctx.send(embed=embed)
 
 
