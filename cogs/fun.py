@@ -849,18 +849,26 @@ class Fun(commands.Cog):
             message = message.content
 
         async with aiohttp.ClientSession() as session:
-            async with session.get(
-                "https://translate.googleapis.com/translate_a/single",
-                params={
-                    "client": "gtx",
-                    "sl": "auto",
-                    "tl": language,
-                    "dt": "t",
-                    "q": message,
-                },
-            ) as response:
-                result = await response.json()
-                translated_text = result[0][0][0]
+                async with session.get(
+                    "https://translate.googleapis.com/translate_a/single",
+                    params={
+                        "client": "gtx",
+                        "sl": "auto",
+                        "tl": language,
+                        "dt": "t",
+                        "q": message,
+                    },
+                ) as response:
+                    result = await response.json()
+                    translated_text = result[0][0][0]
+                    detected_language = result[2]  # Detect the source language
+    
+            embed = discord.Embed(
+                color=self.bot.color,
+                title=f"Translated from {detected_language} to {language}",
+                description=translated_text,
+            )
+            await ctx.send(embed=embed)
 
         embed = discord.Embed(
             color=self.bot.color,
