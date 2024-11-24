@@ -1298,7 +1298,7 @@ class Information(commands.Cog):
                     description=f"> [First message]({link}) in {channel.mention}",
                     color=0x2C2D31,
                 )
-                await ctx.approve(embed=embed)
+                await ctx.send(embed=embed)
                 return
 
             embed = discord.Embed(
@@ -1307,7 +1307,7 @@ class Information(commands.Cog):
             await ctx.warning(embed=embed)
         except Exception as e:
             embed = discord.Embed(
-                description=f"> No messages found in this channel.",
+                description=f"> No messages found in this channel",
                 color=0x2C2D31,
             )
             await ctx.warning(embed=embed)
@@ -1626,6 +1626,25 @@ class Information(commands.Cog):
 
         return await ctx.paginate(embeds)
 
+
+    @commands.command(
+        name="boomer",
+        help="Show the oldest member in the guild by account creation date.",
+        aliases=["boomers", "oldest"],
+    )
+    async def boomer(self, ctx):
+        oldest_member = min(ctx.guild.members, key=lambda m: m.created_at)
+
+        embed = discord.Embed(title="Oldest Member", color=self.bot.color)
+
+        embed.add_field(name="Username", value=oldest_member.name, inline=False)
+        embed.add_field(
+            name="Account Creation Date",
+            value=oldest_member.created_at.strftime("%Y-%m-%d"),
+            inline=False,
+        )
+
+        await ctx.send(embed=embed)
 
     @commands.command(
         name='avatar',
