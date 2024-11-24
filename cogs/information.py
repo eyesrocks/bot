@@ -1305,6 +1305,8 @@ class Information(commands.Cog):
             await ctx.fail("No messages found in this channel.")
         except Exception:
             await ctx.fail("No messages have been found in this channel.")
+    
+    @commands.
 
     @commands.group(
         invoke_without_command=True,
