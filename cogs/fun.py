@@ -849,23 +849,28 @@ class Fun(commands.Cog):
             message = message.content
 
         async with aiohttp.ClientSession() as session:
-            async with session.get(
-                "https://translate.googleapis.com/translate_a/single",
-                params={
-                    "client": "gtx",
-                    "sl": "auto",
-                    "tl": language,
-                    "dt": "t",
-                    "q": message,
-                },
-            ) as response:
-                result = await response.json()
-                translated_text = result[0][0][0]
+            try:
+                async with session.get(
+                    "https://translate.googleapis.com/translate_a/single",
+                    params={
+                        "client": "gtx",
+                        "sl": "auto",
+                        "tl": language,
+                        "dt": "t",
+                        "q": message,
+                    },
+                ) as response:
+                    if response.status != 200:
+                        return await ctx.send("Failed to translate the message.")
+                    result = await response.json()
+                    translated_text = result[0][0][0]
+            except Exception as e:
+                return await ctx.send(f"An error occurred: {e}")
 
         embed = discord.Embed(
-        color=self.bot.color,
-        title=f"Translated to {language}",
-        description=translated_text,
+            color=self.bot.color,
+            title=f"Translated to {language}",
+            description=translated_text,
         )
         await ctx.send(embed=embed)
 
