@@ -837,7 +837,33 @@ class Fun(commands.Cog):
         name="recolor",
         description="Recolor an image to a specified hex color",
     )
-    
+    async def recolor(self, ctx, color: str, message: Optional[discord.Message] = None):
+        if message is None:
+            msg = ctx.message.reference
+            if msg is None:
+                return await ctx.send("No message or reference provided")
+            id = msg.message_id
+            message = await ctx.fetch_message(id)
+
+        if not message.attachments:
+            return await ctx.send("No media found in the message")
+
+        url = message.attachments[0].url
+        async with self.bot.session.get(url) as resp:
+            image = await resp.read()
+        img = Image.open(BytesIO(image)).convert("RGBA")
+        r, g, b = ImageColor.getcolor(color, "RGB")
+        data = np.array(img)
+        red, green, blue, alpha = data.T
+        white_areas = (red == 255) & (blue == 255) & (green == 255)
+        data[..., :3][white_areas.T] = [r, g, b]
+        img = Image.fromarray(data)
+        output = BytesIO()
+        img.save(output, format="PNG")
+        output.seek(0)
+        file = discord.File(output, filename="recolor.png")
+        await ctx.send(file=file)
+        output.close()
 
 
 
