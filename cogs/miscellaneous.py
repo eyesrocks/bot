@@ -216,7 +216,7 @@ class Miscellaneous(Cog):
     @commands.command()
     async def randomuser(ctx):
      # Get the list of all members in the server
-        members = ctx.guild.members
+         members = ctx.guild.members
      
      # Filter out bots if you want to exclude them
         human_members = [member for member in members if not member.bot]
