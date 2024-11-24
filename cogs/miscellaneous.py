@@ -231,7 +231,7 @@ class Miscellaneous(Cog):
         chosen_member = random.choice(human_members)
 
      # Send the selected member's username
-         await ctx.send(f"Randomly selected user: {chosen_member.name}")
+        await ctx.send(f"Randomly selected user: {chosen_member.name}")
 
     @commands.command(
         name="snipe",
