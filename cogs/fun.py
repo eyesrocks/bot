@@ -809,7 +809,7 @@ class Fun(commands.Cog):
 
     @commands.command(
         name="compress",
-        description="Compress an image to reduce its size",
+        brief="Compress an image to reduce its size",
     )
     async def compress(self, ctx, message: Optional[discord.Message] = None):
         if message is None:
