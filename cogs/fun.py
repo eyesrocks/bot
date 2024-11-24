@@ -933,21 +933,6 @@ class Fun(commands.Cog):
             color=self.bot.color,
         )
         await ctx.send(embed=embed)
-        url = "https://would-you-rather.p.rapidapi.com/wyr/random"
-        headers = {
-            "x-rapidapi-key": "dd42e94a21msh04bda572c6da553p127a95jsnf367d0e280bb",
-            "x-rapidapi-host": "would-you-rather.p.rapidapi.com"
-        }
-
-        async with self.bot.session.get(url, headers=headers) as response:
-            data = await response.json()
-            question = data.get("question", "Could not fetch a question at this time.")
-        
-        embed = discord.Embed(
-            description=question,
-            color=self.bot.color,
-        )
-        await ctx.send(embed=embed)
 
 
 
