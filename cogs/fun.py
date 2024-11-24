@@ -808,7 +808,8 @@ class Fun(commands.Cog):
         output.close()
 
     @commands.command(
-        name="compress"
+        name="compress",
+        
     )
 
 
