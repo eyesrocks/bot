@@ -1616,7 +1616,8 @@ class Servers(Cog):
         return await ctx.success(f"**Tagged** `{len(tagged)}` stickers")
     
     @sticker.command(
-            name
+        name="list",
+        
     )
 
     @Group(
