@@ -837,7 +837,8 @@ class Fun(commands.Cog):
         name="quickpoll",
         brief="Create a quick yes/no poll",
         aliases=["qpoll"],
-        
+    )
+    
 
 
 
