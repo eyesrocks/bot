@@ -837,7 +837,15 @@ class Fun(commands.Cog):
         name="translate",
         description="Translate a message to the specified language",
     )
-    
+    async def translate(self, ctx, language: str, *, message: str):
+        translator = Translator()
+        translated = translator.translate(message, dest=language)
+        embed = discord.Embed(
+            color=self.bot.color,
+            title=f"Translated to {translated.dest}",
+            description=translated.text,
+        )
+        await ctx.send(embed=embed)
 
 
 
