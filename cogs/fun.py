@@ -835,6 +835,7 @@ class Fun(commands.Cog):
 
     @commands.command(
         name="recolor",
+        description="Recolor an image to a specified hex color",
         
     )
 
