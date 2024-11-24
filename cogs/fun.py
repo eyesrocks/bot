@@ -896,7 +896,7 @@ class Fun(commands.Cog):
             choice == "paper" and bot_choice == "rock"
         ) or (choice == "scissors" and bot_choice == "paper"):
             embed = discord.Embed(
-                description=f"You chose {choice} and I chose {bot_choice}. You win!",
+                description=f"You chose ``{choice}`` and I chose ``{bot_choice}``. You win!",
                 color=self.bot.color,
             )
             return await ctx.send(embed=embed)
