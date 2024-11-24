@@ -1366,7 +1366,7 @@ class Information(commands.Cog):
 
     @commands.command(
         name="invites",
-        description="View all invites in the server",
+        brief="View all invites in the server",
     )
     async def invites(self, ctx):
         invites = await ctx.guild.invites()
