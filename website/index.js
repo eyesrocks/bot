@@ -34,7 +34,6 @@ app.get('/statusapi', async (req, res) => {
   }
 });
 
-// Start the server
 app.listen(3008, () => {
   console.log('Server running at http://localhost:3008/');
 });
