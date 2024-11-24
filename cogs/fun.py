@@ -856,7 +856,8 @@ class Fun(commands.Cog):
     async def randomhex(self, ctx):
         color = discord.Color(random.randint(0, 0xFFFFFF))
         embed = discord.Embed(
-            description=f"``{color}",
+            description=f"``{color}``",
+            
             color=color,
         )
         await ctx.send(embed=embed)
