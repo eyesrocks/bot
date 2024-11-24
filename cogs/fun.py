@@ -785,21 +785,6 @@ class Fun(commands.Cog):
         name="rotate",
         description="Rotate an image by a specified angle",
     )
-    async def rotate(self, ctx, angle: int, url: str):
-        async with self.bot.session.get(url) as resp:
-            image = await resp.read()
-        img = Image.open(BytesIO(image)).rotate(angle, expand=True)
-        output = BytesIO()
-        img.save(output, format="PNG")
-        output.seek(0)
-        message = await ctx.send(file=discord.File(output, filename="rotated.png"))
-        await asyncio.sleep(10)  # Wait for 10 seconds before deleting
-        await message.delete()
-        output.close()  # Close the BytesIO object to free up memory
-    @commands.command(
-        name="rotate",
-        description="Rotate an image by a specified angle",
-    )
     async def rotate(self, ctx, angle: int, message: Optional[discord.Message] = None):
         if message is None:
             msg = ctx.message.reference
