@@ -1390,7 +1390,7 @@ class Information(commands.Cog):
                         color=self.bot.color,
                         description="\n".join(page),
                     )
-                    .set_footer(text=f"Page {len(embeds) + 1}/{(len(rows) + 9) // 10}", icon_url=ctx.author if ctx.guild.icon else None)
+                    .set_footer(text=f"Page {len(embeds) + 1}/{(len(rows) + 9) // 10}", icon_url=ctx.guild.icon.url if ctx.guild.icon else None)
                 )
                 page = []
             page.append(row)
