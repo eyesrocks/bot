@@ -8,13 +8,12 @@ from discord.ext import commands
 from tool.important import Context  # type: ignore
 from jishaku.codeblocks import codeblock_converter
 from discord import User, Member, Guild
-from typing import Union
-from typing import Optional
+from typing import Union, Optional, Literal
 from loguru import logger
-
+from tool.greed import Greed
 
 class Owner(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot: Greed):
         self.bot = bot
         self.guild_id = 1301617147964821524
         self.cooldowns = {}
@@ -52,7 +51,7 @@ class Owner(commands.Cog):
 
     @commands.group(name="donator", invoke_without_command=True)
     @commands.is_owner()
-    async def donator(self, ctx: Context, *, member: Member | User):
+    async def donator(self, ctx: Context, *, member:Union[Member, User]):
         if await self.bot.db.fetchrow(
             """SELECT * FROM donators WHERE user_id = $1""", member.id
         ):
@@ -71,7 +70,7 @@ class Owner(commands.Cog):
 
     @donator.command(name="check")
     @commands.is_owner()
-    async def donator_check(self, ctx: Context, member: Member | User):
+    async def donator_check(self, ctx: Context, member: Union[Member, User]):
         if await self.bot.db.fetchrow(
             """SELECT * FROM donators WHERE user_id = $1""", member.id
         ):
@@ -434,25 +433,6 @@ class Owner(commands.Cog):
     async def _eval(self, ctx, *, argument: codeblock_converter):
         await ctx.invoke(self.bot.get_command("jishaku py"), argument=argument)
 
-    @commands.command(hidden=True)
-    @commands.is_owner()
-    async def sql(self, ctx, *, query: str):
-        from jishaku.codeblocks import codeblock_converter as cc
-
-        parts = query.split(" | ")
-        query = parts[0]
-        if len(parts) == 2:
-            parts[1].split()  # type: ignore
-
-        if "select" in query.lower():
-            method = "fetch"
-        else:
-            method = "execute"
-        await ctx.invoke(
-            self.bot.get_command("eval"),
-            argument=cc(f"""await bot.db.{method}(f'{query.split(' || ')[0]}')"""),
-        )
-
     @commands.group(name="blacklist", invoke_without_command=True, hidden=True)
     @commands.is_owner()
     async def blacklist(self, ctx):
@@ -808,6 +788,7 @@ class Owner(commands.Cog):
         # Send the embed to the designated channel
         if channel:
             await channel.send(embed=embed)
+
 
 
 async def setup(bot):

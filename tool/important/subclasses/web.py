@@ -1,137 +1,149 @@
+from __future__ import annotations
+
 import datetime
-import ujson
-from discord.ext.commands import Cog, Group, Command
-from typing import Union, Optional, List
+from typing import TypedDict, Union, Optional, List, Any
 from aiohttp.web import Application, Request, Response, _run_app, json_response
-from prometheus_async import aio  # type: ignore
+from discord.ext.commands import Cog, Group, Command
+from prometheus_async import aio
 import socket
+import ujson
+from tool.greed import Greed
 
-def find_available_port(start_port=8493):
-    port = start_port
+def get_available_port(start: int = 8493) -> int:
     while True:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            if s.connect_ex(('localhost', port)) != 0:
-                return port
-        port += 1
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.bind(('0.0.0.0', start))
+            sock.close()
+            return start
+        except OSError:
+            start += 1
+            continue
 
-ADDRESS = {
-    "host": "0.0.0.0",
-    "port": find_available_port(),
+SERVER_CONFIG = {
+    "host": "0.0.0.0", 
+    "port": get_available_port()
 }
 
+class CommandData(TypedDict):
+    name: str
+    description: str
+    permissions: Optional[List[str]]
+    bot_permissions: Optional[List[str]]
+    usage: Optional[str]
+    example: Optional[str]
+
 class WebServer(Cog):
-    def __init__(self, bot):
+    def __init__(self, bot: Greed) -> None:
         self.bot = bot
         self.app = Application()
-        self.setup_routes()
+        self._setup_routes()
 
-    def setup_routes(self):
-        self.app.router.add_get("/", self.index)
-        self.app.router.add_get("/avatars/{id}", self.avatars)
-        self.app.router.add_get("/commands", self.commandz)
-        self.app.router.add_get("/raw", self.command_dump)
-        self.app.router.add_get("/status", self.status)
-        self.app.router.add_get("/metrics", aio.web.server_stats)
+    def _setup_routes(self) -> None:
+        routes = [
+            ('GET', '/', self.index),
+            ('GET', '/avatars/{id}', self.avatars),
+            ('GET', '/commands', self.commands),
+            ('GET', '/raw', self.command_dump),
+            ('GET', '/status', self.status),
+            ('GET', '/metrics', aio.web.server_stats)
+        ]
+        for method, path, handler in routes:
+            self.app.router.add_route(method, path, handler)
 
-    async def cog_load(self):
-        self.bot.loop.create_task(self.run())
+    async def cog_load(self) -> None:
+        self.bot.loop.create_task(self._run())
 
-    async def cog_unload(self):
+    async def cog_unload(self) -> None:
         await self.app.shutdown()
 
-    async def run(self):
-        await _run_app(self.app, **ADDRESS, print=None)  # type: ignore
+    async def _run(self) -> None:
+        await _run_app(self.app, **SERVER_CONFIG, print=None)
 
     @staticmethod
     async def index(request: Request) -> Response:
-        return Response(text="hey this site belongs to icy.com kid", status=200)
+        return Response(text="API endpoint operational", status=200)
 
     async def status(self, request: Request) -> Response:
-        data = [
-            {
-                "uptime": self.bot.startup_time.timestamp(),
-                "latency": round(shard.latency * 1000) if shard.latency != float('inf') else None,
-                "servers": len([g for g in self.bot.guilds if g.shard_id == shard_id]),
-                "users": sum(len(g.members) for g in self.bot.guilds if g.shard_id == shard_id),
-                "shard": shard_id,
-            }
-            for shard_id, shard in self.bot.shards.items()
-        ]
-        return json_response(data)
+        return json_response([{
+            "uptime": self.bot.startup_time.timestamp(),
+            "latency": round(shard.latency * 1000) if shard.latency != float('inf') else None,
+            "servers": len([g for g in self.bot.guilds if g.shard_id == shard_id]),
+            "users": sum(len(g.members) for g in self.bot.guilds if g.shard_id == shard_id),
+            "shard": shard_id
+        } for shard_id, shard in self.bot.shards.items()])
 
     async def avatars(self, request: Request) -> Response:
-        id = int(request.match_info["id"])
-        data = await self.bot.db.fetch("SELECT * FROM avatars WHERE user_id = $1 ORDER BY time ASC", id)
-        if not data:
-            return json_response({"error": "No data found"}, status=404)
+        try:
+            user_id = int(request.match_info["id"])
+            data = await self.bot.db.fetch(
+                "SELECT * FROM avatars WHERE user_id = $1 ORDER BY time ASC",
+                user_id
+            )
+            if not data:
+                raise ValueError("No data found")
 
-        user = self.bot.get_user(id)
-        data2 = {
-            "id": data[0]["user_id"],
-            "avatars": [x["avatar"] for x in data],
-            "time": datetime.datetime.fromtimestamp(int(data[0]["time"])).strftime("%Y-%m-%d %H:%M:%S"),
-            "user": {
-                "name": user.name if user else data[0]["username"],
-                "discriminator": user.discriminator if user else "0000",
-                "id": id,
-            }
-        }
-        return json_response(data2)
+            user = self.bot.get_user(user_id)
+            return json_response({
+                "id": data[0]["user_id"],
+                "avatars": [x["avatar"] for x in data],
+                "time": datetime.datetime.fromtimestamp(int(data[0]["time"])).strftime("%Y-%m-%d %H:%M:%S"),
+                "user": {
+                    "name": user.name if user else data[0]["username"],
+                    "discriminator": user.discriminator if user else "0000",
+                    "id": user_id
+                }
+            })
+        except (ValueError, KeyError) as e:
+            return json_response({"error": str(e)}, status=404)
 
-    def get_permissions(self, command: Union[Command, Group], bot: Optional[bool] = False) -> Optional[List[str]]:
-        permissions = []
+    def _get_permissions(self, command: Union[Command, Group], bot: bool = False) -> Optional[List[str]]:
         perms = command.bot_permissions if bot else command.permissions
-        if perms:
-            if isinstance(perms, list):
-                permissions.extend([c.replace("_", " ").title() for c in perms])
-            else:
-                permissions.append(perms.replace("_", " ").title())
-            if not bot and command.cog_name.title() == "Premium":
-                permissions.append("Donator")
+        if not perms:
+            return None
+
+        permissions = []
+        if isinstance(perms, list):
+            permissions.extend(p.replace("_", " ").title() for p in perms)
+        else:
+            permissions.append(perms.replace("_", " ").title())
+
+        if not bot and command.cog_name.title() == "Premium":
+            permissions.append("Donator")
         return permissions
 
     async def command_dump(self, request: Request) -> Response:
-        commands = [
-            {
-                "name": command.qualified_name,
-                "description": command.brief,
-                "permissions": self.get_permissions(command),
-                "bot_permissions": self.get_permissions(command, True),
-                "usage": command.usage,
-                "example": command.example,
-            }
-            for command in self.bot.walk_commands()
-            if not command.hidden and (not isinstance(command, Group) or command.description) and command.qualified_name != "help"
-        ]
+        commands: List[CommandData] = []
+        for cmd in self.bot.walk_commands():
+            if cmd.hidden or (isinstance(cmd, Group) and not cmd.description) or cmd.qualified_name == "help":
+                continue
+            commands.append({
+                "name": cmd.qualified_name,
+                "description": cmd.brief,
+                "permissions": self._get_permissions(cmd),
+                "bot_permissions": self._get_permissions(cmd, True),
+                "usage": cmd.usage,
+                "example": cmd.example
+            })
         return json_response(commands)
 
-    async def commandz(self, req: Request) -> Response:
-        output = ""
-        for name, cog in sorted(self.bot.cogs.items(), key=lambda cog: cog[0].lower()):
-            if name.lower() in ("jishaku", "Develoepr"):
+    async def commands(self, request: Request) -> Response:
+        def format_command(cmd: Command, level: int = 0) -> str:
+            prefix = "|    " * level
+            aliases = f"({', '.join(cmd.aliases)})" if cmd.aliases else ""
+            usage = f" {cmd.usage}" if cmd.usage else ""
+            return f"{prefix}├── {cmd.qualified_name}{aliases}{usage}: {cmd.brief or 'No description'}"
+
+        output = []
+        for name, cog in sorted(self.bot.cogs.items(), key=lambda x: x[0].lower()):
+            if name.lower() in ("jishaku", "developer"):
                 continue
 
-            _commands = []
-            for command in cog.walk_commands():
-                if command.hidden:
-                    continue
+            commands = [format_command(cmd, level=1) for cmd in cog.walk_commands() if not cmd.hidden]
+            if commands:
+                output.extend([f"┌── {name}"] + commands)
 
-                usage = f" {command.usage}" if command.usage else ""
-                aliases = f"({', '.join(command.aliases)})" if command.aliases else ""
-                if isinstance(command, Group) and not command.root_parent:
-                    _commands.append(f"|    ├── {command.name}{aliases}: {command.brief or 'No description'}")
-                elif not isinstance(command, Group) and command.root_parent:
-                    _commands.append(f"|    |   ├── {command.qualified_name}{aliases}{usage}: {command.brief or 'No description'}")
-                elif isinstance(command, Group) and command.root_parent:
-                    _commands.append(f"|    |   ├── {command.qualified_name}{aliases}: {command.brief or 'No description'}")
-                else:
-                    _commands.append(f"|    ├── {command.qualified_name}{aliases}{usage}: {command.brief or 'No description'}")
+        return json_response("\n".join(output))
 
-            if _commands:
-                output += f"┌── {name}\n" + "\n".join(_commands) + "\n"
-
-        out = ujson.dumps(output)
-        return Response(text=out, content_type="application/json")
-
-async def setup(bot):
+async def setup(bot) -> None:
     await bot.add_cog(WebServer(bot))

@@ -523,31 +523,19 @@ class Economy(commands.Cog):
                 break
         return cards_out, cards_out_n, amount
 
-    def format_int(self, n: Union[float, str, int]):
-        if isinstance(n, float):
-            n = "{:.2f}".format(n)
-        if isinstance(n, str):
-            if "." in n:
-                try:
-                    amount, decimal = n.split(".")
-                    n = f"{amount}.{decimal[:2]}"
-                except Exception:
-                    n = f"{n.split('.')[0]}.00"
-        if str(n).startswith("-"):
-            return f":clown: ${n}"
-        reversed = str(n).split(".")[0][::-1]
-        d = ""
-        amount = 0
-        for i in reversed:
-            amount += 1
-            if amount == 3:
-                d += f"{i},"
-                amount = 0
+    def format_int(self, n: Union[float, str, int]) -> str:
+        try:
+            if isinstance(n, str):
+                n = float(n.replace(",", ""))
+            if isinstance(n, float):
+                formatted = f"{n:,.2f}"
             else:
-                d += i
-        if d[::-1].startswith(","):
-            return d[::-1][1:]
-        return d[::-1]
+                formatted = f"{n:,}"
+            if float(n) < 0:
+                return f":clown: ${formatted}"
+            return f"${formatted}"
+        except ValueError:
+            return "Invalid number"
 
     async def get_balance(
         self, member: DiscordMember, with_bank: Optional[bool] = False
@@ -556,14 +544,17 @@ class Economy(commands.Cog):
             data = await self.bot.db.fetchrow(
                 """SELECT * FROM economy WHERE user_id = $1""", member.id
             )
-            balance = float(str(data["balance"]))
-            bank = float(str(data["bank"]))
+            balance = float(str(data["balance"])) if data and data.get("balance") is not None else 0.0
+            bank = float(str(data["bank"])) if data and data.get("bank") is not None else 0.0
             return balance, bank
         else:
             data = await self.bot.db.fetchval(
                 """SELECT balance FROM economy WHERE user_id = $1""", member.id
             )
-            balance = float(str(data))
+            if data is None:
+                balance = 0.0
+            else:
+                balance = float(str(data))
             if balance < 0.00:
                 await self.bot.db.execute(
                     """UPDATE economy SET balance = $1 WHERE user_id = $2""",
@@ -1174,6 +1165,7 @@ class Economy(commands.Cog):
         example=",roll 500",
     )
     @account()
+    @commands.cooldown(1, 20, commands.BucketType.user) 
     async def roll(self, ctx: Context, amount: GambleAmount):
         if str(amount).startswith("-"):
             return await ctx.warning("You **Cannot use negatives**")
@@ -1189,7 +1181,7 @@ class Economy(commands.Cog):
             value = (self.get_random_value(1, 100000000000) / 1000000000)
         else:
             value = self.get_random_value(1, 100)
-        house_value = self.get_random_value(1, 100)
+        house_value = self.get_random_value(60, 100)
         multiplied = await self.check_item(ctx)
         if value >= house_value:
             action = "WON"
@@ -1210,6 +1202,7 @@ class Economy(commands.Cog):
         example=",coinflip 100 heads",
     )
     @account()
+    @commands.cooldown(1, 20, commands.BucketType.user) 
     async def coinflip(self, ctx: Context, amount: GambleAmount, arg: str = None):
         if not arg:
             return await ctx.warning("please provide either heads or tails")
@@ -1339,6 +1332,7 @@ class Economy(commands.Cog):
         },
     )
     @account()
+    @commands.cooldown(1, 20, commands.BucketType.user) 
     async def gamble(self, ctx: Context, amount: GambleAmount):
         if str(amount).startswith("-"):
             return await ctx.warning("You **Cannot use negatives**")
@@ -1385,6 +1379,7 @@ class Economy(commands.Cog):
         example=",supergamble 5,000",
     )
     @account()
+    @commands.cooldown(1, 20, commands.BucketType.user) 
     async def supergamble(self, ctx: Context, amount: GambleAmount):
         if str(amount).startswith("-"):
             return await ctx.warning("You **Cannot use negatives**")
@@ -1560,6 +1555,62 @@ class Economy(commands.Cog):
             embed = Embed(title=f"{type.title()} Leaderboard (resets in 1 week)", color=self.bot.color)
             embed.description = "\n".join(rows)
             return await ctx.send(embed=embed)
+
+    @commands.command(
+        name="work",
+        brief="Earn some money by working random jobs.",
+        example=",work"
+    )
+    @commands.cooldown(1, 20, commands.BucketType.user)  # Cooldown of 20 seconds per user
+    async def work(self, ctx):
+        # Path to the jobs file (update this path as needed)
+        jobs_file_path = "jobs.txt"
+
+        try:
+            # Read jobs from the file
+            with open(jobs_file_path, "r") as file:
+                jobs = [line.strip() for line in file.readlines()]
+            
+            if not jobs:
+                return await ctx.send("No jobs are available at the moment. Please try again later!")
+
+            # Select a random job
+            job = random.choice(jobs)
+
+            # Generate a random amount between 150 and 1000
+            earnings = random.randint(150, 1000)
+
+            # Check if the user exists in the economy database
+            user_exists = await self.bot.db.fetchrow(
+                """SELECT * FROM economy WHERE user_id = $1""", ctx.author.id
+            )
+
+            if not user_exists:
+                await self.bot.db.execute(
+                    """INSERT INTO economy (user_id, balance, bank) VALUES($1,$2,$3)""",
+                    ctx.author.id,
+                    0.00,
+                    0.00,
+                )
+
+            # Update the user's balance
+            await self.bot.db.execute(
+                """UPDATE economy SET balance = balance + $1 WHERE user_id = $2""",
+                earnings,
+                ctx.author.id,
+            )
+
+            # Send a success message
+            await ctx.currency(
+                f"**{ctx.author.name}**, you worked as a **{job}** and earned **${earnings:,}**"
+            )
+
+        except FileNotFoundError:
+            await ctx.fail("The jobs file is missing. Please contact the administrator.")
+        except Exception as e:
+            await ctx.fail("An error occurred while processing your command.")
+            raise e  # Log the exception for debugging purposes
+
 
 async def setup(bot):
     await bot.add_cog(Economy(bot))

@@ -38,7 +38,7 @@ class EmbedError(CommandError):
 
 
 class Script:
-    def __init__(self, template: str, user: Member | User, lastfm_data: dict = {}):
+    def __init__(self, template: str, user:Union[Member, User], lastfm_data: dict = {}):
         self.pattern = compile(r"\{([\s\S]*?)\}")  # compile(r"{(.*?)}")
         self.data: Dict[str, Union[Dict, str]] = {
             "embed": {},
@@ -328,7 +328,7 @@ class Script:
         if not self.data.get("embed"):
             self.data.pop("embed", None)
 
-    async def send(self: Self, target: Context | GuildChannel, **kwargs) -> Message:
+    async def send(self: Self, target: Union[Context, GuildChannel], **kwargs) -> Message:
         button = self.data.pop("button", None)
         if button:
             view = View()

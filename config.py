@@ -6,12 +6,12 @@ CONFIG_DICT = {
     "owners": {
         977036206179233862,
         352190010998390796,
-        978402974667800666,
+        978402974667800666, 
         744806691396124673,
         863914425445908490,
         915350867438338058
     },
-    "token": "MTE0OTUzNTgzNDc1Njg3NDI1MA.GVpIbW.lvZYmGc_g6QdvZyy649OxNtMen5v3Quc_ZlOgM",
+    "token": "MTE0OTUzNTgzNDc1Njg3NDI1MA.Gao7xE.lq-Qj_UlaPInoZxrjBt_2IhME5t4YuJLjlW9oU",
     "rival_api": "abc2f2fe-a27b-43c0-8b0d-5b4b76752209",
     "domain": "https://greed.wtf",
 }

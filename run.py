@@ -19,8 +19,9 @@ cluster_id = args.cluster
 
 
 if __name__ == "__main__":
-    ips = ["23.160.168.194", "23.160.168.195", "23.160.168.196"]
+    ips = ["23.160.168.124", "23.160.168.125", "23.160.168.126"]
     response = requests.get('https://discord.com/api/v10/gateway/bot', headers=headers)
+    print(response.json())
     shard_count = response.json()['shards']
     shards = [i for i in range(shard_count)]
     per_cluster = round(len(shards) / 3)

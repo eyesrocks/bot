@@ -102,7 +102,7 @@ class AntiNuke(Cog):
         return f"[ {self.bot.user.name} antinuke ] {reason}"
 
     async def get_thresholds(
-        self, guild: Guild, action: AuditLogAction | str
+        self, guild: Guild, action: Union[AuditLogAction,str]
     ) -> Optional[int]:
         if guild.id in self.guilds:
             if isinstance(action, AuditLogAction):
@@ -124,7 +124,7 @@ class AntiNuke(Cog):
                     return thres if thres != 1 else 0 # Check and return 0 if threshold is 1
         return 0
 
-    async def do_ban(self, guild: Guild, user: User | Member, reason: str):
+    async def do_ban(self, guild: Guild, user: Union[User, Member], reason: str):
         with suppress(TypeError):  # async with self.locks[guild.id]:
             if hasattr(user, "top_role"):
                 if user.top_role >= guild.me.top_role:
@@ -137,7 +137,7 @@ class AntiNuke(Cog):
         #       logger.info(f"successfully banned {user.name} with ban entry {b}")
         return
 
-    async def do_kick(self, guild: Guild, user: User | Member, reason: str):
+    async def do_kick(self, guild: Guild, user: Union[User, Member], reason: str):
         async with self.locks[guild.id]:
             if hasattr(user, "top_role"):
                 if user.top_role.position >= guild.me.top_role.position:
@@ -161,7 +161,7 @@ class AntiNuke(Cog):
             await user.edit(roles=after_roles, reason=reason)  # , atomic=False)
         return True
 
-    async def do_punishment(self, guild: Guild, user: User | Member, reason: str):
+    async def do_punishment(self, guild: Guild, user: Union[User, Member], reason: str):
         punishment = await self.bot.db.fetchval(
             """SELECT punishment FROM antinuke WHERE guild_id = $1""", guild.id
         )
@@ -214,7 +214,7 @@ class AntiNuke(Cog):
                 )
         return False
 
-    def check_guild(self, guild: Guild, action: AuditLogAction | str):
+    def check_guild(self, guild: Guild, action: Union[AuditLogAction, str]):
         if guild.id in self.guilds:
             if isinstance(action, AuditLogAction):
                 if get_action(action) in self.guilds[guild.id]:
@@ -574,7 +574,7 @@ class AntiNuke(Cog):
     )
     @bot_has_permissions(administrator=True)
     @trusted()
-    async def antinuke_whitelist(self, ctx: Context, *, user: User | Member):
+    async def antinuke_whitelist(self, ctx: Context, *, user: Union[User, Member]):
         if await self.bot.db.fetchval(
             """SELECT user_id FROM antinuke_whitelist WHERE guild_id = $1 AND user_id = $2""",
             ctx.guild.id,
@@ -602,7 +602,7 @@ class AntiNuke(Cog):
     )
     @bot_has_permissions(administrator=True)
     @trusted()
-    async def antinuke_trust(self, ctx: Context, *, user: User | Member):
+    async def antinuke_trust(self, ctx: Context, *, user: Union[User, Member]):
         if await self.bot.db.fetchval(
             """SELECT user_id FROM antinuke_admin WHERE guild_id = $1 AND user_id = $2""",
             ctx.guild.id,

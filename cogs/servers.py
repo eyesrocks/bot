@@ -2742,7 +2742,7 @@ class Servers(Cog):
     )
     @commands.bot_has_permissions(administrator=True)
     @check_br_status()
-    async def br_delete(self, ctx: Context) -> discord.Message | None:
+    async def br_delete(self, ctx: Context) -> Optional[discord.Message]:
         author: discord.Member = typing.cast(discord.Member, ctx.author)
         if not (
             role := await self.bot.db.fetchval(
@@ -2773,7 +2773,7 @@ class Servers(Cog):
     )
     @commands.bot_has_permissions(administrator=True)
     @check_br_status()
-    async def br_rename(self, ctx: Context, name: str) -> discord.Message | None:
+    async def br_rename(self, ctx: Context, name: str) -> Optional[discord.Message]:
         author: discord.Member = typing.cast(discord.Member, ctx.author)
         if not (
             role := await self.bot.db.fetchval(
@@ -2806,7 +2806,7 @@ class Servers(Cog):
     @check_br_status()
     async def br_color(
         self, ctx: Context, *, color: ColorConverter
-    ) -> discord.Message | None:
+    ) -> Optional[discord.Message]:
         author: discord.Member = typing.cast(discord.Member, ctx.author)
         if not (
             role := await self.bot.db.fetchval(
@@ -2992,7 +2992,7 @@ class Servers(Cog):
         self,
         ctx: Context,
         _type: str,
-        react: discord.Emoji | discord.PartialEmoji | str,
+        react: Union[discord.Emoji, discord.PartialEmoji, str],
     ):
         emoji = react  # ((b64encode(str(reaction).encode()).decode() if isinstance(b64encode(str(reaction).encode()), bytes) else b64encode(str(reaction).encode()) if not is_unicode(reaction) else reaction ) if not is_unicode(reaction) else reaction,)
         if not self.bot.cache.autoreacts.get(ctx.guild.id):
@@ -3756,7 +3756,7 @@ class Servers(Cog):
         self,
         ctx: Context,
         message: discord.Message,
-        emoji: discord.Emoji | discord.PartialEmoji | str,
+        emoji: Union[discord.Emoji, discord.PartialEmoji, str],
     ):
         if isinstance(emoji, (discord.Emoji, discord.PartialEmoji)):
             emoji = str(emoji)

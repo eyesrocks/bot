@@ -110,7 +110,7 @@ class Greed(Bot):
             activity=discord.Activity(
                 type=discord.ActivityType.custom,
                     name=" ",
-                    state=",purchase|/pomice",
+                    state="/pomice",
             ),
             strip_after_prefix=True,
             intents=config["intents"],
@@ -1102,39 +1102,43 @@ class Greed(Bot):
 
     async def hierarchy(
         self,
-        ctx: Context,
-        member: discord.Member,
+        ctx: Context, 
+        member: Union[discord.Member, discord.User],
         author: bool = False,
-    ):
-        if isinstance(member, discord.User):
-            return True
+    ) -> bool:
 
-        elif ctx.guild.me.top_role <= member.top_role:
-            await ctx.warning(f"The role of {member.mention} is **higher than greeds**")
+        bot_member = ctx.guild.me
+        author = ctx.author
+            
+        if bot_member.top_role <= member.top_role:
+            await ctx.warning(f"I don't have high enough roles to perform this action on {member.mention}")
             return False
-        elif ctx.author.id == member.id and not author:
-            await ctx.warning("You **can not execute** that command on **yourself**")
-            return False
-        elif ctx.author.id == member.id and author:
+
+        if author.id == member.id:
+            if not author:
+                await ctx.warning("You cannot use this command on yourself") 
+                return False
             return True
-        elif ctx.author.id == ctx.guild.owner_id:
+            
+        if author.id == ctx.guild.owner_id:
             return True
-        elif member.id == ctx.guild.owner_id:
-            await ctx.warning(
-                "**Can not execute** that command on the **server owner**"
-            )
+            
+        if member.id == ctx.guild.owner_id:
+            await ctx.warning("You cannot use this command on the server owner")
             return False
-        elif ctx.author.top_role.is_default():
-            await ctx.warning("You are **missing permissions to use this command**")
+
+        if author.top_role.is_default():
+            await ctx.warning("You need roles with permissions to use this command")
             return False
-        elif ctx.author.top_role == member.top_role:
-            await ctx.warning("You have the **same role** as that user")
+            
+        if author.top_role <= member.top_role:
+            if author.top_role == member.top_role:
+                await ctx.warning("You cannot target users with the same top role as you")
+            else:
+                await ctx.warning("You cannot target users with higher roles than you")
             return False
-        elif ctx.author.top_role < member.top_role:
-            await ctx.warning("You **do not** have a role **higher** than that user")
-            return False
-        else:
-            return True
+
+        return True
 
     async def dump_command_page(self):
         def get_usage(command):

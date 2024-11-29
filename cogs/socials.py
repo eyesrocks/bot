@@ -3,7 +3,7 @@ from discord.ext import commands
 from discord import Embed, app_commands, Interaction, Message, File, HTTPException
 from discord.ext.commands import Context, CommandError
 from discord.utils import format_dt
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Union
 from contextlib import suppress
 from datetime import datetime
 
@@ -252,7 +252,7 @@ class Socials(commands.Cog):
         )
 
     @executor_function
-    def extract_data(self, url: URL | str, **params) -> Optional[Munch]:
+    def extract_data(self, url: Union[URL, str], **params) -> Optional[Munch]:
         data: Optional[Dict]
         try:
             data = self.ytdl.extract_info(
@@ -431,31 +431,6 @@ class Socials(commands.Cog):
 
             embed.set_footer(
                 text=f"Followers: {await user.follower_count()} | Following: {await user.following_count()} | Friends: {await user.friend_count()}"
-            )
-
-        await ctx.send(embed=embed)
-
-    @commands.command(
-        name="google",
-        aliases=["search"],
-        brief="Search Google for a query.",
-        example=",google discord.py",
-    )
-    async def google(self, ctx: Context, *, query: str):
-        """Search Google for a query."""
-        async with ctx.typing():
-            scraper = GoogleScraper()
-            results = await scraper.search(query)
-
-            if not results:
-                return await ctx.send("No results found.")
-
-            embed = Embed(
-                title=f"Google Search Results for {query}",
-                description="\n\n".join(
-                    f"[{result.title}]({result.link})\n{result.snippet}"
-                    for result in results
-                ),
             )
 
         await ctx.send(embed=embed)

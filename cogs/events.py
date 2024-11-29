@@ -1200,48 +1200,37 @@ class Events(commands.Cog):
             if await self.get_event_types(message):
 
                 async def do_autoreact_event(_type: str):
-                    #   if await self.bot.glory_cache.ratelimited(
-                    #      f"rl:autoreact{message.guild.id}", 5, 30
-                    #    ):
-                    #    return
-                    if reactions := self.bot.cache.autoreacts[message.guild.id].get(
-                        _type
-                    ):
+                    _ = f"rl:autoreact:{message.guild.id}:{_type}"
+                    if await self.bot.glory_cache.ratelimited(_, 5, 30):
+                        return
+                    reactions = self.bot.cache.autoreacts[message.guild.id].get(_type)
+                    if reactions:
                         await self.add_reaction(message, reactions)
 
-                #                        await gather(
-                #                           *(
-                # #                             message.add_reaction(
-                #                              get_emoji(reaction)
-                # #                                if len(tuple(reaction)) < 1
-                #                             else reaction
-                #                        )
-                #                       for reaction in reactions
-                #                  )
-                #                       )
-                #
                 events = await self.get_event_types(message)
-                #                if message.author.name == "aiohttp": logger.info(f"{events}")
+
                 if "images" in events and any(
-                    tuple(
-                        attachment.content_type.startswith(("image/", "video/"))
-                        for attachment in message.attachments
-                    )
+                    attachment.content_type.startswith(("image/", "video/"))
+                    for attachment in message.attachments
                 ):
-                    #                   if message.author.name == "aiohttp": logger.info(f"doing autoreact for images")
                     await do_autoreact_event("images")
-                #              else:
-                #                 if message.author.name == "aiohttp": logger.info(f"not an image")
-                if "spoilers" in events and (message.content.count("||") > 2):
-                    tasks.append(await do_autoreact_event("spoilers"))
 
-                if "emojis" in events and find_emojis(message.content):
-                    tasks.append(await do_autoreact_event("emojis"))
+                for event_type in ["spoilers", "emojis", "stickers"]:
+                    if event_type in events:
+                        condition = False
+                        if event_type == "spoilers" and message.content.count("||") > 2:
+                            condition = True
+                        elif event_type == "emojis" and find_emojis(message.content):
+                            condition = True
+                        elif event_type == "stickers" and message.stickers:
+                            condition = True
+                        
+                        if condition:
+                            tasks.append(do_autoreact_event(event_type))
 
-                if "stickers" in events and message.stickers:
-                    tasks.append(await do_autoreact_event("stickers"))
         try:
-            await asyncio.AbstractChildWatchergather(*tasks)
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
         except Exception:
             pass
         if not block_command_execution:

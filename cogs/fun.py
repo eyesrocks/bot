@@ -9,12 +9,94 @@ from datetime import datetime, timedelta
 from typing import Optional
 from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
+from typing import List
 import textwrap
 import random
 import aiohttp
 
 # from greed.tool import aliases
 
+class TicTacToeButton(discord.ui.Button):
+    def __init__(self, x: int, y: int, player1: discord.Member, player2: discord.Member):
+        super().__init__(style=discord.ButtonStyle.secondary, label='\u200b', row=y)
+        self.x = x
+        self.y = y
+        self.player1 = player1
+        self.player2 = player2
+
+
+    async def callback(self, interaction: discord.Interaction):
+        assert self.view is not None
+        view: 'TicTacToe' = self.view
+        state = view.board[self.y][self.x]
+        if state in (view.X, view.O):
+            return
+
+        if view.current_player == view.X:
+            if interaction.user.id != self.player1.id:
+                return await interaction.response.send_message("It's not your turn", ephemeral=True)
+            self.style = discord.ButtonStyle.danger
+            self.label = 'X'
+            view.current_player = view.O
+        else:
+            if interaction.user.id != self.player2.id:
+                return await interaction.response.send_message("It's not your turn", ephemeral=True)
+            self.style = discord.ButtonStyle.success
+            self.label = 'O'
+            view.current_player = view.X
+        
+        self.disabled = True
+        view.board[self.y][self.x] = view.current_player * -1
+        content = f"It's **{self.player2.mention if view.current_player == view.O else self.player1.mention}**'s turn"
+        
+        winner = view.check_board_winner()
+        if winner is not None:
+            content = "It's a tie!" if winner == view.Tie else f"**{self.player1.mention if winner == view.X else self.player2.mention}** won!"
+            for child in view.children:
+                child.disabled = True
+            view.stop()
+
+        await interaction.response.edit_message(content=content, view=view)
+
+class TicTacToe(discord.ui.View):
+    children: List[TicTacToeButton]
+    X = -1
+    O = 1
+    Tie = 0
+
+    def __init__(self, player1: discord.Member, player2: discord.Member):
+        super().__init__()
+        self.current_player = self.X
+        self.player1 = player1
+        self.player2 = player2
+        self.board = [[0 for _ in range(3)] for _ in range(3)]
+
+        for y in range(3):
+            for x in range(3):
+                self.add_item(TicTacToeButton(x, y, player1, player2))
+
+    def check_board_winner(self):
+
+        board = self.board
+        lines = board + [list(x) for x in zip(*board)] + [[board[i][i] for i in range(3)], [board[i][2-i] for i in range(3)]]
+        for line in lines:
+            if all(x == self.O for x in line):
+                return self.O
+            if all(x == self.X for x in line):
+                return self.X
+
+
+        if all(cell != 0 for row in board for cell in row):
+            return self.Tie
+        return None
+
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
+        if hasattr(self, "message"):
+            await self.message.edit(view=self)
+    
+    
 
 class BlackTea:
     def __init__(self, bot):
@@ -951,7 +1033,20 @@ class Fun(commands.Cog):
 
 
 
-
+    @commands.command(
+        name="tictactoe",
+        brief="Play a game of Tic Tac Toe",
+        aliases=["ttt"],
+    )
+    async def tictactoe(self, ctx, opponent: discord.Member):
+        if opponent.bot:
+            return await ctx.send("You can't play against a bot!")
+        
+        if opponent == ctx.author:
+            return await ctx.send("You can't play against yourself!")
+        
+        view = TicTacToe(ctx.author, opponent)
+        await ctx.send(f"{opponent.mention}, you have been challenged to a game of Tic Tac Toe!", view=view)
 
 
 async def setup(bot):

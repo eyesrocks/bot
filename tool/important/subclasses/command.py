@@ -145,86 +145,69 @@ class Sticker(GuildStickerConverter):
 class TextChannel(commands.TextChannelConverter):
     async def convert(self, ctx: Context, argument: str):
         argument = argument.replace(" ", "-")
+        
         try:
             return await super().convert(ctx, argument)
         except Exception:
             pass
-        if match := DISCORD_ID.match(argument):
-            return ctx.guild.get_channel(int(match.group(1)))
-        if match := DISCORD_CHANNEL_MENTION.match(argument):
-            return ctx.guild.get_channel(int(match.group(1)))
-        channel = discord.utils.find(
-            lambda m: argument.lower() in m.name.lower(),
-            ctx.guild.text_channels,
-        )
-        if channel:
-            return channel
-        raise discord.ext.commands.errors.ChannelNotFound(f"channel `{argument}` not found")
 
-class CategoryChannel(commands.TextChannelConverter):
+        try:
+            channel_id = int(argument)
+            if channel := ctx.guild.get_channel(channel_id):
+                return channel
+        except ValueError:
+            pass
+            
+        channels = [c for c in ctx.guild.text_channels if argument.lower() in c.name.lower()]
+        if channels:
+            return channels[0]
+
+        raise commands.ChannelNotFound(f"Text channel `{argument}` not found")
+
+class CategoryChannel(commands.CategoryChannelConverter):
     async def convert(self, ctx: Context, argument: str):
         try:
             return await super().convert(ctx, argument)
-        except Exception:
-            pass
-        if match := DISCORD_ID.match(argument):
-            return ctx.guild.get_channel(int(match.group(1)))
-        if match := DISCORD_CHANNEL_MENTION.match(argument):
-            return ctx.guild.get_channel(int(match.group(1)))
-        channel = discord.utils.find(
-            lambda m: argument.lower() in m.name.lower(),
-            ctx.guild.categories,
-        )
-        if channel:
-            return channel
-        raise discord.ext.commands.errors.ChannelNotFound(f"channel `{argument}` not found")
+        except commands.ChannelNotFound:
+            for category in ctx.guild.categories:
+                if argument.lower() in category.name.lower():
+                    return category
+            raise commands.ChannelNotFound(f"Category '{argument}' not found")
 
-class VoiceChannel(commands.TextChannelConverter):
+class VoiceChannel(commands.VoiceChannelConverter):
     async def convert(self, ctx: Context, argument: str):
         try:
             return await super().convert(ctx, argument)
-        except Exception:
-            pass
-        if match := DISCORD_ID.match(argument):
-            return ctx.guild.get_channel(int(match.group(1)))
-        if match := DISCORD_CHANNEL_MENTION.match(argument):
-            return ctx.guild.get_channel(int(match.group(1)))
-        channel = discord.utils.find(
-            lambda m: argument.lower() in m.name.lower(),
-            ctx.guild.voice_channels,
-        )
-        if channel:
-            return channel
-        raise discord.ext.commands.errors.ChannelNotFound(f"channel `{argument}` not found")
+        except commands.ChannelNotFound:
+            for vc in ctx.guild.voice_channels:
+                if argument.lower() in vc.name.lower():
+                    return vc
+            raise commands.ChannelNotFound(f"Voice channel '{argument}' not found")
 
 class User(commands.UserConverter):
     async def convert(self, ctx: Context, argument: str):
-        argument = str(argument)
-        if match := DISCORD_ID.match(argument):
-            member = ctx.bot.get_user(int(match.group(1))) or await ctx.bot.fetch_user(int(match.group(1)))
-        elif match := DISCORD_USER_MENTION.match(argument):
-            member = ctx.bot.get_user(int(match.group(1))) or await ctx.bot.fetch_user(int(match.group(1)))
-        else:
-            member = discord.utils.find(
-                lambda m: argument.lower() in (m.name.lower(), m.display_name.lower(), str(m).lower()),
-                ctx.bot.users
-            )
-        if not member:
-            raise commands.UserNotFound(argument)
-        return member
+        try:
+            return await super().convert(ctx, argument)
+        except commands.UserNotFound:
+            for user in ctx.bot.users:
+                if argument.lower() in (user.name.lower(), user.display_name.lower(), str(user).lower()):
+                    return user
+            try:
+                if argument.isdigit():
+                    return await ctx.bot.fetch_user(int(argument))
+            except discord.NotFound:
+                pass
+            raise commands.UserNotFound(f"User '{argument}' not found")
 
 class Member(commands.MemberConverter):
     async def convert(self, ctx: Context, argument: str):
-        argument = str(argument)
-        if match := DISCORD_ID.match(argument):
-            member = ctx.guild.get_member(int(match.group(1)))
-        elif match := DISCORD_USER_MENTION.match(argument):
-            member = ctx.guild.get_member(int(match.group(1)))
-        else:
-            return await commands.MemberConverter().convert(ctx, argument)
-        if not member:
-            raise commands.MemberNotFound(argument)
-        return member
+        try:
+            return await super().convert(ctx, argument)
+        except commands.MemberNotFound:
+            for member in ctx.guild.members:
+                if argument.lower() in (member.name.lower(), member.display_name.lower()):
+                    return member
+            raise commands.MemberNotFound(f"Member '{argument}' not found")
 
 class RolePosition(commands.CommandError):
     def __init__(self, message, **kwargs):
@@ -232,9 +215,11 @@ class RolePosition(commands.CommandError):
         self.kwargs = kwargs
         super().__init__(self.message)
 
-link = re.compile(
-    r"https?:\/\/(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&\/\/=]*(?:\.png|\.jpe?g|\.gif|\.jpg|))"
-)
+def link(url: str) -> bool:
+    try:
+        return any(url.lower().endswith(ext) for ext in ('.png', '.jpg', '.jpeg', '.gif'))
+    except:
+        return False
 
 async def get_file_ext(url: str) -> str:
     file_ext1 = url.split("/")[-1].split(".")[1]
@@ -255,8 +240,8 @@ class Image(commands.Converter):
 
 class VoiceMessage(commands.Converter):
     async def convert(self, ctx: "Context", argument: str = None, fail: bool = True) -> Optional[str]:
-        if match := link.match(argument):
-            return match.group()
+        if argument and link(argument):
+            return argument
         if fail:
             with suppress(Exception):
                 await ctx.send_help(ctx.command.qualified_name)
@@ -274,8 +259,8 @@ class VoiceMessage(commands.Converter):
 
 class Stickers(commands.Converter):
     async def convert(self, ctx: "Context", argument: str, fail: bool = True) -> Optional[str]:
-        if match := link.match(argument):
-            return match.group()
+        if argument and link(argument):
+            return argument
         if fail:
             with suppress(Exception):
                 await ctx.send_help(ctx.command.qualified_name)
@@ -295,8 +280,8 @@ class Stickers(commands.Converter):
 
 class Attachment(commands.Converter):
     async def convert(self, ctx: "Context", argument: str, fail: bool = True) -> Optional[str]:
-        if match := link.match(argument):
-            return match.group()
+        if argument and link(argument):
+            return argument
         if fail:
             with suppress(Exception):
                 await ctx.send_help(ctx.command.qualified_name)
@@ -332,21 +317,23 @@ class Message(commands.MessageConverter):
 
 class NonAssignedRole(commands.RoleConverter):
     async def convert(self, ctx: Context, arg: str):
-        arguments = re.split(r'[ ,]', arg)
         roles = []
+        arguments = [a.strip() for a in arg.split(",")]
+        
         for argument in arguments:
-            argument = argument.strip()
-            if match := DISCORD_ID.match(argument):
-                role = ctx.guild.get_role(int(match.group(1)))
-            elif match := DISCORD_ROLE_MENTION.match(argument):
-                role = ctx.guild.get_role(int(match.group(1)))
-            else:
+            try:
+                role = await super().convert(ctx, argument)
+            except commands.RoleNotFound:
                 role = discord.utils.find(
-                    lambda r: argument.lower() in r.name.lower(), ctx.guild.roles
+                    lambda r: argument.lower() in r.name.lower(),
+                    ctx.guild.roles
                 )
+            
             if not role or role.is_default():
                 raise commands.RoleNotFound(argument)
+                
             roles.append(role)
+            
         return roles
 
 class Role(commands.RoleConverter):
@@ -354,57 +341,69 @@ class Role(commands.RoleConverter):
         self.assign = assign
 
     async def convert(self, ctx: Context, arg: str):
-        arguments = re.split(r'[ ,]', arg)
         roles = []
+        arguments = [a.strip() for a in arg.split(",")]
+        
         for argument in arguments:
-            argument = argument.strip()
             role = None
+            
             try:
                 role = await super().convert(ctx, argument)
-            except Exception:
-                pass
-            _roles = {r.name: r for r in ctx.guild.roles if r.is_assignable()}
-            if role is None:
-                if match := DISCORD_ID.match(argument):
-                    role = ctx.guild.get_role(int(match.group(1)))
-                elif match := DISCORD_ROLE_MENTION.match(argument):
-                    role = ctx.guild.get_role(int(match.group(1)))
-                else:
-                    if match := closest_match(argument.lower(), list(_roles.keys())):
-                        role = _roles.get(match)
-                if not role or role.is_default():
-                    raise commands.RoleNotFound(argument)
+            except commands.RoleNotFound:
+                _roles = {r.name: r for r in ctx.guild.roles if r.is_assignable()}
+                if match := closest_match(argument.lower(), list(_roles.keys())):
+                    role = _roles.get(match)
+                    
+            if not role or role.is_default():
+                raise commands.RoleNotFound(argument)
+
             if self.assign:
-                if role < ctx.author.top_role or ctx.author.id == ctx.guild.owner_id:
-                    if role <= ctx.guild.me.top_role or ctx.author.id in ctx.bot.owner_ids or ctx.author.id == ctx.guild.owner_id:
-                        roles.append(role)
-                    else:
-                        raise RolePosition(f"{role.mention} is **above my role**")
-                else:
-                    m = "the same as your top role" if role == ctx.author.top_role and ctx.author != ctx.guild.owner else "above your top role"
-                    raise RolePosition(f"{role.mention} is **{m}**")
-            else:
-                roles.append(role)
+                if role >= ctx.author.top_role and ctx.author.id != ctx.guild.owner_id:
+                    msg = "the same as your top role" if role == ctx.author.top_role else "above your top role"
+                    raise RolePosition(f"{role.mention} is **{msg}**")
+                    
+                if role > ctx.guild.me.top_role and ctx.author.id not in ctx.bot.owner_ids and ctx.author.id != ctx.guild.owner_id:
+                    raise RolePosition(f"{role.mention} is **above my role**")
+                    
+            roles.append(role)
+            
         return roles
 
 class Command(commands.Command):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    async def invoke_command(self, ctx):
+    async def invoke_command(self, ctx: commands.Context) -> None:
         await super().invoke(ctx)
 
-    async def invoke(self, ctx: commands.Context, /):
-        data = await ctx.bot.db.fetchrow(
-            "SELECT * FROM disabled_commands WHERE guild_id = $1 AND command = $2",
-            ctx.guild.id,
-            ctx.command.qualified_name,
-        )
-        if data and data.status and data.whitelist and ctx.author.id in data.whitelist:
+    async def invoke(self, ctx: commands.Context, /) -> None:
+        try:
+            data = await ctx.bot.db.fetchrow(
+                """
+                SELECT status, whitelist 
+                FROM disabled_commands 
+                WHERE guild_id = $1 AND command = $2
+                """,
+                ctx.guild.id,
+                ctx.command.qualified_name
+            )
+
+            if not data:
+                return await self.invoke_command(ctx)
+
+            if data['status']:
+                if data['whitelist'] and ctx.author.id in data['whitelist']:
+                    return await self.invoke_command(ctx)
+                return await ctx.reply(
+                    "This command is disabled in this server.", 
+                )
+                
             return await self.invoke_command(ctx)
-        elif data and data.status:
-            return await ctx.reply("This command is disabled in this server.")
-        return await self.invoke_command(ctx)
+
+        except Exception as e:
+            logger.error(f"{ctx.command}: {e}")
+            await ctx.fail("An error occurred while executing this command.")
+            raise
 
 def Feature(*args, **kwargs):
     return commands.command(cls=Command, *args, **kwargs)

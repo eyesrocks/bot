@@ -12,7 +12,7 @@ from collections import defaultdict
 from asyncio import Lock
 from datetime import timedelta
 from typing import Optional, Literal
-from tool.important.services import TTS
+#from tool.important.services import TTS
 from tool.processing import FileProcessing
 from tool.important import Context  # type: ignore
 from typing import Union
@@ -112,7 +112,7 @@ class Miscellaneous(Cog):
         self.bot = bot
         self.color = self.bot.color
         self.bot.afks = {}
-        self.texttospeech = TTS()
+#        self.texttospeech = TTS()
         self.file_processor = FileProcessing(self.bot)
         self.queue = defaultdict(Lock)
     #     self.auto_destroy.start()

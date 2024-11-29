@@ -906,7 +906,7 @@ class Context(commands.Context):
         return await self.alternative_paginate(embeds, message)
 
     async def confirm(self, text: str, timeout: int = 60) -> bool:
-        con = Confirm(self)
+        con = Confirm(self, timeout=timeout)
         msg = await self.send(text, view=con)
         
         await con.wait()

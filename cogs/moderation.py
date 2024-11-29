@@ -303,10 +303,6 @@ class Moderation(Cog):
             await channel.edit(nsfw=True, reason=f"invoked by author | {ctx.author.id}")
             return await ctx.success(f"**Enabled nsfw** for {channel.mention}")
 
-    @commands.command(name="argt")
-    async def argt(self, ctx: Context, *, args: Args(7)):
-        return await ctx.send(f"got {args}")
-
     @commands.group(
         name="slowmode",
         aliases=["sm"],
@@ -429,6 +425,7 @@ class Moderation(Cog):
     async def nuke(self, ctx: Context, *, channel: discord.TextChannel = None):
         if channel is None:
             channel = ctx.channel
+        await ctx.confirm(f"Are you sure you want to **nuke** this channel?")
         position = channel.position
         new = await channel.clone(
             reason=f"nuked by {str(ctx.author)} | {ctx.author.id}"
@@ -485,7 +482,7 @@ class Moderation(Cog):
         await new.edit(position=position, reason=f"invoked by author | {ctx.author.id}")
         return await new.send(
             embed=discord.Embed(
-                description=f"{new.mention} has been **nuked**. If any **welcomes**, **leaves**, or **booster messages** configured for the previous channel, has **been configured through greed**, it has been **reconfigured** to send **here.**",
+                description=f"first",
                 color=self.bot.color,
             )
         )
@@ -936,7 +933,7 @@ class Moderation(Cog):
     )
     @commands.bot_has_permissions(manage_roles=True)
     @commands.has_permissions(manage_roles=True)
-    async def role_color(self, ctx, color: discord.Color | str, *, role: Role):
+    async def role_color(self, ctx, color: Union[discord.Color, str], *, role: Role):
         role = role[0]
         if not ctx.guild.get_role(role.id):
             return
@@ -1133,7 +1130,7 @@ class Moderation(Cog):
     @commands.has_permissions(manage_channels=True)
     @commands.bot_has_permissions(manage_channels=True)
     async def channel_delete(
-        self, ctx, *, channel: TextChannel | VoiceChannel | discord.abc.GuildChannel
+        self, ctx, *, channel: Union[TextChannel, VoiceChannel, discord.abc.GuildChannel]
     ):
         channel_name = channel.name
         await channel.delete()
@@ -1158,7 +1155,7 @@ class Moderation(Cog):
     )
     @commands.has_permissions(manage_channels=True)
     @commands.bot_has_permissions(manage_channels=True)
-    async def channel_duplicate(self, ctx, *, channel: TextChannel | VoiceChannel):
+    async def channel_duplicate(self, ctx, *, channel: Union[TextChannel, VoiceChannel]):
         c = await channel.clone(reason=f"invoked by author | {ctx.author.id}")
         return await ctx.success(f"**Duplicated** `{channel.name}` into {c.mention}")
 
@@ -1269,7 +1266,7 @@ class Moderation(Cog):
             await ctx.fail(f"{user.name} is already **banned** from the server.")
             raise InvalidError()
 
-    async def do_unban(self, ctx, u: discord.Member | discord.User | str):
+    async def do_unban(self, ctx, u: Union[discord.Member, discord.User, str]):
         if isinstance(u, discord.User):
             pass  # type: ignore
         elif isinstance(u, discord.Member):
@@ -1286,7 +1283,7 @@ class Moderation(Cog):
     @commands.command(name="unban", brief="Unban a banned user from the guild")
     @commands.has_permissions(ban_members=True)
     @commands.bot_has_permissions(ban_members=True)
-    async def unban_member(self, ctx, user_id: int | str):
+    async def unban_member(self, ctx, user_id: Union[int, str]):
         guild = ctx.guild
         try:
             if isinstance(user_id, int):
@@ -2487,7 +2484,47 @@ class Moderation(Cog):
     async def warnings(self, ctx: Context, member: discord.Member) -> discord.Message:
         await self.warn_list(ctx, member)
 
-    
+    @commands.hybrid_command(brief="manage messages", aliases=["pic"])
+    @commands.has_guild_permissions(manage_messages=True)
+    @commands.bot_has_guild_permissions(manage_channels=True)
+    async def picperms(
+        self,
+        ctx,
+        member: discord.Member,
+        *,
+        channel: discord.TextChannel = commands.CurrentChannel,
+    ):
+        """
+        Give a member permissions to post attachments in a channel
+        """
+
+        overwrite = channel.overwrites_for(member)
+
+        if (
+            channel.permissions_for(member).attach_files
+            and channel.permissions_for(member).embed_links
+        ):
+            overwrite.attach_files = False
+            overwrite.embed_links = False
+            await channel.set_permissions(
+                member,
+                overwrite=overwrite,
+                reason=f"Picture permissions removed by {ctx.author}",
+            )
+            return await ctx.success(
+                f"Removed pic perms from {member.mention} in {channel.mention}"
+            )
+        else:
+            overwrite.attach_files = True
+            overwrite.embed_links = True
+            await channel.set_permissions(
+                member,
+                overwrite=overwrite,
+                reason=f"Picture permissions granted by {ctx.author}",
+            )
+            return await ctx.success(
+                f"Added pic perms to {member.mention} in {channel.mention}"
+            )    
 
 async def setup(bot: "Greed") -> None:
     await bot.add_cog(Moderation(bot))

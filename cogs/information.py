@@ -1,8 +1,10 @@
 import os
 import typing
+from color_processing import ColorInfo
 import discord
 import pytz
 import aiohttp
+import asyncio
 import psutil
 from difflib import get_close_matches
 from tool.important import Context  # type: ignore
@@ -18,8 +20,7 @@ from tool.important.subclasses.command import (  # type: ignore
 )
 from tool.worker import offloaded  # type: ignore
 from aiohttp import ContentTypeError
-from tool.important.subclasses.color import get_dominant_color, color_info  # type: ignore
-from discord import Interaction, app_commands  # type: ignore
+from discord import Interaction, app_commands, Color  # type: ignore
 from discord.app_commands import Choice
 from typing import Union, Optional, List, Annotated  # type: ignore
 from tool.greed import Greed  # type: ignore
@@ -65,7 +66,7 @@ def get_timezone(location: str) -> str:
 class plural:
     def __init__(
         self: "plural",
-        value: int | str | typing.List[typing.Any],
+        value: typing.Union[int,  str, typing.List[typing.Any]],
         number: bool = True,
         md: str = "",
     ):
@@ -192,70 +193,70 @@ class UrbanDefinition(BaseModel):
     thumbs_down: int
 
 
-@cache(ttl=1200, key="ig:{username}")
-async def get_instagram_user(username: str) -> Optional[InstagramUser]:
-    async with Session() as session:
-        async with session.get(
-            f"https://dumpoir.com/v/{username}",
-            headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/112.0"
-            },
-        ) as response:
-            data = await response.read()
-    try:
-        soup = BeautifulSoup(data, "html.parser")
-        bio_element = soup.select_one(
-            "#user-page > div.user > div > div.col-md-5.my-3 > div"
-        )
-        bio = bio_element.get_text(strip=True) if bio_element else ""
-        result = {
-            "bio": bio,  # soup.select_one('#user-page > div.user > div > div.col-md-5.my-3 > div').get_text(strip=True) if bio,
-            "followers": soup.select_one(
-                "#user-page > div.user > div > div.col-md-4.col-8.my-3 > ul > li:nth-child(2)"
-            )
-            .get_text(strip=True)
-            .replace(" Followers", ""),
-            "following": soup.select_one(
-                "#user-page > div.user > div > div.col-md-4.col-8.my-3 > ul > li:nth-child(3)"
-            )
-            .get_text(strip=True)
-            .replace(" Following", ""),
-            "fullname": soup.select_one(
-                "#user-page > div.user > div > div.col-md-4.col-8.my-3 > div > a > h1"
-            ).get_text(strip=True),
-            "posts": soup.select_one(
-                "#user-page > div.user > div > div.col-md-4.col-8.my-3 > ul > li:nth-child(1)"
-            )
-            .get_text(strip=True)
-            .replace(" Posts", ""),
-            "profile_pic": soup.select_one(
-                "#user-page > div.user > div.row > div > div.user__img"
-            )["style"]
-            .replace("background-image: url('", "")
-            .replace("');", ""),
-            "url": f"https://www.instagram.com/{username.replace('@', '')}",
-            "username": username,
-        }
-        try:
-            result["followers"] = int(result["followers"].replace(" ", ""))
-        except Exception:
-            result["followers"] = 0
-        try:
-            result["posts"] = int(result["posts"].replace(" ", ""))
-        except Exception:
-            result["posts"] = 0
-        try:
-            result["following"] = int(result["following"].replace(" ", ""))
-        except Exception:
-            result["following"] = 0
-        return InstagramUser(**result)
-    except Exception as e:
-        if hasattr(e, "response") and e.response.status_code == 404:
-            raise Exception("Error: Akun tidak ditemukan")
-        elif hasattr(e, "response") and e.response.status_code == 403:
-            raise Exception("Error: Akunnya Di Private")
-        else:
-            raise Exception("Error: Failed to fetch Instagram profile")
+# @cache(ttl=1200, key="ig:{username}")
+# async def get_instagram_user(username: str) -> Optional[InstagramUser]:
+#     async with Session() as session:
+#         async with session.get(
+#             f"https://dumpoir.com/v/{username}",
+#             headers={
+#                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/112.0"
+#             },
+#         ) as response:
+#             data = await response.read()
+#     try:
+#         soup = BeautifulSoup(data, "html.parser")
+#         bio_element = soup.select_one(
+#             "#user-page > div.user > div > div.col-md-5.my-3 > div"
+#         )
+#         bio = bio_element.get_text(strip=True) if bio_element else ""
+#         result = {
+#             "bio": bio,  # soup.select_one('#user-page > div.user > div > div.col-md-5.my-3 > div').get_text(strip=True) if bio,
+#             "followers": soup.select_one(
+#                 "#user-page > div.user > div > div.col-md-4.col-8.my-3 > ul > li:nth-child(2)"
+#             )
+#             .get_text(strip=True)
+#             .replace(" Followers", ""),
+#             "following": soup.select_one(
+#                 "#user-page > div.user > div > div.col-md-4.col-8.my-3 > ul > li:nth-child(3)"
+#             )
+#             .get_text(strip=True)
+#             .replace(" Following", ""),
+#             "fullname": soup.select_one(
+#                 "#user-page > div.user > div > div.col-md-4.col-8.my-3 > div > a > h1"
+#             ).get_text(strip=True),
+#             "posts": soup.select_one(
+#                 "#user-page > div.user > div > div.col-md-4.col-8.my-3 > ul > li:nth-child(1)"
+#             )
+#             .get_text(strip=True)
+#             .replace(" Posts", ""),
+#             "profile_pic": soup.select_one(
+#                 "#user-page > div.user > div.row > div > div.user__img"
+#             )["style"]
+#             .replace("background-image: url('", "")
+#             .replace("');", ""),
+#             "url": f"https://www.instagram.com/{username.replace('@', '')}",
+#             "username": username,
+#         }
+#         try:
+#             result["followers"] = int(result["followers"].replace(" ", ""))
+#         except Exception:
+#             result["followers"] = 0
+#         try:
+#             result["posts"] = int(result["posts"].replace(" ", ""))
+#         except Exception:
+#             result["posts"] = 0
+#         try:
+#             result["following"] = int(result["following"].replace(" ", ""))
+#         except Exception:
+#             result["following"] = 0
+#         return InstagramUser(**result)
+#     except Exception as e:
+#         if hasattr(e, "response") and e.response.status_code == 404:
+#             raise Exception("Error: Akun tidak ditemukan")
+#         elif hasattr(e, "response") and e.response.status_code == 403:
+#             raise Exception("Error: Akunnya Di Private")
+#         else:
+#             raise Exception("Error: Failed to fetch Instagram profile")
 
 
 class Object:
@@ -368,7 +369,7 @@ class CategoryTransformer(app_commands.Transformer):
         ][:25]
 
     async def transform(self, interaction: Interaction, value: str) -> commands.Cog:
-        cog: commands.Cog | None = interaction.client.get_cog(value)  # type: ignore
+        cog: Optional[commands.Cog] = interaction.client.get_cog(value)  # type: ignore
         if cog is None:
             raise ValueError(f"Category {value} not found.")
         else:
@@ -387,7 +388,7 @@ class CommandTransformer(app_commands.Transformer):
         ][:25]
 
     async def transform(self, interaction: Interaction, value: str) -> commands.Command:
-        command: commands.Command | None = interaction.client.get_command(value)  # type: ignore
+        command: Optional[commands.Command] = interaction.client.get_command(value)  # type: ignore
         if command is None:
             raise ValueError(f"Command {value} not found.")
         else:
@@ -416,8 +417,8 @@ class Information(commands.Cog):
     async def help_(
         self,
         interaction: Interaction,
-        category: Annotated[commands.Cog, CategoryTransformer] | None = None,
-        command: Annotated[commands.Command, CommandTransformer] | None = None,
+        category: Optional[Annotated[commands.Cog, CategoryTransformer]] = None,
+        command: Optional[Annotated[commands.Command, CommandTransformer]] = None,
     ):
         if category is not None:
             pass  # type: ignore
@@ -526,7 +527,7 @@ class Information(commands.Cog):
         example=",timezone @lim",
     )
     async def timezone(
-        self, ctx: Context, member: discord.Member | discord.User = commands.Author
+        self, ctx: Context, member: Optional[Union[discord.Member, discord.User]] = commands.Author
     ):
         if data := await self.bot.db.fetchval(
             """SELECT tz FROM timezone WHERE user_id = $1""", member.id
@@ -622,8 +623,14 @@ class Information(commands.Cog):
         example=",color red",
     )
     async def color(
-        self, ctx: Context, *, query: Optional[Union[str, User, Member]] = None
+        self, ctx: Context, *, query: Optional[Union[str, User, Member, Color]] = None
     ):
+        if query is None:
+            if len(ctx.message.attachments) > 0:
+                query = ctx.message.attachments[0].url
+            else:
+                raise CommandError("you must provide a query or attachment")
+        return await ColorInfo().convert(ctx, query)
         try:
             if isinstance(query, User):
                 _ = await get_dominant_color(query)
@@ -729,6 +736,7 @@ class Information(commands.Cog):
         example=",serverinfo",
     )
     async def serverinfo(self, ctx: Context, *, guild: discord.Guild = None):
+
         guild = ctx.guild if guild is None else guild
         invite = "None"
         if guild.vanity_url is not None:
@@ -805,6 +813,13 @@ class Information(commands.Cog):
         brief="View information on a user's account",
     )
     async def whois(self, ctx, user: Member = None):
+        loading_embed = discord.Embed(color=self.bot.color, description="<a:lavishloading:1310941946944159816> **loading user info**")
+        loading_message = await ctx.reply(embed=loading_embed, mention_author=False)
+
+        await asyncio.sleep(2.5)
+
+
+
         """View some information on a user"""
 
         user = user or ctx.author
@@ -836,7 +851,7 @@ class Information(commands.Cog):
             "partner": "<:vile_partner:1022944710895075389>",
             "staff": "<:vile_dstaff:1022944972858720327>",
             "verified_bot": "<:694579695567503381:1302748499607289928>",
-            "server_boost": "<:iconscolorboostnitro:1302340831906365482>",
+            "server_boost": "<:nitro24:1310672012330532936>",
             "active_developer": "<:ActiveDeveloper:1307532835434790974>",
             "pomelo": "<:pomelo:1122143950719954964>",
             "web_idle": "<:status_idle:1302238592172822569>",
@@ -991,7 +1006,7 @@ class Information(commands.Cog):
             text=f"{len(mutual_guilds)} mutuals, Join position: {position}"
         )
 
-        await ctx.send(embed=embed)
+        await loading_message.edit(embed=embed)
 
     @commands.command(
         name="serveravatar",

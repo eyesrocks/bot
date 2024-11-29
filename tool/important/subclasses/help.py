@@ -9,7 +9,6 @@ from fast_string_match import closest_match
 from typing import List, Generator, Optional, Dict, Any, Mapping, Literal
 from tool.exceptions import InvalidSubCommand
 from logging import getLogger
-from rust_requests import Client, Request
 from contextlib import asynccontextmanager
 import inspect
 from tuuid import tuuid
@@ -24,15 +23,6 @@ DEFAULT_HEADERS = {
 METHOD = Optional[Literal["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]]
 HEADERS = Optional[Dict[str, Any]]
 
-@asynccontextmanager
-async def request(url: str, method: METHOD = "GET", headers: HEADERS = DEFAULT_HEADERS):
-    client = Client(headers=headers)
-    req = Request(method, url)
-    try:
-        response = await client.send(req)
-        yield response
-    except Exception as error:
-        raise error
 
 class OnCooldown(Exception):
     pass

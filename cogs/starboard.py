@@ -7,7 +7,7 @@ from weakref import WeakValueDictionary
 
 import discord
 import traceback
-
+from typing import Union
 from asyncpg import Record
 from discord.ext import commands
 from discord.ext.commands import Context
@@ -145,7 +145,7 @@ class starboard(commands.Cog, name="Starboard"):
     async def star_message(
         self,
         starboard: Record,
-        starboard_channel: discord.TextChannel | discord.Thread,
+        starboard_channel: Union[discord.TextChannel, discord.Thread],
         guild: discord.Guild,
         channel: discord.TextChannel,
         member: discord.Member,
@@ -163,7 +163,7 @@ class starboard(commands.Cog, name="Starboard"):
     async def _star_message(
         self,
         starboard: Record,
-        starboard_channel: discord.TextChannel | discord.Thread,
+        starboard_channel: Union[Union[discord.TextChannel, discord.Thread]],
         guild: discord.Guild,
         channel: discord.TextChannel,
         member: discord.Member,
@@ -252,7 +252,7 @@ class starboard(commands.Cog, name="Starboard"):
     async def unstar_message(
         self,
         starboard: Record,
-        starboard_channel: discord.TextChannel | discord.Thread,
+        starboard_channel: Union[discord.TextChannel, discord.Thread],
         guild: discord.Guild,
         channel: discord.TextChannel,
         member: discord.Member,
@@ -425,7 +425,7 @@ class starboard(commands.Cog, name="Starboard"):
     async def starboard_add(
         self,
         ctx: Context,
-        channel: discord.TextChannel | discord.Thread,
+        channel: Union[discord.TextChannel, discord.Thread],
         emoji: str,
         threshold: int,
     ):
@@ -463,7 +463,7 @@ class starboard(commands.Cog, name="Starboard"):
     async def starboard_remove(
         self,
         ctx: Context,
-        channel: discord.TextChannel | discord.Thread,
+        channel: Union[discord.TextChannel, discord.Thread],
         emoji: str,
     ):
         """Remove a starboard from a channel"""

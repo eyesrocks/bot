@@ -1,64 +1,34 @@
 from tool.worker import offloaded  # type: ignore
 import asyncio
 from typing import Optional, Union, Any, List
-from functools import partial, wraps
+from functools import wraps
 from io import BytesIO
 from math import sqrt
 from PIL import Image
 import aiohttp
 import discord
 from loguru import logger
-import concurrent.futures
-
-executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-
 
 def _collage_paste(image: Image, x: int, y: int, background: Image):
-    background.paste(
-        image,
-        (
-            x * 256,
-            y * 256,
-        ),
-    )
-
+    background.paste(image, (x * 256, y * 256))
 
 def async_executor():
     def outer(func):
         @wraps(func)
-        def inner(*args, **kwargs):
-            task = partial(func, *args, **kwargs)
-            return asyncio.get_event_loop().run_in_executor(executor, task)
-
+        async def inner(*args, **kwargs):
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(None, partial(func, *args, **kwargs))
         return inner
-
     return outer
 
-
 def _collage_open(image: BytesIO, resize: Optional[bool] = False):
-    if not resize:
-        image = (
-            Image.open(image)
-            .convert("RGBA")
-        )
-        return image
-    image = (
-        Image.open(image)
-        .convert("RGBA")
-        .resize(
-            (
-                256,
-                256,
-            )
-        )
-    )
-    return image
-
+    img = Image.open(image).convert("RGBA")
+    if resize:
+        img = img.resize((256, 256))
+    return img
 
 @offloaded
 def validate_image(data: bytes):
-
-    # magic_instance = magic.Magic()
     image_formats = {
         "JPEG": [b"\xFF\xD8\xFF"],
         "PNG": [b"\x89\x50\x4E\x47\x0D\x0A\x1A\x0A"],
@@ -67,49 +37,21 @@ def validate_image(data: bytes):
         "JPG": [b"\xFF\xD8\xFF"],
     }
     file_header = data[:12]
-    try:
-        # detected_type = magic_instance.from_buffer(file_header)
-
-        for magic_numbers in image_formats.items():
-            for magic_number in magic_numbers:
-                if file_header.startswith(magic_number):
-                    return True
-        return False
-    except Exception as e:
-        raise e
-
+    for magic_numbers in image_formats.values():
+        for magic_number in magic_numbers:
+            if file_header.startswith(magic_number):
+                return True
+    return False
 
 async def _validate_image_(data: bytes):
     try:
-        _ = await validate_image(data)
-        return _
+        return await validate_image(data)
     except Exception as e:
         logger.info(f"validating image raised: {e}")
         return False
 
-
 @offloaded
-def _make_bar(
-    percentage_1: float,
-    color_1: str,
-    percentage_2: float,
-    color_2: str,
-    bar_width: int = 10,
-    height: int = 1,
-    corner_radius: float = 0.2
-) -> bytes:
-    """
-    Generate a bar with two colors representing two different percentages,
-    with rounded corners on each segment.
-
-    :param percentage_1: The percentage for the first color (0-100)
-    :param color_1: The color for the first segment
-    :param percentage_2: The percentage for the second color (0-100)
-    :param color_2: The color for the second segment
-    :param bar_width: The width of the bar (default is 10 units)
-    :param height: The height of the bar (default is 1 unit)
-    :param corner_radius: The radius of the rounded corners (default is 0.2 units)
-    """
+def _make_bar(percentage_1: float, color_1: str, percentage_2: float, color_2: str, bar_width: int = 10, height: int = 1, corner_radius: float = 0.2) -> bytes:
     import matplotlib.pyplot as plt
     from matplotlib.patches import PathPatch, Path
     from PIL import Image
@@ -127,7 +69,6 @@ def _make_bar(
     width_1 = (percentage_1 / 100) * bar_width
     width_2 = (percentage_2 / 100) * bar_width
 
-    # First segment with rounded left corners
     if width_1 > 0:
         path_data = [
             (Path.MOVETO, [corner_radius, 0]),
@@ -145,7 +86,6 @@ def _make_bar(
         patch = PathPatch(path, facecolor=color_1, edgecolor='none')
         ax.add_patch(patch)
 
-    # Second segment with rounded right corners
     if width_2 > 0:
         path_data = [
             (Path.MOVETO, [width_1, 0]),
@@ -180,9 +120,6 @@ def _make_bar(
         image_cropped.save(output_buffer, format="PNG")
     return output_buffer.getvalue()
 
-    
-
-
 @offloaded
 def _make_chart(name: str, data: list, avatar: bytes) -> bytes:
     import matplotlib
@@ -201,9 +138,7 @@ def _make_chart(name: str, data: list, avatar: bytes) -> bytes:
     durations = [naturaldelta(timedelta(seconds=s)) for s in seconds]
     colors = ["#43b581", "#faa61a", "#f04747", "#747f8d"]
     fig, ax = plt.subplots(figsize=(6, 8))
-    wedges, _ = ax.pie(
-        seconds, colors=colors, startangle=90, wedgeprops=dict(width=0.3)
-    )
+    wedges, _ = ax.pie(seconds, colors=colors, startangle=90, wedgeprops=dict(width=0.3))
     ax.axis("equal")
     ax.set_aspect("equal")
     img = Image.open(BytesIO(avatar)).convert("RGBA")
@@ -220,13 +155,7 @@ def _make_chart(name: str, data: list, avatar: bytes) -> bytes:
     half_height = aspect_ratio * half_width
     extent = [-half_width, half_width, -half_height, half_height]
     plt.imshow(img, extent=extent, zorder=-1)
-    legend = ax.legend(
-        wedges,
-        durations,
-        title=f"{name}'s activity overall",
-        loc="upper center",
-        bbox_to_anchor=(0.5, 0.08),
-    )
+    legend = ax.legend(wedges, durations, title=f"{name}'s activity overall", loc="upper center", bbox_to_anchor=(0.5, 0.08))
     frame = legend.get_frame()
     frame.set_facecolor("#2C2F33")
     frame.set_edgecolor("#23272A")
@@ -238,12 +167,8 @@ def _make_chart(name: str, data: list, avatar: bytes) -> bytes:
     buffer.seek(0)
     return buffer.getvalue()
 
-
-async def make_chart(
-    member: Union[discord.Member, discord.User], data: Any, avatar: bytes
-) -> bytes:
+async def make_chart(member: Union[discord.Member, discord.User], data: Any, avatar: bytes) -> bytes:
     return await _make_chart(member.name, data, avatar)
-
 
 async def _collage_read(image: str):
     async with aiohttp.ClientSession() as session:
@@ -253,77 +178,16 @@ async def _collage_read(image: str):
             except Exception:
                 return None
     try:
-        return await asyncio.get_event_loop().run_in_executor(
-            executor, lambda: _collage_open(BytesIO(resp))
-        )
+        return _collage_open(BytesIO(resp))
     except Exception as e:
         logger.info(f"_collage_read raised {e}")
         return None
 
-
 async def collage(images: list):
-    _ = []
-
-    for image in images:
-        i = await _collage_read(image)
-        if i:
-            _.append(i)
-    return await __collage(images)
-
-async def collage_(images: list):
-    _ = []
-    for image in images:
-        i = await _collage_read(image)
-        if i:
-            _.append(i)
-    return await ___collage(images)
-
-@offloaded
-def __resize(image: bytes, size: tuple):
-    i = Image.open(BytesIO(image)).convert("RGBA").resize(size)
-    buffer = BytesIO()
-    i.save(buffer, format="png")
-    i.close()
-    return buffer.getvalue()
-
-@offloaded
-def ___collage(_images: List[List[bytes]]) -> List[bytes]:
-    if not _images:
-        return None
-    collages = []
-
-    def open_image(image: bytes):
-        return Image.open(BytesIO(image)).convert("RGBA").resize((300, 300))
-    
-    for images in _images:
-        images = [open_image(i) for i in images]
-        rows = int(sqrt(len(images)))
-        columns = (len(images) + rows - 1) // rows
-
-        background = Image.new(
-            "RGBA",
-            (
-                columns * 256,
-                rows * 256,
-            ),
-        )
-        for i, image in enumerate(images):
-            _collage_paste(image, i % columns, i // columns, background)
-        #    await asyncio.gather(*tasks)
-
-        buffer = BytesIO()
-        background.save(
-            buffer,
-            format="png",
-        )
-        buffer.seek(0)
-
-        background.close()
-        for image in images:
-            image.close()
-        collages.append(buffer.getvalue())
-    return collages
-
+    tasks = [_collage_read(image) for image in images]
+    results = await asyncio.gather(*tasks)
+    valid_images = [img for img in results if img]
+    return await __collage(valid_images)
 
 @offloaded
 def __collage(images: list):
@@ -331,28 +195,18 @@ def __collage(images: list):
         return None
 
     def open_image(image: bytes):
-        return Image.open(BytesIO(image)).convert("RGBA")#.resize((300, 300))
+        return Image.open(BytesIO(image)).convert("RGBA")
 
     images = [open_image(i) for i in images]
     rows = int(sqrt(len(images)))
     columns = (len(images) + rows - 1) // rows
 
-    background = Image.new(
-        "RGBA",
-        (
-            columns * 256,
-            rows * 256,
-        ),
-    )
+    background = Image.new("RGBA", (columns * 256, rows * 256))
     for i, image in enumerate(images):
         _collage_paste(image, i % columns, i // columns, background)
-    #    await asyncio.gather(*tasks)
 
     buffer = BytesIO()
-    background.save(
-        buffer,
-        format="png",
-    )
+    background.save(buffer, format="png")
     buffer.seek(0)
 
     background.close()

@@ -15,7 +15,7 @@ from discord.ext.commands import Context
 from tuuid import tuuid
 from loguru import logger
 
-# Emojis
+
 play_emoji = "<:greed_play:1207661064096063599>"
 skip_emoji = "<:greed_skip:1207661069938589716>"
 pause_emoji = "<:greed_pause:1207661063093620787>"
@@ -620,6 +620,8 @@ class Music(commands.Cog):
                     f"Added **{Plural(tracks.track_count):track}** from [**{tracks.name}**]({tracks.uri}) to the queue",
                     emoji=queue_emoji,
                 )
+                if not player.is_playing and not player.is_paused:
+                    await player.next_track()
             else:
                 track = tracks[0]
                 await player.insert(track, bump=ctx.parameters.get("bump"))

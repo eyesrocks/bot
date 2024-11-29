@@ -10,6 +10,7 @@ from discord.ext.commands import CommandError
 from discord.ui import Button, View
 from discord.utils import format_dt
 from yarl import URL
+from typing import Union
 from tool.important.subclasses.parser import Script
 
 
@@ -19,7 +20,7 @@ def ordinal(n):
 
 
 class EmbedBuilder:
-    def __init__(self, user: discord.User | discord.Member, lastfm_data: dict = {}):
+    def __init__(self, user: Union[discord.User, discord.Member], lastfm_data: dict = {}):
         self.user = user
         self.lastfm_data = lastfm_data
         self.replacements = {

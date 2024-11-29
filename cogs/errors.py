@@ -3,6 +3,7 @@ from discord.ext.commands import (
     Context,
     CommandError,
     CheckFailure,  # type: ignore
+    UserInputError
 )
 from typing import Union
 import discord
@@ -368,6 +369,12 @@ class Errors(Cog):
                 return
             return await ctx.warning(str(exception))
         if isinstance(error, CommandError):
+            if await self.bot.glory_cache.ratelimited(
+                f"rl:error_message:{ctx.author.id}", 3, 5
+            ):
+                return
+            return await ctx.warning(str(exception))
+        if isinstance(error, UserInputError):
             if await self.bot.glory_cache.ratelimited(
                 f"rl:error_message:{ctx.author.id}", 3, 5
             ):

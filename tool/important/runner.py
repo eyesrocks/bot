@@ -199,6 +199,7 @@ class RebootRunner:
         self.started = True
 
     async def commit(self) -> str:
+        return ""
         process = await asyncio.create_subprocess_shell(
             "git add * ; git commit -m 'auto commit'; git push --force", stderr=PIPE
         )

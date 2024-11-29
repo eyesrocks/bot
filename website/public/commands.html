@@ -6,239 +6,139 @@
   <title>Command List</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <style>
+    /* Existing styles with improvements */
     * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
     }
 
-    #loader {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background-color: #111;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 9999;
-      transition: opacity 0.5s ease;
-    }
-
-    #loader.hidden {
-      opacity: 0;
-      pointer-events: none;
-    }
-
-    .loader-icon {
-      width: 100px;
-      height: 100px;
-      background-image: url('file (2).png');
-      background-size: contain;
-      background-repeat: no-repeat;
+    :root {
+      --primary-color: #7e87fe;
+      --background-dark: #111;
+      --card-background: #222;
+      --text-primary: #fff;
+      --text-secondary: #ccc;
     }
 
     body {
       background: linear-gradient(135deg, #010101, #333333);
       background-size: 400% 400%;
-      color: #fff;
-      font-family: Arial, sans-serif;
+      color: var(--text-primary);
+      font-family: 'Inter', Arial, sans-serif;
+      min-height: 100vh;
+      animation: backgroundAnimation 15s ease infinite;
+    }
+
+    /* Improved loader with animation */
+    #loader {
+      position: fixed;
+      inset: 0;
+      background-color: var(--background-dark);
       display: flex;
-      flex-direction: column;
+      justify-content: center;
       align-items: center;
-      padding: 20px;
-      animation: backgroundAnimation 10s infinite alternate;
+      z-index: 9999;
+      transition: all 0.5s ease;
     }
 
-    @keyframes backgroundAnimation {
-      0% { background-position: 0% 50%; }
-      100% { background-position: 100% 50%; }
+    .loader-icon {
+      animation: pulse 1.5s ease-in-out infinite;
     }
 
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+      100% { transform: scale(1); }
+    }
+
+    /* Improved header */
     .header {
-      display: flex;
-      justify-content: space-between;
-      width: 100%;
-      max-width: 1200px;
-      align-items: center;
-      margin-bottom: 20px;
-    }
-
-    .header-left {
-      display: flex;
-      align-items: center;
-    }
-
-    .header-left img {
-      height: 40px;
-      margin-right: 10px;
-    }
-
-    .header-left h1 {
-      font-size: 2rem;
-      font-weight: bold;
+      backdrop-filter: blur(10px);
+      background: rgba(0, 0, 0, 0.5);
+      padding: 1rem;
+      position: sticky;
+      top: 0;
+      z-index: 100;
     }
 
     .header-right a {
-      background-color: #222;
-      color: #fff;
-      padding: 8px 16px;
-      border-radius: 16px;
-      text-decoration: none;
-      font-weight: bold;
-      transition: box-shadow 0.3s ease;
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(5px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 0.75rem 1.25rem;
+      border-radius: 8px;
+      transition: all 0.3s ease;
     }
 
-    .header-right a:hover {
-      box-shadow: 0 0 8px rgba(255, 255, 255, 0.7), 0 0 16px rgba(255, 255, 255, 0.5);
-    }
-
+    /* Improved search bar */
     .search-bar {
-      position: relative;
-      margin-bottom: 20px;
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(5px);
+      border-radius: 12px;
+      padding: 0.5rem;
+      width: 100%;
+      max-width: 400px;
+      margin: 2rem auto;
     }
 
     .search-bar input {
-      padding: 10px 40px 10px 15px;
-      border: none;
-      border-radius: 8px;
-      background-color: #222;
-      color: #fff;
-      outline: none;
-      width: 200px;
-    }
-
-    .search-bar .fa-search {
-      position: absolute;
-      right: 10px;
-      top: 50%;
-      transform: translateY(-50%);
-      color: #aaa;
-    }
-
-    .search-bar input:hover {
-      box-shadow: 0 0 15px 5px rgba(126, 135, 254, 0.3);
-    }
-
-    .command-categories-container {
-      display: flex;
-      align-items: center;
-      margin-bottom: 20px;
       width: 100%;
-      max-width: 1200px;
-      position: relative;
-      padding: 10px;
-      border-radius: 10px;
-      box-shadow: 0 0 15px 5px rgba(126, 135, 254, 0.3);
-    }
-
-    .scroll-button {
-      background: none;
-      border: none;
-      color: #ccc;
-      font-size: 20px;
-      cursor: pointer;
-      padding: 5px;
-      transition: color 0.3s ease;
-    }
-
-    .scroll-button:hover {
-      color: #fff;
-    }
-
-    .command-categories {
-      display: flex;
-      gap: 10px;
-      overflow-x: auto;
-      scroll-behavior: smooth;
-      flex: 1;
-      white-space: nowrap;
-      padding: 10px 0;
-      -ms-overflow-style: none;
-      scrollbar-width: none;
-      user-select: none;
-    }
-
-    .command-categories::-webkit-scrollbar {
-      display: none;
-    }
-
-    .category {
-      background-color: #060606;
-      color: #fff;
-      padding: 10px 20px;
-      border-radius: 20px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      cursor: pointer;
-      transition: all 0.3s ease;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(0, 0, 0, 0.2);
+      color: var(--text-primary);
       font-size: 1rem;
     }
 
-    .category.active, .category:hover {
-      background-color: #444;
-      box-shadow: 0 0 8px rgba(255, 255, 255, 0.7), 0 0 16px rgba(255, 255, 255, 0.5);
-    }
-
-    .command-cards {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 15px;
-      width: 100%;
-      max-width: 1200px;
-    }
-
+    /* Improved command cards */
     .command-card {
-      background-color: #222;
-      border-radius: 12px;
-      padding: 15px;
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(5px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      padding: 1.5rem;
       transition: all 0.3s ease;
-      position: relative;
-      color: #ccc;
-      box-shadow: 0 0 8px rgba(126, 135, 254, 0.644);
     }
 
     .command-card:hover {
-      background-color: #333;
-      box-shadow: 0 0 8px rgba(255, 255, 255, 0.5), 0 0 16px rgba(255, 255, 255, 0.3);
+      transform: translateY(-5px);
+      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
     }
-
 
     .command-title {
-      font-size: 1.2rem;
-      font-weight: bold;
-      color: #fff;
-      margin-bottom: 5px;
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+      color: var(--primary-color);
     }
 
-    .description {
-      font-size: 0.9rem;
-      margin-bottom: 10px;
+    /* Improved category buttons */
+    .category {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 0.75rem 1.25rem;
+      border-radius: 12px;
+      font-weight: 500;
+      transition: all 0.3s ease;
     }
 
-    .details {
-      font-size: 0.8rem;
-      color: #999;
+    .category.active {
+      background: var(--primary-color);
+      border-color: var(--primary-color);
     }
 
-    .details span {
-      display: inline-block;
-      margin-top: 5px;
-    }
-
-    .copy-icon {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      color: #777;
-      cursor: pointer;
-      transition: color 0.3s ease;
-    }
-
-    .copy-icon:hover {
-      color: #fff;
+    /* Add responsive grid */
+    @media (max-width: 768px) {
+      .command-cards {
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      }
+      
+      .header {
+        flex-direction: column;
+        gap: 1rem;
+      }
     }
   </style>
 </head>

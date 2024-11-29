@@ -1,7 +1,7 @@
 from io import BytesIO
 from os import mkdir, path
 from sys import getsizeof
-from typing import Optional
+from typing import Optional, Union
 
 import magic
 from aiofiles import open as async_open
@@ -29,7 +29,7 @@ class Asset(BaseModel):
 
 async def save(
     session: ClientSession,
-    buffer: BytesIO | bytes | str,
+    buffer: Union[BytesIO, bytes, str],
     redistribute: bool = True,
     name: Optional[str] = None,
     prefix: Optional[str] = "",
