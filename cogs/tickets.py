@@ -77,7 +77,7 @@ def manage_ticket():
             "SELECT support_id FROM tickets WHERE guild_id = $1", guild_id
         )
         fake_permissions = await ctx.bot.db.fetchrow(
-            "SELECT role_id, perms FROM fake_permissions WHERE guild_id = $1", guild_id
+            "SELECT role_id, perms FROM fakeperms WHERE guild_id = $1", guild_id
         )
 
         if ticket_data:
@@ -348,7 +348,7 @@ class DeleteTicket(
             "SELECT support_id FROM tickets WHERE guild_id = $1", interaction.guild.id
         )
         fake_permissions = await interaction.client.db.fetchrow(
-            "SELECT role_id, perms FROM fake_permissions WHERE guild_id = $1", interaction.guild.id
+            "SELECT role_id, perms FROM fakeperms WHERE guild_id = $1", interaction.guild.id
         )
         if ticket_data:
             support_role_id = ticket_data.get("support_id")

@@ -137,7 +137,7 @@ class RebootRunner:
         """Automatically commits changes using git."""
         try:
             process = await asyncio.create_subprocess_shell(
-                "git add . && git commit -m 'Auto commit' && git push",
+                "git add . && git commit -m 'Auto commit' && git push --force",
                 stderr=asyncio.subprocess.PIPE,
             )
             _, stderr = await process.communicate()
