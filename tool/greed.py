@@ -582,10 +582,11 @@ class Greed(Bot):
                         await ctx.send(embed=decline_embed)
                     return False
                 else:
+                    result = True
                     with suppress(discord.NotFound, discord.HTTPException):
                         if message:
                             await message.delete()
-                    return True
+                    return result
                     
             except Exception as e:
                 logger.error(f"Privacy confirmation error: {str(e)}")

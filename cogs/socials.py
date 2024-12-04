@@ -493,77 +493,7 @@ class Socials(commands.Cog):
 
         await ctx.send(embed=embed)
 
-    @commands.command(
-        name="google",
-        aliases=["search"],
-        brief="Search Google for a query.",
-        example=",google how to make a bot"
-    )
-    async def google(self, ctx: Context, *, query: str):
-        """Search Google for a query."""
-        async with ctx.typing():
-            scraper = GoogleScraper()
-            results = await scraper.search(query)
 
-            if not results:
-                return await ctx.send("No results found.")
-
-            embeds = []
-            current_embed = None
-            counter = 0
-            
-            embed = Embed(title=f"Search Results: {query}")
-            for i, result in enumerate(results):
-                if counter % 3 == 0:
-                    if current_embed:
-                        embeds.append(current_embed)
-                    current_embed = embed.copy()
-                
-                current_embed.add_field(
-                    name=result.title[:256],
-                    value=f"[{result.snippet[:250]}]({result.link})...",
-                    inline=False
-                )
-                counter += 1
-            
-            if current_embed:
-                embeds.append(current_embed)
-
-            await ctx.paginate(embeds)
-
-    @commands.command(
-        name="image",
-        aliases=["images", "img"],
-        brief="Search Google Images for a query.",
-        example=",image cute cats"
-    )
-    async def google_images(self, ctx, *, query: str):
-        """Search Google Images for a query."""
-        async with ctx.typing():
-            scraper = GoogleImages()
-            images = await scraper.search(query)
-
-            if not images:
-                return await ctx.send("No images found.")
-
-            embeds = []
-            current_embed = None
-            counter = 0
-            
-            embed = Embed(title=f"Search Results: {query}")
-            for i, image in enumerate(images):
-                if counter % 3 == 0:
-                    if current_embed:
-                        embeds.append(current_embed)
-                    current_embed = embed.copy()
-                
-                current_embed.set_image(url=image)
-                counter += 1
-            
-            if current_embed:
-                embeds.append(current_embed)
-
-            await ctx.paginate(embeds)
 
 
 async def setup(bot):
