@@ -74,7 +74,7 @@ def manage_ticket():
         acheck = await ctx.bot.db.fetchrow(
             "SELECT support_id FROM tickets WHERE guild_id = $1", ctx.guild.id
         )
-        fakepermissions = ctx.bot.db.fetchrow(
+        fakepermissions = await ctx.bot.db.fetchrow(
             "SELECT role_id, perms FROM fake_permissions WHERE guild_id = $1",
         )
         if acheck:
