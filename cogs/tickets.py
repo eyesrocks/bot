@@ -69,44 +69,45 @@ def get_ticket():
 
 def manage_ticket():
     async def predicate(ctx: Context):
-        if ctx.command.qualified_name == "help":
-            return True
-        acheck = await ctx.bot.db.fetchrow(
-            "SELECT support_id FROM tickets WHERE guild_id = $1", ctx.guild.id
+        guild_id = ctx.guild.id
+        author = ctx.author
+        guild_permissions = author.guild_permissions
+
+        ticket_data = await ctx.bot.db.fetchrow(
+            "SELECT support_id FROM tickets WHERE guild_id = $1", guild_id
         )
-        fakepermissions = await ctx.bot.db.fetchrow(
-            "SELECT role_id, perms FROM fake_permissions WHERE guild_id = $1",
+        fake_permissions = await ctx.bot.db.fetchrow(
+            "SELECT role_id, perms FROM fake_permissions WHERE guild_id = $1", guild_id
         )
-        if acheck:
-            role = ctx.guild.get_role(acheck[0])
-            if role:
+
+        if ticket_data:
+            support_role_id = ticket_data.get("support_id")
+            support_role = ctx.guild.get_role(support_role_id)
+            if support_role and support_role not in author.roles:
+                if not guild_permissions.manage_channels:
+                    raise CommandError(
+                        f"Only members with {support_role.mention} role or those with the "
+                        f"**Manage Channels** permission can manage the ticket."
+                    )
+
+        elif not guild_permissions.manage_channels:
+            if fake_permissions:
                 if (
-                    role not in ctx.author.roles
-                    and not ctx.author.guild_permissions.manage_channels
+                    fake_permissions["role_id"] == author.id
+                    and "manage_channels" not in fake_permissions["perms"]
                 ):
                     raise CommandError(
-                        f"Only members with {role.mention} role and members with the **Manage Channels** permission can **add** or **remove** new members from the ticket",
+                        "You need the **Manage Channels** permission to manage the ticket."
                     )
             else:
-                if not ctx.author.guild_permissions.manage_channels:
-                    raise CommandError(
-                        "Only members with the **Manage Channels** permission can **add** or **remove** new members from the ticket"
-                    )
-        else:
-            if not ctx.author.guild_permissions.manage_channels:
                 raise CommandError(
-                    "Only members with the **Manage Channels** permission can **add** or **remove** new members from the ticket",
+                    "Only members with the **Manage Channels** permission can manage the ticket."
                 )
-            if fakepermissions:
-                if fakepermissions[0] == ctx.author.id:
-                    if "manage_channels" not in fakepermissions[1]:
-                        raise CommandError(
-                            "Only members with the **Manage Channels** permission can **add** or **remove** new members from the ticket",
-                        )
+
         return True
-    
 
     return check(predicate)
+
 
 
 def ticket_exists():
