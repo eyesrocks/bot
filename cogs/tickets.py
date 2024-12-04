@@ -25,7 +25,6 @@ from discord import (  # type: ignore
     ButtonStyle,
     SelectOption,
 )
-from loguru import logger as log
 
 EMOJI_REGEX = re.compile(
     r"<(?P<animated>a?):(?P<name>[a-zA-Z0-9_]{2,32}):(?P<id>[0-9]{18,22})>"
@@ -70,7 +69,6 @@ def get_ticket():
 
 def manage_ticket():
     async def predicate(ctx: Context):
-        log.info(f"manage_ticket requested with {ctx.command.qualified_name}")
         if ctx.command.qualified_name == "help":
             return True
         acheck = await ctx.bot.db.fetchrow(
@@ -411,30 +409,6 @@ class TicketView(discord.ui.View):
         )
 
 
-class GreedDonation(discord.ui.View):
-    def __init__(self, bot: commands.AutoShardedBot):
-        self.bot = bot
-        super().__init__(timeout=None)
-
-    @discord.ui.button(
-        label="",
-        emoji="<a:Sanrio_hellokittylove:1255713730281607240>",
-        custom_id="greed:purchase",
-    )
-    async def purchase(self, interaction: discord.Interaction, button: discord.ui.Button):  # type: ignore
-        embed = discord.Embed(title="Payment Methods")
-        embed.description = """
-        > **Greed Pass Premium** requires a monthly payment of **$3.99 a month or 2 server boosts**. No additional fees and includes access to commands such as avatar history, google searching, among other commands. Once purchased, Dm a staff member with proof of payment to get the donator role. Users who owns a server with more than 500 users that has greed in it, provided with proof, qualify for greed premium free!
-        """
-        embed.color = self.bot.color
-        embed.add_field(
-            name="Cashapp Payment Only",
-            value="> <:CashApp:1252763419560640645> - $ocx01",
-        )
-        embed.set_footer(text="For questions, contact a staff member.")
-        return await interaction.response.send_message(embed=embed, ephemeral=True)
-
-
 class Tickets(Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -457,14 +431,11 @@ class Tickets(Cog):
 
     async def cog_load(self):
         await self.register_persistent_views()
-        self.bot.add_view(GreedDonation(self.bot))
 
     @commands.command(name="sendmessage", hidden=True)
     @commands.is_owner()
     async def sendmessage(self, ctx: Context, *, code: EmbedConverter):
-        view = GreedDonation(self.bot)
         code.pop("view", None)
-        code["view"] = view
         return await ctx.send(**code)
 
     @Cog.listener()

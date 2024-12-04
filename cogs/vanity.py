@@ -91,40 +91,31 @@ class Vanity(commands.Cog):
         for guild in guilds:
             await self.notify(
                 guild,
-                before.vanity_url_code,
-                after.owner
+                after.vanity_url_code,
             )
 
-    async def notify(self, guild: dict, vanity: str, owner: Optional[discord.Member]):
+    async def notify(self, guild: dict, vanity: str):
         """
         Sends a notification about a dropped vanity URL to specified guild channels across all clusters.
         """
-        channel_id = guild.get("channel_id")
+        if not guild.get("channel_id") or not vanity or vanity.lower() == "none":
+            return
+
         msg = guild.get("message")
-
-        if not channel_id:
-            return
-
-        if not vanity or vanity.lower() == "none":
-            return
-
-        channel = self.bot.get_channel(channel_id)
-        if not channel:  
-            logger.error(f"Channel with ID {channel_id} not found")
-            return
-
         message = (msg or f"Vanity **{vanity}** has been dropped").replace("{vanity}", vanity)
-        
-        message = message.replace("{description:", "").replace("}", "")
-   
+
         embed = discord.Embed(
-            title="new vanity",
-            description=message,  
-            color=self.bot.color,  
+            title="New Vanity",
+            description=message,
+            color=self.bot.color,
         )
 
         try:
-            await channel.send(embed=embed)
+            await self.bot.ipc.roundtrip(
+                "send_message", 
+                channel_id=[guild["channel_id"]],
+                embed=embed.to_dict(),
+            )
         except Exception as e:
             logger.error(f"Failed to send vanity notification: {e}")
 

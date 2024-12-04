@@ -31,10 +31,8 @@ class Giveaway(Cog):
         self.entry_updating = False
         self.locks = defaultdict(Lock)
 
-    @commands.group(name="giveaway")
+    @commands.hybrid_group(name="giveaway", aliases=["gw"], invoke_without_command=True)
     async def giveaway(self, ctx: Context):
-        if ctx.subcommand_passed is not None:  # Check if a subcommand was passed
-            return
         return await ctx.send_help(ctx.command)
 
     @giveaway.command(
@@ -416,47 +414,18 @@ class Giveaway(Cog):
 
     @giveaway.command(
         name="start",
-        brief="Create a giveaway for a users to join and win from once the time ends",
-        example=",giveaway start nitro --time 5minutes --winners 3",
-        parameters={
-            "winners": {
-                "converter": int,
-                "description": "The amount of winners",
-            },
-            "winner": {
-                "converter": int,
-                "description": "The amount of winners",
-            },
-            "timeframe": {
-                "converter": str,
-                "description": "The amount of time for the giveaway to run for",
-            },
-            "time": {
-                "converter": str,
-                "description": "The amount of time for the giveaway to run for",
-            },
-        },
+        aliases=["create"],
+        brief="Create a giveaway for users to join and win from once the time ends",
+        example=",giveaway start nitro 5m 3",
     )
     @has_permissions(manage_guild=True)
-    async def giveaway_start(self, ctx: Context, prize: str):
+    async def giveaway_start(self, ctx: Context, duration: str, winners: int = 1, *, prize: str):
         self.bot.gwctx = ctx
-        winners = ctx.parameters.get("winners") or ctx.parameters.get("winner") or 1
-        timeframe = (
-            ctx.parameters.get("timeframe") or ctx.parameters.get("time") or "24h"
-        )
-        end_time = await self.get_timeframe(timeframe)
-        message = await ctx.send(content="sup", view=GiveawayView())
+        end_time = await self.get_timeframe(duration)
+        message = await ctx.send(content="Giveaway starting...", view=GiveawayView())
         embed = await self.get_message(
             ctx.guild, prize, end_time, winners, ctx.author, message
         )
-        try:
-            embed.pop("view")
-        except Exception:
-            pass
-        try:
-            embed.pop("files")
-        except Exception:
-            pass
         await message.edit(**embed)
         await self.bot.db.execute(
             """INSERT INTO gw (guild_id, channel_id, message_id, ex, creator, winner_count) VALUES($1, $2, $3, $4, $5, $6) ON CONFLICT(guild_id, message_id) DO NOTHING""",
@@ -467,10 +436,12 @@ class Giveaway(Cog):
             ctx.author.id,
             winners,
         )
+        await ctx.success("Giveaway started successfully!")
 
     @giveaway.command(
         name="end",
         brief="End a specific giveaway from that giveaway message",
+        aliases=["stop"],
         example=",giveaway end 1234567890",
     )
     @has_permissions(manage_guild=True)
@@ -501,7 +472,7 @@ class Giveaway(Cog):
 
     @giveaway.command(
         name="dmcreator",
-        brief="Dm the creator when the giveaway has ended of the winners",
+        brief="Dm the creator when the giveaway has ended of the winner(s)",
         example=",giveaway dmcreator true",
     )
     @has_permissions(manage_guild=True)
@@ -517,7 +488,7 @@ class Giveaway(Cog):
     @giveaway.command(
         name="dmwinners",
         aliases=["dmwinner"],
-        brief="dm the creator when the giveaway has ended of the winners",
+        brief="dm the winners when the giveaway has ended",
         example=",giveaway dmwinners true",
     )
     @has_permissions(manage_guild=True)

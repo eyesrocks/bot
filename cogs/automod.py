@@ -82,7 +82,7 @@ class Automod(commands.Cog):
     @commands.has_permissions(manage_guild=True)
     async def filter_add(self: "Automod", ctx: Context, *, keywords: str):
         if "," in keywords:
-            keywords = [f.lstrip().rstrip() for f in keywords.split(",")]
+            keywords = [f.strip() for f in keywords.split(",")]
         else:
             keywords = [keywords]
         await self.check_setup(ctx.guild)
@@ -178,7 +178,7 @@ class Automod(commands.Cog):
             event = event.split(",")
         if isinstance(event, list):
             for e in event:
-                e.lstrip().rstrip()
+                e.strip()
                 if e not in [
                     "invites",
                     "links",

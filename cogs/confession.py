@@ -47,7 +47,7 @@ class ConfessionModel(Modal, title="confess"):
             )
             e.set_author(
                 name=f"anonymous confession #{count}",
-                url="https://discord.gg/greedbot",
+                url="https://discord.gg/pomice",
             )
 
             e.set_footer(text="type /confess to send a confession")
@@ -241,6 +241,12 @@ class Confessions(Cog):
     @app_commands.command()
     async def confess(self, interaction: Interaction):
         """anonymously confess your thoughts"""
+        if interaction.guild is None:
+            return await interaction.response.send_message(
+                "This command can only be used in a server.", ephemeral=True
+            )
+            
+
         re = await self.bot.db.fetchrow(
             "SELECT * FROM confess_mute WHERE guild_id = $1 AND user_id = $2",
             interaction.guild.id,

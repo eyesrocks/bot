@@ -85,7 +85,7 @@ class HelpModal(discord.ui.Modal, title="Help"):
                 return await interaction.response.defer()
             embed = Embed(color=0x36393f, timestamp=datetime.datetime.now())
             embed.set_author(name=self.ctx.author.display_name, icon_url=self.ctx.author.display_avatar.url)
-            embed.set_image(url=f"https://greed.my/{command.qualified_name.replace(' ', '_')}.png?{tuuid()}")
+            embed.set_image(url=f"https://greed.wtf/{command.qualified_name.replace(' ', '_')}.png?{tuuid()}")
             await interaction.message.edit(view=BotHelpView(self.bot, self.ctx), embed=embed)
             return await interaction.response.defer()
 
@@ -181,7 +181,7 @@ class CommandSelect(discord.ui.Select):
             color=0x36393f,
             description="\n".join(f"**{cmd}**" for cmd in commands_list) or "No commands available in this category."
         )
-        embed.set_thumbnail(url=self.view.bot.user.avatar.url)
+        embed.set_thumbnail(url=self.view.bot.user.display_avatar.url)
         embed.set_footer(text="Use the dropdown to switch categories.")
         await interaction.response.edit_message(embed=embed)
 
@@ -207,7 +207,7 @@ class MyHelpCommand(commands.HelpCommand):
 
         embed = discord.Embed(
             title="Help",
-            description="<:luma_info:1302336751599222865> **support: [/pomice](https://discord.gg/pomice)**\n<a:loading:1302351366584270899> **site: [greed](http://greed.my)**\n\n Use **,help [command name]** or select a category from the dropdown",
+            description="<:luma_info:1302336751599222865> **support: [/pomice](https://discord.gg/pomice)**\n<a:loading:1302351366584270899> **site: [greed](http://greed.wtf)**\n\n Use **,help [command name]** or select a category from the dropdown",
             color=0x36393f,
         )
         embed.set_author(name=self.context.bot.user.name, icon_url=self.context.bot.user.avatar)
@@ -259,15 +259,19 @@ class MyHelpCommand(commands.HelpCommand):
             embed.set_footer(text=f"Aliases: {aliases}・Module: {command.cog_name.replace('.py','')}・{i}/{len(commands)}")
             embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
             embeds[command.qualified_name] = {"embed": embed, "name": command.qualified_name, "description": command.brief}
-        await self.context.send(
-            embed=Embed(
-                color=0x36393f,
-                title=f'**Need help with {group.qualified_name}?**',
-                url='https://greed.my/Commands',
-                description=f"<:settings_icon:1302207796737085533> **Usage**\n> **{group.qualified_name}** has {len([i for i in group.walk_commands()])} sub commands that can be used. To view all commands for **{group.qualified_name}**, use the help menu below or visit our [**website**](https://greed.my/)",
-            ),
-            view=HelpInterface(self.context.bot, embeds)
-        )
+        
+        if len(embeds) > 25:
+            pages = ctx.paginate(embeds)
+        else:
+            await self.context.send(
+                embed=Embed(
+                    color=0x36393f,
+                    title=f'**Need help with {group.qualified_name}?**',
+                    url='https://greed.wtf/Commands',
+                    description=f"<:settings_icon:1302207796737085533> **Usage**\n> **{group.qualified_name}** has {len([i for i in group.walk_commands()])} sub commands that can be used. To view all commands for **{group.qualified_name}**, use the help menu below or visit our [**website**](https://greed.wtf/)",
+                ),
+                view=HelpInterface(self.context.bot, embeds)
+            )
 
     async def send_command_help(self, command):
         if retry_after := await self.context.bot.glory_cache.ratelimited(f"rl:user_commands{self.context.author.id}", 2, 4):

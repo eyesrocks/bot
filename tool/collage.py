@@ -1,10 +1,10 @@
 from tool.worker import offloaded  # type: ignore
 import asyncio
 from typing import Optional, Union, Any, List
-from functools import wraps
+from functools import wraps, partial
 from io import BytesIO
 from math import sqrt
-from PIL import Image
+from PIL import Image, ImageDraw, ImageMath
 import aiohttp
 import discord
 from loguru import logger
@@ -54,8 +54,6 @@ async def _validate_image_(data: bytes):
 def _make_bar(percentage_1: float, color_1: str, percentage_2: float, color_2: str, bar_width: int = 10, height: int = 1, corner_radius: float = 0.2) -> bytes:
     import matplotlib.pyplot as plt
     from matplotlib.patches import PathPatch, Path
-    from PIL import Image
-    from io import BytesIO
     import matplotlib
     matplotlib.use("Agg")
 
@@ -124,10 +122,8 @@ def _make_bar(percentage_1: float, color_1: str, percentage_2: float, color_2: s
 def _make_chart(name: str, data: list, avatar: bytes) -> bytes:
     import matplotlib
     import matplotlib.pyplot as plt
-    from PIL import Image, ImageDraw, ImageMath
     from humanize import naturaldelta
     from datetime import timedelta
-    from io import BytesIO
 
     matplotlib.use("agg")
     plt.switch_backend("agg")

@@ -59,7 +59,7 @@ def get_timezone(location: str) -> str:
     timezone = tf.timezone_at(lng=location.longitude, lat=location.latitude)
     if timezone is None:
         raise ValueError("Timezone not found for the given location")
-
+    logger.info(timezone)
     return timezone
 
 
@@ -452,7 +452,12 @@ class Information(commands.Cog):
             return f"**{ban.user.name}#{ban.user.discriminator}**"
 
     async def get_time(self, timezone: str):
-        return int(datetime.now(tz=pytz.timezone(timezone)).timestamp())  # type: ignore
+        try:
+            tz = pytz.timezone(timezone)
+            logger.info(tz)
+            return datetime.now(tz=tz).strftime('%-I:%M%p').lower()
+        except pytz.UnknownTimeZoneError:
+            raise ValueError(f"Unknown timezone: {timezone}")
 
     @commands.command(name = "status", brief = "check on discord's status")
     async def status(self, ctx: Context):
@@ -533,7 +538,7 @@ class Information(commands.Cog):
             """SELECT tz FROM timezone WHERE user_id = $1""", member.id
         ):
             return await ctx.success(
-                f"{member.mention}'s **current time** is <t:{await self.get_time(data)}:F>"
+                f"{member.mention}'s **current time** is ``{await self.get_time(data)}``"
             )
         else:
             return await ctx.fail(
@@ -562,7 +567,7 @@ class Information(commands.Cog):
             )
             current_time = await self.get_time(data)
             return await ctx.success(
-                f"Set your current time to <t:{current_time}:F>"
+                f"Set your current time to ``{current_time}``"
             )
         else:
             return await ctx.fail(f"Could not find a timezone for `{timezone}`")
@@ -661,7 +666,7 @@ class Information(commands.Cog):
     @commands.command(
         name="botinfo",
         aliases=["bi", "system", "sys"],
-        brief="View greed bots information on its growth",
+        brief="View the bots information on its growth",
         example=",botinfo",
     )
     async def botinfo(self, ctx: Context):
@@ -670,7 +675,7 @@ class Information(commands.Cog):
         embed = discord.Embed(
             color=self.bot.color,
             title="**invite**",
-            url="https://discord.com/oauth2/authorize?client_id=1149535834756874250",
+            url=f"https://discord.com/oauth2/authorize?client_id={self.bot.user.id}",
         )
         usage = psutil.disk_usage("/")
         #
@@ -813,13 +818,6 @@ class Information(commands.Cog):
         brief="View information on a user's account",
     )
     async def whois(self, ctx, user: Member = None):
-        loading_embed = discord.Embed(color=self.bot.color, description="<a:lavishloading:1310941946944159816> **loading user info**")
-        loading_message = await ctx.reply(embed=loading_embed, mention_author=False)
-
-        await asyncio.sleep(2.5)
-
-
-
         """View some information on a user"""
 
         user = user or ctx.author
@@ -1006,8 +1004,8 @@ class Information(commands.Cog):
             text=f"{len(mutual_guilds)} mutuals, Join position: {position}"
         )
 
-        await loading_message.edit(embed=embed)
-
+        await ctx.send(embed=embed)
+        
     @commands.command(
         name="serveravatar",
         description="View the avatar of a user for a server",
@@ -1802,7 +1800,7 @@ class Information(commands.Cog):
         embed = discord.Embed(
             title="Purchase Subscription",
             description=(
-                "Purchase **$6** one time or **$3.50** monthly or **$10** for a custom bot\n\n"
+                "Purchase **$10** one time or **$3.50** monthly\n\n"
                 "If you're interested in purchasing a subscription for a Discord server of your choice, "
                 "please open a ticket below to buy or if you purchased a server subscription\n\n"
                 "Prices and the available payment methods are listed here.\n\n"
@@ -1814,13 +1812,13 @@ class Information(commands.Cog):
 
 
         monthly_button = Button(label="Monthly - $3.50", style=discord.ButtonStyle.green, url="https://buy.stripe.com/aEUdUJc8w3uf6qsfZ7")
-        lifetime_button = Button(label="Lifetime - $6", style=discord.ButtonStyle.blurple, url="https://buy.stripe.com/dR6dUJb4s5Cn4ik3co")
-        custom_button = Button(label="custom bot - $10", style=discord.ButtonStyle.secondary, url="https://buy.stripe.com/dR6bMB1tSgh1eWY28n")
+        lifetime_button = Button(label="Lifetime - $10", style=discord.ButtonStyle.blurple, url="https://buy.stripe.com/dR6bMBa0ogh1dSUaEE")
+
 
         view = View()
         view.add_item(monthly_button)
         view.add_item(lifetime_button)
-        view.add_item(custom_button)
+
 
         await ctx.send(embed=embed, view=view)
 
@@ -1834,7 +1832,30 @@ class Information(commands.Cog):
         """Get the support server invite link."""
         await ctx.success("**[greed support](https://discord.com/channels/1301617147964821524/1302829884900376577)**")
 
-    
+
+    @commands.command(
+        brief="Get a random bible verse",
+        example=",bible"
+    )
+    async def bible(self, ctx):
+        async with self.bot.session.get("https://beta.ourmanna.com/api/v1/get/?format=json") as response:
+            data = await response.json()
+            verse = data["verse"]["details"]["text"]
+            verse_reference = data["verse"]["details"]["reference"]
+            await ctx.send(f"{verse} - {verse_reference}")
+            logger.info(data)
+            
+    @commands.command(
+        name="quran",
+        brief="Get a random quran verse",
+        example=",quran",
+    )
+    async def quran(self, ctx):
+        """Get a random quran verse."""
+        async with self.bot.session.get("https://api.alquran.cloud/v1/ayah/random") as response:
+            data = await response.json()
+            verse = data["data"]["text"]
+            await ctx.send(verse)
 
 
 

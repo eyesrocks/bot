@@ -28,7 +28,7 @@ async def add_keyword(
     guild: Guild, keyword: Union[str, List[str]], migrate: Optional[bool] = False
 ) -> bool:
     automod_rules = await guild.fetch_automod_rules()
-    keyword_rule = utils.get(automod_rules, name="greed-keywords")
+    keyword_rule = utils.get(automod_rules, name=f"keywords")
 
     if keyword_rule:
         if migrate:
@@ -46,13 +46,13 @@ async def add_keyword(
         if migrate:
             keywords = [keyword] if isinstance(keyword, str) else keyword
             await guild.create_automod_rule(
-                name="greed-keywords",
+                name="keywords",
                 event_type=AutoModRuleEventType.message_send,
                 trigger=AutoModTrigger(keyword_filter=keywords),
                 enabled=True,
                 actions=[
                     AutoModRuleAction(
-                        custom_message="Greed Blocked you from saying this"
+                        custom_message="The bot Blocked you from saying this"
                     )
                 ],
             )
@@ -62,7 +62,7 @@ async def add_keyword(
 
 async def clear_keywords(guild: Guild) -> bool:
     automod_rules = await guild.fetch_automod_rules()
-    keyword_rule = utils.get(automod_rules, name="greed-keywords")
+    keyword_rule = utils.get(automod_rules, name="keywords")
     if keyword_rule:
         await keyword_rule.delete()
         return True
@@ -71,7 +71,7 @@ async def clear_keywords(guild: Guild) -> bool:
 
 async def remove_keyword(guild: Guild, keyword: str) -> bool:
     automod_rules = await guild.fetch_automod_rules()
-    keyword_rule = utils.get(automod_rules, name="greed-keywords")
+    keyword_rule = utils.get(automod_rules, name="keywords")
     if keyword_rule and keyword_rule.trigger.type == AutoModRuleTriggerType.keyword:
         new_keywords = keyword_rule.trigger.keyword_filter
         new_keywords.remove(keyword[:59])

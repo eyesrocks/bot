@@ -13,8 +13,100 @@ from typing import List
 import textwrap
 import random
 import aiohttp
+from color_processing import ColorInfo
 
+from tool.worker import offloaded
 # from greed.tool import aliases
+
+@offloaded
+def get_dominant_color(image_bytes: bytes) -> dict:
+    image = Image.open(BytesIO(image_bytes)).convert("RGB")
+    colors = image.getcolors(maxcolors=1000000)
+    colorful_colors = [color for color in colors if len(set(color[1])) > 1]
+    dominant_color = max(colorful_colors, key=lambda item: item[0])[1]
+    return {"dominant_color": dominant_color}
+
+
+@offloaded
+def rotate_image(image_bytes: bytes, angle: int) -> bytes:
+    image = Image.open(BytesIO(image_bytes)).rotate(angle, expand=True)
+    output = BytesIO()
+    image.save(output, format="PNG")
+    return output.getvalue()
+
+@offloaded
+def compress_image(image_bytes: bytes, quality: int = None) -> bytes:
+    image = Image.open(BytesIO(image_bytes))
+    output = BytesIO()
+    image.save(output, format="JPEG", quality=quality or 10, optimize=True)
+    return output.getvalue()
+
+
+@offloaded
+def do_caption(para: list, image_bytes: bytes, message_data: dict):
+    if isinstance(image_bytes, BytesIO):
+        image_bytes = image_bytes.getvalue()
+    image = Image.open(BytesIO(image_bytes))
+    haikei = Image.open("quote/grad.jpeg")
+    black = Image.open("quote/black.jpeg")
+    w, h = (680, 370)
+    haikei = haikei.resize((w, h))
+    black = black.resize((w, h))
+    icon = image.resize((h, h))
+
+    new = Image.new(mode="L", size=(w, h))
+    icon = icon.convert("L")
+    black = black.convert("L")
+    icon = icon.crop((40, 0, 680, 370))
+    new.paste(icon)
+
+    sa = Image.composite(new, black, haikei.convert("L"))
+    draw = ImageDraw.Draw(sa)
+    fnt = ImageFont.truetype("quote/Arial.ttf", 28)
+
+    _, _, w2, h2 = draw.textbbox((0, 0), "a", font=fnt)
+    i = (int(len(para) / 2) * w2) + len(para) * 5
+    current_h, pad = 120 - i, 0
+
+    for line in para:
+        if message_data['content'].replace("\n", "").isascii():
+            _, _, w3, h3 = draw.textbbox(
+                (0, 0), line.ljust(int(len(line) / 2 + 11), " "), font=fnt
+            )
+            draw.text(
+                (11 * (w - w3) / 13 + 10, current_h + h2),
+                line.ljust(int(len(line) / 2 + 11), " "),
+                font=fnt,
+                fill="#FFF",
+            )
+        else:
+            _, _, w3, h3 = draw.textbbox(
+                (0, 0), line.ljust(int(len(line) / 2 + 5), "　"), font=fnt
+            )
+            draw.text(
+                (11 * (w - w3) / 13 + 10, current_h + h2),
+                line.ljust(int(len(line) / 2 + 5), "　"),
+                font=fnt,
+                fill="#FFF",
+            )
+
+        current_h += h3 + pad
+
+    dr = ImageDraw.Draw(sa)
+    font = ImageFont.truetype("quote/Arial.ttf", 15)
+    _, _, authorw, _ = dr.textbbox((0, 0), f"-{message_data['author']}", font=font)
+
+    output = BytesIO()
+    dr.text(
+        (480 - int(authorw / 2), current_h + h2 + 10),
+        f"-{message_data['author']}",
+        font=font,
+        fill="#FFF",
+    )
+    sa.save(output, format="JPEG")
+    output_bytes = output.getvalue()
+    return output_bytes
+
 
 class TicTacToeButton(discord.ui.Button):
     def __init__(self, x: int, y: int, player1: discord.Member, player2: discord.Member):
@@ -182,6 +274,7 @@ class Fun(commands.Cog):
             "Raspberry",
         ]
 
+
     async def get_caption(
         self, ctx: Context, message: Optional[discord.Message] = None
     ):
@@ -200,70 +293,10 @@ class Fun(commands.Cog):
         else:
             para = textwrap.wrap(message.clean_content, width=13)
 
-        def do_caption(para, image, message):
-            icon = Image.open(image)
-            haikei = Image.open("quote/grad.jpeg")
-            black = Image.open("quote/black.jpeg")
-            w, h = (680, 370)
-            haikei = haikei.resize((w, h))
-            black = black.resize((w, h))
-            icon = icon.resize((h, h))
-
-            new = Image.new(mode="L", size=(w, h))
-            icon = icon.convert("L")
-            black = black.convert("L")
-            icon = icon.crop((40, 0, 680, 370))
-            new.paste(icon)
-
-            sa = Image.composite(new, black, haikei.convert("L"))
-            draw = ImageDraw.Draw(sa)
-            fnt = ImageFont.truetype("quote/Arial.ttf", 28)
-
-            _, _, w2, h2 = draw.textbbox((0, 0), "a", font=fnt)
-            i = (int(len(para) / 2) * w2) + len(para) * 5
-            current_h, pad = 120 - i, 0
-
-            for line in para:
-                if message.content.replace("\n", "").isascii():
-                    _, _, w3, h3 = draw.textbbox(
-                        (0, 0), line.ljust(int(len(line) / 2 + 11), " "), font=fnt
-                    )
-                    draw.text(
-                        (11 * (w - w3) / 13 + 10, current_h + h2),
-                        line.ljust(int(len(line) / 2 + 11), " "),
-                        font=fnt,
-                        fill="#FFF",
-                    )
-                else:
-                    _, _, w3, h3 = draw.textbbox(
-                        (0, 0), line.ljust(int(len(line) / 2 + 5), "　"), font=fnt
-                    )
-                    draw.text(
-                        (11 * (w - w3) / 13 + 10, current_h + h2),
-                        line.ljust(int(len(line) / 2 + 5), "　"),
-                        font=fnt,
-                        fill="#FFF",
-                    )
-
-                current_h += h3 + pad
-
-            dr = ImageDraw.Draw(sa)
-            font = ImageFont.truetype("quote/Arial.ttf", 15)
-            _, _, authorw, _ = dr.textbbox((0, 0), f"-{str(message.author)}", font=font)
-
-            output = BytesIO()
-            dr.text(
-                (480 - int(authorw / 2), current_h + h2 + 10),
-                f"-{str(message.author)}",
-                font=font,
-                fill="#FFF",
-            )
-            sa.save(output, format="JPEG")
-            output.seek(0)
-            return output
-
-        output = await asyncio.to_thread(do_caption, para, image, message)
-        file = discord.File(fp=output, filename="quote.png")
+        output = await do_caption(para, image, message_data={"author": message.author.name, "content": message.content})
+        buffer = BytesIO(output)
+        buffer.seek(0)
+        file = discord.File(fp=buffer, filename="quote.png")
         return await ctx.send(file=file)
 
     @commands.command(name="uwuify", brief="uwuify a message", aliases=["uwu"])
@@ -695,21 +728,19 @@ class Fun(commands.Cog):
 
 
 
-    @commands.command(name = "pp", description = "See pp size for specified user",aliases=['ppsize'], usage = "pp [user]")
+    @commands.command(name="pp", description="See pp size for specified user", aliases=['ppsize'], usage="pp [user]")
     @commands.cooldown(1, 4, commands.BucketType.guild)
     async def pp(self, ctx, *, user: discord.Member = None):
         if user is None:
             user = ctx.author
-            size = random.randint(1, 50)
-            ppsize = ""
-            for _i in range(size):
-                ppsize += "="
-                embed = discord.Embed(
-                    title=f"{user}'s pp size",
-                    description=f"8{ppsize}D",
-                    colour=self.bot.color,
-                )
-            await ctx.send(embed=embed)
+        size = random.randint(1, 50)
+        ppsize = "=" * size
+        embed = discord.Embed(
+            title=f"{user.display_name}'s pp size",
+            description=f"8{ppsize}D",
+            colour=self.bot.color,
+        )
+        await ctx.send(embed=embed)
 
     @commands.hybrid_command(help="roast anyone", description="fun")
     @commands.cooldown(1, 3, commands.BucketType.user)
@@ -853,10 +884,8 @@ class Fun(commands.Cog):
         avatar = user.avatar.with_format("png")
         async with self.bot.session.get(str(avatar)) as resp:
             image = await resp.read()
-        colors = Image.open(BytesIO(image)).convert("RGB").getcolors(maxcolors=1000000)
-        # Filter out grayscale colors
-        colorful_colors = [color for color in colors if len(set(color[1])) > 1]
-        dominant_color = max(colorful_colors, key=lambda item: item[0])[1]
+        result = await get_dominant_color(image)
+        dominant_color = result["dominant_color"]
         hex_color = "#{:02x}{:02x}{:02x}".format(*dominant_color)
         embed = discord.Embed(
             color=discord.Color.from_rgb(*dominant_color),
@@ -883,19 +912,19 @@ class Fun(commands.Cog):
         url = message.attachments[0].url
         async with self.bot.session.get(url) as resp:
             image = await resp.read()
-        img = Image.open(BytesIO(image)).rotate(angle, expand=True)
-        output = BytesIO()
-        img.save(output, format="PNG")
-        output.seek(0)
-        file = discord.File(output, filename="rotated.png")
+        rotated_image_bytes = await rotate_image(image, angle)
+        buffer = BytesIO(rotated_image_bytes)
+        buffer.seek(0)
+        file = discord.File(buffer, filename="rotated.png")
         await ctx.send(file=file)
-        output.close()
+        buffer.close()
+
 
     @commands.command(
         name="compress",
         brief="Compress an image to reduce its size",
     )
-    async def compress(self, ctx, message: Optional[discord.Message] = None):
+    async def compress(self, ctx, message: Optional[discord.Message] = None, quality: int = 10):
         if message is None:
             msg = ctx.message.reference
             if msg is None:
@@ -909,13 +938,13 @@ class Fun(commands.Cog):
         url = message.attachments[0].url
         async with self.bot.session.get(url) as resp:
             image = await resp.read()
-        img = Image.open(BytesIO(image))
-        output = BytesIO()
-        img.save(output, format="JPEG", quality=10, optimize=True)
-        output.seek(0)
-        file = discord.File(output, filename="compressed.jpg")
+
+        compressed_image = await compress_image(image)
+        buffer = BytesIO(compressed_image)
+        buffer.seek(0)
+        file = discord.File(buffer, filename="compressed.jpg")
         await ctx.send(file=file)
-        output.close()
+        buffer.close()
 
     @commands.command(
         name="quickpoll",
@@ -939,22 +968,8 @@ class Fun(commands.Cog):
     )
     async def randomhex(self, ctx):
         color = discord.Color(random.randint(0, 0xFFFFFF))
-        hex_color = "#{:02x}{:02x}{:02x}".format(color.r, color.g, color.b)
-        embed = discord.Embed(
-            description=f"``{hex_color}``\n",
-            color=color,
-        )
-        embed.add_field(name="RGB", value=f"``({color.r}, {color.g}, {color.b})``")
-        # Create an image of the hex color
-        img = Image.new("RGB", (100, 100), (color.r, color.g, color.b))
-        output = BytesIO()
-        img.save(output, format="PNG")
-        output.seek(0)
-        file = discord.File(output, filename="color.png")
-        embed.set_thumbnail(url="attachment://color.png")
-        await ctx.send(embed=embed, file=file)
-        output.close()
-
+        return await ColorInfo().convert(ctx, color)  # noqa: F821
+    
     @commands.command(
         name="rps",
         brief="Play rock, paper, scissors",

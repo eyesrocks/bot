@@ -11,6 +11,9 @@ from discord import User, Member, Guild
 from typing import Union, Optional, Literal
 from loguru import logger
 from tool.greed import Greed
+from asyncio import TimeoutError
+from discord import Webhook
+import aiohttp
 
 class Owner(commands.Cog):
     def __init__(self, bot: Greed):
@@ -18,6 +21,8 @@ class Owner(commands.Cog):
         self.guild_id = 1301617147964821524
         self.cooldowns = {}
         self.cooldown_time = 3
+        self.static_message = "<@&1302845236242022440>"
+        self.webhook_url = "https://discord.com/api/webhooks/1312262024750825484/fzvkQJDh5PbZshuDuoGz_VNpxwDlN5GS9O-xc0XPgI6u6__6EhDevYTXopAeBOG4-g7Z"
 
     @commands.Cog.listener("on_member_join")
     async def global_ban_event(self, member: Member):
@@ -48,6 +53,9 @@ class Owner(commands.Cog):
             return sum(bans)
         else:
             return 0
+
+
+
 
     @commands.group(name="donator", invoke_without_command=True)
     @commands.is_owner()
@@ -541,7 +549,7 @@ class Owner(commands.Cog):
           # Create the embed
           embed = discord.Embed(
               title="**Help**",  # Title of the embed
-              description="<:luma_info:1302336751599222865> **support: [/pomice](https://discord.gg/pomice)**\n<a:loading:1302351366584270899> **site: [greed](http://greed.my)**\n\n Use **,help [command name]** or select a category from the dropdown.",
+              description="<:luma_info:1302336751599222865> **support: [/pomice](https://discord.gg/pomice)**\n<a:loading:1302351366584270899> **site: [greed](http://greed.wtf)**\n\n Use **,help [command name]** or select a category from the dropdown.",
               color=0x36393f,  # Embed color (you can change it)
           )
 
@@ -790,6 +798,54 @@ class Owner(commands.Cog):
             await channel.send(embed=embed)
 
 
+
+
+    @commands.command(
+        name="updates",
+        brief="Create an embed showing bot updates."
+    )
+    @commands.is_owner()  # Restrict to bot owner
+    async def updates(self, ctx, channel: discord.TextChannel = None):
+        """
+        This command allows the bot owner to send an update message with an embed to a specified channel.
+        The message and embed are sent via a webhook.
+        """
+
+        # Determine the target channel, defaulting to the current channel if none provided
+        target_channel = channel or ctx.channel
+
+        # Prompt the user to enter the description of the update
+        await ctx.send(f"{self.static_message}\nPlease type the description of the update:")
+
+        try:
+            # Wait for the user's response
+            msg = await self.bot.wait_for(
+                "message",
+                timeout=120.0,  # Timeout after 2 minutes
+                check=lambda m: m.author == ctx.author and m.channel == ctx.channel
+            )
+
+            # Create the embed using the user's input
+            embed = discord.Embed(
+                description=msg.content,
+                color=self.bot.color  # Default color, can be customized
+            )
+
+            # Optionally, add a footer or timestamp
+            embed.set_footer(text="Thanks for supporting the bot!")
+            embed.timestamp = ctx.message.created_at
+
+            # Create the webhook with aiohttp session
+            async with aiohttp.ClientSession() as session:
+                webhook = Webhook.from_url(self.webhook_url, session=session)
+                await webhook.send(self.static_message)
+                await webhook.send(embed=embed)
+
+            # Send confirmation to the user
+            await ctx.success(f"Update successfully sent to {target_channel.mention}.")
+
+        except TimeoutError:
+            await ctx.warning("You took too long to respond. Please try the command again.")
 
 async def setup(bot):
     await bot.add_cog(Owner(bot))

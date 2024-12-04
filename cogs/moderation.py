@@ -34,7 +34,7 @@ from num2words import num2words
 from enum import Enum, auto
 from pydantic import BaseModel
 import uuid
-import pytz
+from asyncpg import exceptions
 
 class ModerationStatistics(BaseModel):
     bans: Optional[int] = 0
@@ -89,13 +89,26 @@ class InvalidError(TypeError):
 
 class GuildChannel(commands.Converter):
     async def convert(self, ctx: Context, argument: str):
-        channels = {
-            c.name: c.id for c in ctx.guild.channels if c.type.name != "category"
-        }
+        # Check if the argument is a channel ID
+        if argument.isdigit():
+            channel = ctx.guild.get_channel(int(argument))
+            if channel and isinstance(channel, discord.abc.GuildChannel):
+                return channel
+
+        # Check if the argument is a channel mention
+        match = re.match(r'<#(\d+)>', argument)
+        if match:
+            channel_id = int(match.group(1))
+            channel = ctx.guild.get_channel(channel_id)
+            if channel and isinstance(channel, discord.abc.GuildChannel):
+                return channel
+
+        # Check if the argument is a channel name
+        channels = {c.name: c.id for c in ctx.guild.channels if isinstance(c, discord.abc.GuildChannel)}
         if match := closest_match(argument, list(channels.keys())):
             return ctx.guild.get_channel(channels[match])
-        else:
-            raise commands.CommandError(f"Channel `{argument}` not found")
+
+        raise commands.CommandError(f"Channel `{argument}` not found")
 
 class Args:
     def __init__(self, count: Optional[int] = 2):
@@ -103,7 +116,7 @@ class Args:
 
     async def convert(self, ctx: Context, argument: str):
         if "," in argument:
-            args = [i.lstrip().rstrip() for i in argument.split(",", (self.count - 1))]
+            args = [i.strip() for i in argument.split(",", (self.count - 1))]
         else:
             if argument.count(" ") == 1:
                 args = argument.split(" ", (self.count - 1))
@@ -274,17 +287,20 @@ class Moderation(Cog):
         await channel.edit(slowmode_delay=0)
         return True
 
+    
     async def moderator_logs(self, ctx: Context, description: str):
-        await self.bot.db.execute(
-            """INSERT INTO moderation_logs (id, guild_id, user_id, action_type, created_at) VALUES ($1, $2, $3, $4, $5)""",
-            ctx.message.id,
-            ctx.author.id,
-            ctx.guild.id,
-            description,
-            datetime.datetime.now()
-        )
+        try:
+            await self.bot.db.execute(
+                """INSERT INTO moderation_logs (id, guild_id, user_id, action_type, created_at) VALUES ($1, $2, $3, $4, $5)""",
+                ctx.message.id,
+                ctx.guild.id,
+                ctx.author.id,
+                description,
+                datetime.datetime.now()
+            )
+        except exceptions.UniqueViolationError:
+            print(f"Record with id {ctx.message.id} already exists. Skipping insertion.")
         return
-
     @commands.command(
         name="nsfw", brief="Toggle nsfw for a channel", example=",nsfw #channel"
     )
@@ -631,7 +647,7 @@ class Moderation(Cog):
     @commands.command(
         name="topic",
         brief="change the channel topic",
-        example=",topic sudosql is the best",
+        example=",topic general sudosql is the best",
     )
     @commands.bot_has_permissions(manage_channels=True)
     @commands.has_permissions(manage_channels=True)
@@ -1591,10 +1607,10 @@ class Moderation(Cog):
         # else:
         #     imute_role = await ctx.guild.create_role(name="imute")
         await self.setup_mute_roles(ctx)
-        category = discord.utils.get(ctx.guild.categories, name="greed-mod")
+        category = discord.utils.get(ctx.guild.categories, name=f"{self.bot.user.name}-mod")
         if not category:
             category = await ctx.guild.create_category_channel(
-                name="greed-mod",
+                name=f"{self.bot.user.name}-mod",
                 overwrites={
                     ctx.guild.default_role: discord.PermissionOverwrite(
                         view_channel=False
@@ -1779,8 +1795,27 @@ class Moderation(Cog):
         await self.moderator_logs(ctx, f"unmuted **{member.name}**")
 
     @commands.command(
-        name="forcenick",
+        name="nickname",
         aliases=["nick"],
+        brief="Change a users nickname in the guild",
+    )
+    @commands.has_permissions(manage_nicknames=True)
+    async def nickname(self, ctx, member: discord.Member, *, nickname: str = None):
+        if not (r := await self.bot.hierarchy(ctx, member)):
+            return r
+        if member.top_role >= ctx.author.top_role:
+            return await ctx.fail(f"you aren't higher then {member.mention} is")
+        if member == ctx.guild.owner:
+            return await ctx.fail("you can't change the nickname of the owner")
+        if nickname is None:
+            await member.edit(nick=None)
+            return await ctx.success(f"**Reset** {member.mention}'s nickname")
+        await member.edit(nick=nickname)
+        return await ctx.success(f"**Changed** {member.mention}'s nickname to **{nickname}**")
+
+    @commands.command(
+        name="forcenick",
+        aliases=["fn"],
         brief="Force/Remove the force of a users nickname in a guild",
         example="forcenick @sudosql catboy",
     )

@@ -454,7 +454,9 @@ class LastFM(commands.Cog):
         )
 
         if not track:
-            return await ctx.send("No recent tracks found.")
+            return await ctx.fail("No recent tracks found.")
+        if not track["recenttracks"]["track"]:
+            return await ctx.fail("No recent tracks found.")
         track_data = track["recenttracks"]["track"][0]
         artist = track_data["artist"]["#text"]
         uzr = uzar["user"]
@@ -834,13 +836,14 @@ class LastFM(commands.Cog):
         )
         return await self.bot.dummy_paginator(ctx, embed, rows, 10)
 
-    @lastfm.command(
-        "whoknows",
+    @lastfm.group(
+        name="whoknows",
         brief="Shows what other users listen to the current track in your server",
         aliases=["similar", "wk"],
         example=",lastfm whoknows Juice Wrld",
+        invoke_without_command=True,
     )
-    async def lastfm_crowns(self, ctx: Context, *, artist_name: str = None):
+    async def lastfm_whoknows(self, ctx: Context, *, artist_name: str = None):
         if not (
             conf := await self.bot.db.fetchrow(
                 "SELECT * FROM lastfm.conf WHERE user_id = $1", ctx.author.id
@@ -902,7 +905,212 @@ class LastFM(commands.Cog):
                 )
             )
         return await ctx.paginate(embeds)
+    
+    @lastfm_whoknows.command(
+        name="global", 
+        brief="Shows what other users listen to the current track globally",
+        example=",lastfm whoknows global Juice Wrld"
+    )
+    async def lastfm_whoknows_global(self, ctx: Context, *, artist_name: str = None):
+        if not (conf := await self.bot.db.fetchrow(
+            "SELECT * FROM lastfm.conf WHERE user_id = $1", ctx.author.id
+        )):
+            return await ctx.fail("You do **not** have a **Last.FM account linked**")
+
+        if not artist_name:
+            data = await self.requester.get(
+                method="user.getrecenttracks", user=conf.username
+            )
+            if "error" in data or not data["recenttracks"]["track"]:
+                return await ctx.fail("Invalid username or no recent tracks.")
+            artist_name = data["recenttracks"]["track"][0]["artist"]["#text"]
+
+        async with ctx.typing():
+            data = [
+                {
+                    "user_id": int(user_id),
+                    "user": user,
+                    "artist": artist,
+                    "plays": plays,
+                }
+                for user_id, user, artist, plays in await self.bot.db.fetch(
+                    "SELECT user_id, username, artists, tracks FROM lastfm.users"
+                )
+            ]
+
+            chunk_size = 5
+            for i in range(0, len(data), chunk_size):
+                chunk = data[i:i + chunk_size]
+                for item in chunk:
+                    item["artists"] = orjson.loads(item["artist"])
+                    item["plays"] = sum(
+                        artist["plays"]
+                        for artist in item["artists"]
+                        if artist["name"].lower() == artist_name.lower()
+                    )
+                    if item["plays"] > 0:
+                        user = self.bot.get_user(item["user_id"])
+                        if user is None:
+                            try:
+                                user = await self.bot.fetch_user(item["user_id"])
+                            except discord.HTTPException:
+                                item["username"] = "Unknown"
+                                continue
+                        item["username"] = user.display_name
+                await asyncio.sleep(0.5)
+
+            data = [item for item in data if item["plays"] > 0]
+            data = sorted(data, key=lambda x: x["plays"], reverse=True)
+
+            if len(data) > 0:
+                await self.bot.db.execute(
+                    """INSERT INTO lastfm_crowns (guild_id, artist, user_id, plays) 
+                    VALUES($1,$2,$3,$4) ON CONFLICT(guild_id, artist) 
+                    DO UPDATE SET user_id = $3, plays = $4""",
+                    ctx.guild.id,
+                    artist_name,
+                    data[0]["user_id"],
+                    data[0]["plays"],
+                )
+
+            embeds = []
+            for i, p in enumerate(chunks(data, 10), start=1):
+                description = "\n".join(
+                    f"> `{i}.` **[{item['username']}](https://www.last.fm/user/{item['user']}) - {item['plays']} plays{' 👑' if i == 1 else ''}**"
+                    for i, item in enumerate(p, start=(i - 1) * 10 + 1)
+                )
+                embeds.append(
+                    discord.Embed(
+                        title=f"{artist_name} most plays",
+                        description=description,
+                        color=0x2B2D31,
+                    )
+                )
             
+            if not embeds:
+                return await ctx.fail("No plays found for this artist.")
+                
+            return await ctx.paginate(embeds)
+
+    @lastfm.command(
+        name="topartists",
+        aliases=["ta"],
+        brief="View the top artists of a user",
+        example=",lastfm topartists",
+    )
+    async def lastfm_topartists(self, ctx: Context, user: discord.Member = None):
+        user = user or ctx.author
+        if not (
+            conf := await self.bot.db.fetchrow(
+                "SELECT * FROM lastfm.conf WHERE user_id = $1", user.id
+            )
+        ):
+            return await ctx.fail("You do **not** have a **Last.FM account linked**")
+
+        data = await self.requester.get(
+            method="user.gettopartists", user=conf.username
+        )
+        if "error" in data:
+            return await ctx.fail("Invalid username.")
+
+        artists = [
+            f"> `{i+1}.` **{artist['name']}** - {artist['playcount']} plays"
+            for i, artist in enumerate(data["topartists"]["artist"]) 
+        ]
+        embeds = []
+        for i, chunk in enumerate(chunks(artists, 10), start=1):
+            embeds.append(
+                discord.Embed(
+                    title=f"{conf.username}'s top artists",
+                    description="\n".join(chunk),
+                    color=0x2B2D31,
+                ).set_thumbnail(url=user.avatar.url if user else ctx.author.default_avatar.url)
+            )
+        if not embeds:
+            return await ctx.fail("No artists found.")
+
+        return await ctx.paginate(embeds)
+
+    @lastfm.command(
+        name="toptracks",
+        aliases=["tt"],
+        brief="View the top tracks of a user",
+        example=",lastfm toptracks",
+    )
+    async def lastfm_toptracks(self, ctx: Context, user: discord.Member = None):
+        user = user or ctx.author
+        if not (
+            conf := await self.bot.db.fetchrow(
+                "SELECT * FROM lastfm.conf WHERE user_id = $1", user.id
+            )
+        ):
+            return await ctx.fail("You do **not** have a **Last.FM account linked**")
+
+        data = await self.requester.get(
+            method="user.gettoptracks", user=conf.username
+        )
+        if "error" in data:
+            return await ctx.fail("Invalid username.")
+
+        tracks = [
+            f"> `{i+1}.` **{track['name']}** - {track['playcount']} plays"
+            for i, track in enumerate(data["toptracks"]["track"])
+        ]
+        embeds = []
+        for i, chunk in enumerate(chunks(tracks, 10), start=1):
+            embeds.append(
+                discord.Embed(
+                    title=f"{conf.username}'s top tracks",
+                    description="\n".join(chunk),
+                    color=0x2B2D31,
+                ).set_thumbnail(url=user.avatar.url if user else ctx.author.default_avatar.url)
+            )
+        if not embeds:
+            return await ctx.fail("No tracks found.")
+
+        return await ctx.paginate(embeds)
+
+    @lastfm.command(
+        name="topalbums",
+        aliases=["tal"],
+        brief="View the top albums of a user",
+        example=",lastfm topalbums",
+    )
+    async def lastfm_topalbums(self, ctx, user: discord.Member = None):
+        user = user or ctx.author
+        if not (
+            conf := await self.bot.db.fetchrow(
+                "SELECT * FROM lastfm.conf WHERE user_id = $1", user.id
+            )
+        ):
+            return await ctx.fail("You do **not** have a **Last.FM account linked**")
+
+        data = await self.requester.get(
+            method="user.gettopalbums", user=conf.username
+        )
+        if "error" in data:
+            return await ctx.fail("Invalid username.")
+
+        albums = [
+            f"> `{i+1}.` **{album['name']}** - {album['playcount']} plays"
+            for i, album in enumerate(data["topalbums"]["album"])
+        ]
+        embeds = []
+        for i, chunk in enumerate(chunks(albums, 10), start=1):
+            embeds.append(
+                discord.Embed(
+                    title=f"{conf.username}'s top albums",
+                    description="\n".join(chunk),
+                    color=0x2B2D31,
+                ).set_thumbnail(url=user.avatar.url if user else ctx.author.default_avatar.url)
+            )
+        if not embeds:
+            return await ctx.fail("No albums found.")
+
+        return await ctx.paginate(embeds)
+
+    
+    
     @commands.command(
         name="fm",
         brief="View the last song you listened to on LastFM",
@@ -911,5 +1119,23 @@ class LastFM(commands.Cog):
     async def fm(self, ctx: Context, user: discord.Member = None):
         return await self.nowplaying(ctx, user=user)
 
+    @commands.command(
+        name="whoknows",
+        aliases=["wk"],
+        brief="Shows what other users listen to the current track in your server",
+        example=",wk Juice Wrld",
+    )
+    async def wk(self, ctx: Context, *, artist_name: str = None):
+        return await self.lastfm_whoknows(ctx, artist_name=artist_name)
+    
+    @commands.command(
+        name="globalwhoknows",
+        brief="Shows what other users listen to the current track globally",
+        example=",globalwhoknows Juice Wrld",
+        aliases=["gwk", "globalwk"]
+    )
+    async def globalwhoknows(self, ctx: Context, *, artist_name: str = None):
+        return await self.lastfm_whoknows_global(ctx, artist_name=artist_name)
+    
 async def setup(bot):
     await bot.add_cog(LastFM(bot))

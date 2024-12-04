@@ -58,13 +58,12 @@ class WebServer(Cog):
         await self.app.shutdown()
 
     async def _run(self) -> None:
-        await _run_app(self.app, **SERVER_CONFIG, print=None)
+        await _run_app(self.app, **SERVER_CONFIG, print=None, handle_signals=False)
 
     @staticmethod
-    async def index(request: Request) -> Response:
+    async def index(_: Request) -> Response:
         return Response(text="API endpoint operational", status=200)
-
-    async def status(self, request: Request) -> Response:
+    async def status(self, _: Request) -> Response:
         return json_response([{
             "uptime": self.bot.startup_time.timestamp(),
             "latency": round(shard.latency * 1000) if shard.latency != float('inf') else None,
@@ -111,8 +110,7 @@ class WebServer(Cog):
         if not bot and command.cog_name.title() == "Premium":
             permissions.append("Donator")
         return permissions
-
-    async def command_dump(self, request: Request) -> Response:
+    async def command_dump(self, _: Request) -> Response:
         commands: List[CommandData] = []
         for cmd in self.bot.walk_commands():
             if cmd.hidden or (isinstance(cmd, Group) and not cmd.description) or cmd.qualified_name == "help":
@@ -126,8 +124,7 @@ class WebServer(Cog):
                 "example": cmd.example
             })
         return json_response(commands)
-
-    async def commands(self, request: Request) -> Response:
+    async def commands(self, _: Request) -> Response:
         def format_command(cmd: Command, level: int = 0) -> str:
             prefix = "|    " * level
             aliases = f"({', '.join(cmd.aliases)})" if cmd.aliases else ""

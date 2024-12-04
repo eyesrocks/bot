@@ -52,8 +52,8 @@ class AliasConverter(Converter):
             raise CommandError("please include a `,` between the command and alias")
         else:
             command, a = argument.split(",")
-            command = command.rstrip().lstrip().lower()
-            a = a.rstrip().lstrip().lower()
+            command = command.strip().lower()
+            a = a.strip().lower()
             if a in ctx.bot.command_list:
                 raise CommandError(
                     f"You cannot alias **{command}** as **{a}** as its already a command"

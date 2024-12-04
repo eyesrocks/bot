@@ -19,14 +19,14 @@ cluster_id = args.cluster
 
 
 if __name__ == "__main__":
-    ips = ["23.160.168.124", "23.160.168.125", "23.160.168.126"]
+    ips = ["23.160.168.123", "23.160.168.124", "23.160.168.125"]
     response = requests.get('https://discord.com/api/v10/gateway/bot', headers=headers)
-    print(response.json())
-    shard_count = response.json()['shards']
+    data = response.json()
+    shard_count = data['shards']
     shards = [i for i in range(shard_count)]
-    per_cluster = round(len(shards) / 3)
+    per_cluster = round(len(shards) / len(ips))
     shard_chunks = chunk_list(shards, per_cluster)
-    shard_array = shard_chunks[cluster_id - 1 if cluster_id > 0 else 1]
-    local_addr = (ips[cluster_id - 1 if cluster_id > 0 else 1], 0)
+    shard_array = shard_chunks[cluster_id - 1 if cluster_id > 0 else 0]
+    local_addr = (ips[cluster_id - 1 if cluster_id > 0 else 0], 0)
     bot = Greed(CONFIG_DICT, shard_count=shard_count, shard_ids=shard_array, local_address=local_addr)
     asyncio.run(bot.go())

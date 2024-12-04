@@ -6,7 +6,7 @@ const cors = require('cors');
 
 app.use(cors());
 
-app.get('/statusapi', async (req, res) => {
+app.get('/statusapi', async (_, res) => {
   const urls = [
     'http://localhost:8493/status',
     'http://localhost:8494/status',
@@ -45,24 +45,44 @@ app.get('/statusapi', async (req, res) => {
 });
 
 // Handle both root and page routes
-app.get('/', (req, res) => {
+app.get('/', (_, res) => {
+  console.log('Root page accessed');
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+app.use(express.static('public'));
+
 app.get('/:page', (req, res) => {
   const page = req.params.page;
-  const filePath = path.join(__dirname, 'public', `${page}.html`);
-  res.sendFile(filePath, (err) => {
-    if (err) {
-      res.status(404).send('Page not found');
-    }
-  });
+  const ext = path.extname(page).toLowerCase();
+  
+  // List of allowed file extensions
+  const allowedExts = ['.gif', '.png', '.json', '.js'];
+  
+  if (allowedExts.includes(ext)) {
+    // If file has an allowed extension, serve it directly
+    console.log(`Static file requested: ${page}`);
+    res.sendFile(path.join(__dirname, 'public', page), (err) => {
+      if (err) {
+        console.error(`Error loading file ${page}:`, err);
+        res.status(404).send('File not found');
+      }
+    });
+  } else if (ext) {
+    // If file has any other extension, return 404
+    console.error(`Unsupported file type: ${page}`);
+    res.status(404).send('File type not supported');
+  } else {
+    // If no extension, assume HTML page
+    console.log(`Page requested: ${page}`);
+    res.sendFile(path.join(__dirname, 'public', `${page}.html`), (err) => {
+      if (err) {
+        console.error(`Error loading page ${page}:`, err);
+        res.status(404).send('Page not found');
+      }
+    });
+  }
 });
-
-// Move static middleware after routes
-app.use(express.static('public', {
-  extensions: ['html']
-}));
 
 app.listen(3008, () => {
   console.log('Server running at http://localhost:3008/');

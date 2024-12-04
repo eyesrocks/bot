@@ -14,6 +14,7 @@ class MarryView(View):
 
     async def on_timeout(self):
         await self.ctx.send("You took too long to respond, please try again.")
+        self.stop()
 
     @button(label="Yes", style=ButtonStyle.green)
     async def yes(self, interaction: Interaction, button: Button):
@@ -37,10 +38,12 @@ class MarryView(View):
     @button(label="No", style=ButtonStyle.red)
     async def no(self, interaction: Interaction, button: Button):
         if interaction.user.id != self.proposee.id:
-            return await interaction.response.send_message("You are not the one being proposed to!", ephemeral=True)
+            await interaction.response.send_message("You are not the one being proposed to!", ephemeral=True)
+            return
             
-        await interaction.response.send_message(f"{self.proposee.mention} has rejected {self.proposer.mention}'s proposal!", view=None)
+        await interaction.response.edit_message(content=f"{self.proposee.mention} has rejected {self.proposer.mention}'s proposal!", embed=None, view=None)
         self.stop()
+
 
 
 

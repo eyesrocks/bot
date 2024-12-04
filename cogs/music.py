@@ -14,7 +14,7 @@ from discord.ext import tasks, commands
 from discord.ext.commands import Context
 from tuuid import tuuid
 from loguru import logger
-
+from contextlib import suppress
 
 play_emoji = "<:greed_play:1207661064096063599>"
 skip_emoji = "<:greed_skip:1207661069938589716>"
@@ -230,6 +230,26 @@ class Player(pomice.Player):
         self.loop: Union[str, bool] = False
         self._volume: int = 65
 
+    @property 
+    def bound_channel(self) -> Optional[discord.TextChannel]:
+        if not self._bound_channel and self.channel:
+            if self.channel.category:
+                for channel in self.channel.category.text_channels:
+                    if channel.permissions_for(self.guild.me).send_messages:
+                        self._bound_channel = channel
+                        break
+            if not self._bound_channel:
+                for channel in self.guild.text_channels:
+                    if channel.permissions_for(self.guild.me).send_messages:
+                        self._bound_channel = channel
+                        break
+        return self._bound_channel
+
+    @bound_channel.setter
+    def bound_channel(self, channel: discord.TextChannel):
+        self._bound_channel = channel
+
+
     def _format_socket_track(self, track: pomice.Track) -> dict:
         """Format track data for socket communication."""
         return {
@@ -404,7 +424,10 @@ class Player(pomice.Player):
         """Clean up player resources."""
         self.queue._queue.clear()
         await self.reset_filters()
-        await self.destroy()
+        with suppress(KeyError):
+            if self.guild.id in self._node._players:
+                await self.destroy()
+
 
     def __repr__(self) -> str:
         return f"<Player guild={self.guild.id} connected={self.is_connected} playing={self.is_playing}>"
@@ -433,7 +456,7 @@ class Music(commands.Cog):
         spotify = self.bot.config.get("spotify")
         self.bot.node = await pomice.NodePool().create_node(
             bot=self.bot,
-            host="127.0.0.1",
+            host="[2602:fa48:0:3:9edc:71ff:fec7:cbc0]",
             port=2333,
             password="youshallnotpass1",
             identifier=f"MAIN{tuuid()}",
@@ -442,6 +465,36 @@ class Music(commands.Cog):
             apple_music=True,
         )
         logger.info("Created LavaLink Node Pool Connection")
+
+    async def get_player(self, ctx: Context, *, connect: bool = True, check_connected: bool = True) -> Optional[Player]:
+        if not hasattr(self.bot, "node"):
+            raise commands.CommandError("The **Lavalink** node hasn't been **initialized** yet")
+
+        user_voice = ctx.author.voice
+        bot_voice = ctx.guild.me.voice
+
+        if not user_voice:
+            if check_connected:
+                raise commands.CommandError("You're not **connected** to a voice channel")
+            return None
+
+        if bot_voice and bot_voice.channel != user_voice.channel:
+            raise commands.CommandError("I'm **already** connected to another voice channel")
+
+        player = self.bot.node.get_player(ctx.guild.id)
+        if not player or not bot_voice:
+            if not connect:
+                if ctx.voice_client:
+                    await ctx.voice_client.disconnect()
+                    return None
+                raise commands.CommandError("I'm not **connected** to a voice channel")
+            await user_voice.channel.connect(cls=Player, self_deaf=True)
+            player = self.bot.node.get_player(ctx.guild.id)
+            player.bound_channel = ctx.channel
+            await ctx.voice_client.set_volume(65)
+
+        return player
+
 
     @tasks.loop(minutes=5)
     async def music_autodisconnect(self):
@@ -454,11 +507,7 @@ class Music(commands.Cog):
 
     @commands.Cog.listener()
     async def on_pomice_track_end(self, player: pomice.Player, track: pomice.Track, reason: str):
-        track = await player.next_track()
-        if not track:
-            asyncio.sleep(60)
-            if not player.is_playing and not player.is_paused:
-                await player.teardown()
+        await player.next_track()
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, reaction: discord.RawReactionActionEvent):
@@ -489,42 +538,15 @@ class Music(commands.Cog):
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
         if before.channel and self.bot.user in before.channel.members:
             player = self.bot.node.get_player(member.guild.id)
-            if player and len(player.channel.members) == 1:
-                await player.teardown()
+            if player and player.channel and len(player.channel.members) == 1:
+                with suppress(Exception):
+                    await player.teardown()
         if member.id != self.bot.user.id:
             return
         player = self.bot.node.get_player(member.guild.id) if hasattr(self.bot, "node") else None
         if player and not after.channel:
-            await player.destroy()
+            await player.teardown()
 
-    async def get_player(self, ctx: Context, *, connect: bool = True, check_connected: bool = True) -> Optional[Player]:
-        if not hasattr(self.bot, "node"):
-            raise commands.CommandError("The **Lavalink** node hasn't been **initialized** yet")
-
-        user_voice = ctx.author.voice
-        bot_voice = ctx.guild.me.voice
-
-        if not user_voice:
-            if check_connected:
-                raise commands.CommandError("You're not **connected** to a voice channel")
-            return None
-
-        if bot_voice and bot_voice.channel != user_voice.channel:
-            raise commands.CommandError("I'm **already** connected to another voice channel")
-
-        player = self.bot.node.get_player(ctx.guild.id)
-        if not player or not bot_voice:
-            if not connect:
-                if ctx.voice_client:
-                    await ctx.voice_client.disconnect()
-                    return None
-                raise commands.CommandError("I'm not **connected** to a voice channel")
-            await user_voice.channel.connect(cls=Player, self_deaf=True)
-            player = self.bot.node.get_player(ctx.guild.id)
-            player.bound_channel = ctx.channel
-            await ctx.voice_client.set_volume(65)
-
-        return player
 
     async def get_tracks(self, ctx: Context, player: Player, query: str, search_type: Optional[pomice.SearchType] = None):
         try:
@@ -678,9 +700,12 @@ class Music(commands.Cog):
         }
         if not valid.get(option, False):
             return await ctx.fail(f"Cannot set loop to `{option}`")
-        await player.set_loop(option if option != "off" else False)
-        emoji = "✅" if option == "off" else "🔂" if option == "track" else "🔁"
-        await ctx.message.add_reaction(emoji)
+        try:
+            await player.set_loop(option if option != "off" else False)
+            emoji = "✅" if option == "off" else "🔂" if option == "track" else "🔁"
+            await ctx.message.add_reaction(emoji)
+        except commands.BadLiteralArgument:
+            await ctx.fail("You can choose from track, queue, or off")
 
     @commands.command(name="pause", brief="Pause the current song", example=",pause")
     async def pause(self, ctx: Context):

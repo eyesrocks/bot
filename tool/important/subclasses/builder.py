@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import datetime
 import io
-import re
 
 import discord
 from aiohttp import ClientSession

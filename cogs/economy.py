@@ -19,6 +19,8 @@ from loguru import logger
 
 log = logger
 MAX_GAMBLE = 100_000_000_000_000_000  # Simplified max gamble amount
+BOOSTER_ROLE_ID = 1301664266868363356
+GUILD_ID = 1301617147964821524
 
 class OverMaximum(CommandError):
     def __init__(self, message):
@@ -376,7 +378,7 @@ class Economy(commands.Cog):
         self.symbols = ["♠", "♥", "♦", "♣"]
         self.achievements = {
             "Lets begin.": {
-                "description": "open an account through greed for gambling",
+                "description": f"open an account through {self.bot.user.name} for gambling",
                 "price": None,
             },
             "Getting higher": {
@@ -771,6 +773,7 @@ class Economy(commands.Cog):
         example=",blackjack 100",
     )
     @account()
+    @commands.cooldown(1, 20, commands.BucketType.user)
     async def blackjack(self, ctx: Context, *, amount: GambleAmount):
         async with self.locks[f"bj:{ctx.author.id}"]:
             balance = await self.get_balance(ctx.author)
@@ -946,7 +949,7 @@ class Economy(commands.Cog):
             )
         product = discord.utils.chunk_list(product, 2)
         embeds = [
-            Embed(title="The Greed Shop", description="".join(m for m in _), color=self.bot.color)
+            Embed(title=f"The {self.bot.user.name} Shop", description="".join(m for m in _), color=self.bot.color)
             .set_thumbnail(url="https://media.discordapp.net/attachments/1270698610094243880/1274962183704281150/shop.png?ex=66c42890&is=66c2d710&hm=6240fd5d83f184893d0f3d725bc20ff65ac0f54ccef6b2914b5a397dac8a406c&=&format=webp&quality=lossless")  # Replace with your emoji URL
             for _ in product
         ]
@@ -1096,6 +1099,7 @@ class Economy(commands.Cog):
 
     @commands.command(
         name="deposit",
+        aliases=["dep"],
         brief="Deposit bucks from your wallet to your bank",
         example=",deposit 200",
     )
@@ -1390,7 +1394,7 @@ class Economy(commands.Cog):
         ):
             return await ctx.fail("you too **broke** for that **top G**")
         roll = self.get_random_value(1, 100)
-        value = 75 if not await self.check_shrooms(ctx) else 50
+        value = 90 if not await self.check_shrooms(ctx) else 70
         if roll > value or ctx.author.id == 977036206179233862:
             action = "WON"
             result = "Add"
@@ -1412,7 +1416,7 @@ class Economy(commands.Cog):
     async def buy(self, ctx: Context, *, item_and_amount: str):
         item = "".join(m for m in item_and_amount if not m.isdigit())
         amount = "".join(m for m in item_and_amount if m.isdigit())
-        item = item.lstrip().rstrip()
+        item = item.strip()
         try:
             if int(amount) == 0:
                 amount = 1
@@ -1561,24 +1565,38 @@ class Economy(commands.Cog):
         brief="Earn some money by working random jobs.",
         example=",work"
     )
-    @commands.cooldown(1, 20, commands.BucketType.user)  # Cooldown of 20 seconds per user
+    @commands.cooldown(1, 30, commands.BucketType.user)  # Cooldown of 20 seconds per user
     async def work(self, ctx):
         # Path to the jobs file (update this path as needed)
         jobs_file_path = "jobs.txt"
 
         try:
+            # Check if the user is a booster in your specific guild (GUILD_ID)
+            is_booster = False
+
+            # Fetch the guild object for the guild with GUILD_ID (your server where boosters are tracked)
+            guild = self.bot.get_guild(GUILD_ID)
+
+            if guild:
+                # Check if the user has the booster role in your guild (GUILD_ID)
+                member = guild.get_member(ctx.author.id)
+                if member:
+                    is_booster = any(role.id == BOOSTER_ROLE_ID for role in member.roles)
+
             # Read jobs from the file
             with open(jobs_file_path, "r") as file:
                 jobs = [line.strip() for line in file.readlines()]
-            
+
             if not jobs:
-                return await ctx.send("No jobs are available at the moment. Please try again later!")
+                return await ctx.fail("No jobs are available at the moment. Please try again later!")
 
             # Select a random job
             job = random.choice(jobs)
 
             # Generate a random amount between 150 and 1000
-            earnings = random.randint(150, 1000)
+            base_earnings = random.randint(500, 1500)
+            multiplier = 3 if is_booster else 1.0
+            earnings = int(base_earnings * multiplier)
 
             # Check if the user exists in the economy database
             user_exists = await self.bot.db.fetchrow(
@@ -1587,7 +1605,7 @@ class Economy(commands.Cog):
 
             if not user_exists:
                 await self.bot.db.execute(
-                    """INSERT INTO economy (user_id, balance, bank) VALUES($1,$2,$3)""",
+                    """INSERT INTO economy (user_id, balance, bank) VALUES($1, $2, $3)""",
                     ctx.author.id,
                     0.00,
                     0.00,
@@ -1600,16 +1618,86 @@ class Economy(commands.Cog):
                 ctx.author.id,
             )
 
-            # Send a success message
-            await ctx.currency(
-                f"**{ctx.author.name}**, you worked as a **{job}** and earned **${earnings:,}**"
-            )
+            # Send a success message based on whether the user is a booster
+            if is_booster:
+                await ctx.currency(
+                    f"you worked as a **{job}** and earned **${earnings:,}**! As a booster in **[/pomice](https://discord.gg/pomice)**, you received a bonus pay for boosting!"
+                )
+            else:
+                await ctx.currency(
+                    f"you worked as a **{job}** and earned **${earnings:,}**!"
+                )
+
 
         except FileNotFoundError:
             await ctx.fail("The jobs file is missing. Please contact the administrator.")
         except Exception as e:
             await ctx.fail("An error occurred while processing your command.")
             raise e  # Log the exception for debugging purposes
+
+
+    @commands.command(
+         name="hack",
+         brief="Attempt to hack another user and steal their bank balance.",
+         example=",hack @user"
+     )
+    @account() 
+    @commands.cooldown(1, 180, commands.BucketType.user)
+    async def hack(self, ctx: Context, target: discord.Member):
+         if target == ctx.author:
+             return await ctx.warning("You cannot hack yourself.")
+         
+         hacker_bank_balance = await self.get_balance(ctx.author)
+         target_bank_balance = await self.get_balance(target)
+         if target_bank_balance == 0:
+             return await ctx.warning(f"{target.display_name} has no bucks in their wallet to start a hack")
+         
+         if hacker_bank_balance == 0:
+             return await ctx.warning("You have no bucks in your bank to attempt a hack!")
+
+
+         progress = "💻 --------- 💻"
+         progress_message = await ctx.send(progress)
+
+
+         for i in range(7):
+             await asyncio.sleep(1.2)  
+             progress = f"💻 {'✔️' * (i+1)}{'-' * (7-i)} 💻"
+             await progress_message.edit(content=progress)
+         
+
+         success = random.random() < 0.25  
+         if success:
+             stolen_amount = target_bank_balance * 0.75 
+             await self.bot.db.execute(
+                 """UPDATE economy SET bank = bank + $1 WHERE user_id = $2""",
+                 stolen_amount,
+                 ctx.author.id,
+             )
+             await self.bot.db.execute(
+                 """UPDATE economy SET bank = bank - $1 WHERE user_id = $2""",
+                 stolen_amount,
+                 target.id,
+             )
+
+             progress = f"💻 {'✔️' * 7} ✅ 💻"
+             await progress_message.edit(content=progress)
+             return await ctx.currency(
+                 f"You successfully hacked **{target.display_name}** and stole **{self.format_int(stolen_amount)}** bucks!"
+             )
+         else:
+
+             await self.bot.db.execute(
+                 """UPDATE economy SET bank = 1000 WHERE user_id = $1""",
+                 ctx.author.id,
+             )
+
+             progress = f"💻 {'✔️' * 6} ❌ 💻"
+             await progress_message.edit(content=progress)
+             return await ctx.fail(
+                 "Your hacking attempt failed, and you lost all your bucks in your bank."
+             )
+
 
 
 async def setup(bot):

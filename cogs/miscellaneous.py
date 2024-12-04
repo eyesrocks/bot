@@ -116,6 +116,21 @@ class Miscellaneous(Cog):
         self.file_processor = FileProcessing(self.bot)
         self.queue = defaultdict(Lock)
     #     self.auto_destroy.start()
+        self.check_reminds.start()
+
+    async def cog_load(self):
+        await self.bot.db.execute(
+            """CREATE TABLE IF NOT EXISTS reminders (
+            user_id BIGINT,
+            guild_id BIGINT,
+            channel_id BIGINT,
+            reminder TEXT,
+            time TIMESTAMP
+            );"""
+        )
+
+    def cog_unload(self):
+        self.check_reminds.cancel()
 
     # @tasks.loop(minutes = 10)
     # async def auto_destroy(self):
@@ -125,6 +140,23 @@ class Miscellaneous(Cog):
     #                 await client.destroy()
     #             except: 
     #                 await client.disconnect()
+
+    @tasks.loop(seconds=10)
+    async def check_reminds(self):
+        reminds = await self.bot.db.fetch(
+            "SELECT * FROM reminders WHERE time < $1", datetime.utcnow()
+        )
+        for remind in reminds:
+            user = await self.bot.fetch_user(remind["user_id"])
+            channel = self.bot.get_channel(remind["channel_id"])
+            if channel:
+                view = discord.ui.View()
+                view.add_item(discord.ui.Button(style=discord.ButtonStyle.gray, label="reminder set by user", disabled=True))
+                await channel.send(f"{user.mention} {remind['reminder']}", view=view)
+                await self.bot.db.execute(
+                    "DELETE FROM reminders WHERE time = $1", remind["time"]
+                )
+    
 
     @commands.command(
         name="valorant",
@@ -155,51 +187,51 @@ class Miscellaneous(Cog):
             ctx, discord.Embed(title="variables", color=self.bot.color), rows
         )
     
-    async def do_tts(self, message: str, model: Optional[str] = "amy") -> str:
-        try:
-            return await self.texttospeech.tts_api(model, "en_US", "low", message)
-        except Exception as e:
-            if DEBUG:
-                raise e
-            from aiogtts import aiogTTS  # type: ignore
-            i = io.BytesIO()
-            aiogtts = aiogTTS()
-            await aiogtts.save(message, ".tts.mp3", lang="en")
-            await aiogtts.write_to_fp(message, i, slow=False, lang="en")
-            return ".tts.mp3"
+    # async def do_tts(self, message: str, model: Optional[str] = "amy") -> str:
+    #     try:
+    #         return await self.texttospeech.tts_api(model, "en_US", "low", message)
+    #     except Exception as e:
+    #         if DEBUG:
+    #             raise e
+    #         from aiogtts import aiogTTS  # type: ignore
+    #         i = io.BytesIO()
+    #         aiogtts = aiogTTS()
+    #         await aiogtts.save(message, ".tts.mp3", lang="en")
+    #         await aiogtts.write_to_fp(message, i, slow=False, lang="en")
+    #         return ".tts.mp3"
 
-    @commands.command(
-        name="tts",
-        brief="Allow the bot to speak to a user in a voice channel",
-        example=",tts whats up guys",
-    )
-    async def tts(self, ctx: Context, model: Optional[Literal["amy","danny","arctic","hfc_female","hfc_male","joe","kathleen","kusal","lessac","ryan",]] = "amy", *, message: str):
-        fp = await self.do_tts(message, model)
-        if ctx.author.voice is None:
-            msg = await self.file_processor.upload_to_discord(ctx.channel, fp)
-            await self.texttospeech.delete_soon(fp, 3)
-            await self.texttospeech.delete_soon(fp.replace(".mp3", ".ogg"), 3)
-            return msg
-        if voice_channel := ctx.author.voice.channel:
-#            if ctx.voice_client is None:
- #           else:
-            try: 
-                await ctx.voice_client.disconnect()
-            except Exception: 
-                pass
-            vc = await voice_channel.connect()
-  #                  await ctx.voice_client.move_to(voice_channel)
-            #            aiogtts = aiogTTS()
-            async with self.queue[ctx.guild.id]:
-                await asyncio.sleep(0.5)
-                try:
-                    vc.play(discord.FFmpegPCMAudio(source=fp))
-                except Exception as e: 
-                    raise e #return await ctx.reply(file = discord.File("./.tts.mp3"))
-        #                os.remove(".tts.mp3")
-                await self.texttospeech.delete_soon(fp, 3)
-        else:
-            return await ctx.fail("you aren't in a voice channel")
+#     @commands.command(
+#         name="tts",
+#         brief="Allow the bot to speak to a user in a voice channel",
+#         example=",tts whats up guys",
+#     )
+#     async def tts(self, ctx: Context, model: Optional[Literal["amy","danny","arctic","hfc_female","hfc_male","joe","kathleen","kusal","lessac","ryan",]] = "amy", *, message: str):
+#         fp = await self.do_tts(message, model)
+#         if ctx.author.voice is None:
+#             msg = await self.file_processor.upload_to_discord(ctx.channel, fp)
+#             await self.texttospeech.delete_soon(fp, 3)
+#             await self.texttospeech.delete_soon(fp.replace(".mp3", ".ogg"), 3)
+#             return msg
+#         if voice_channel := ctx.author.voice.channel:
+# #            if ctx.voice_client is None:
+#  #           else:
+#             try: 
+#                 await ctx.voice_client.disconnect()
+#             except Exception: 
+#                 pass
+#             vc = await voice_channel.connect()
+#   #                  await ctx.voice_client.move_to(voice_channel)
+#             #            aiogtts = aiogTTS()
+#             async with self.queue[ctx.guild.id]:
+#                 await asyncio.sleep(0.5)
+#                 try:
+#                     vc.play(discord.FFmpegPCMAudio(source=fp))
+#                 except Exception as e: 
+#                     raise e #return await ctx.reply(file = discord.File("./.tts.mp3"))
+#         #                os.remove(".tts.mp3")
+#                 await self.texttospeech.delete_soon(fp, 3)
+#         else:
+#             return await ctx.fail("you aren't in a voice channel")
 
     @commands.command(
         name="afk",
@@ -612,7 +644,103 @@ class Miscellaneous(Cog):
                 return await ctx.fail("That doesn't appear to be a valid custom emoji")
 
 
+    @commands.group(
+        name="reminder",
+        aliases=["remind"],
+        brief="Set a reminder for a specific time",
+    )
+    async def reminder(self, ctx: Context):
+        if ctx.invoked_subcommand is None:
+            await ctx.send_help(ctx.command)
+    
+    @reminder.command(
+        name="add",
+        brief="Add a reminder",
+        example=",reminder add 5m take out the trash",
+    )
+    async def reminder_add(self, ctx: Context, time: str, *, reminder: str):
+        """
+        Add a reminder for a specific time
+        """
+        import humanfriendly as hf
+        try:
+            delta = hf.parse_timespan(time)
+            reminder_time = datetime.utcnow() + timedelta(seconds=delta)
+            if delta <= 0:
+                return await ctx.fail("Please provide a valid time in the future")
+        except Exception:
+            return await ctx.fail("Please provide a valid time")
+        
+        await self.bot.db.execute(
+            "INSERT INTO reminders (user_id, guild_id, channel_id, reminder, time) VALUES ($1, $2, $3, $4, $5)",
+            ctx.author.id,
+            ctx.guild.id,
+            ctx.channel.id,
+            reminder,
+            reminder_time,
+        )
+        
+        await ctx.success(f"Reminder set for {arrow.get(reminder_time).humanize()}")
 
+    
+    @reminder.command(
+        name="list",
+        brief="List all your reminders",
+        example=",reminder list"
+    )
+    async def reminder_list(self, ctx: Context):
+        """
+        List all your reminders
+        """
+        reminders = await self.bot.db.fetch(
+            "SELECT * FROM reminders WHERE user_id = $1", ctx.author.id
+        )
+        
+        if not reminders:
+            return await ctx.fail("You don't have any reminders set")
+        
+        embed = discord.Embed(
+            title="Reminders",
+            color=self.color,
+            description="\n".join(
+                f"**{i + 1}.** {reminder['reminder']} - {arrow.get(reminder['time']).humanize()}"
+                for i, reminder in enumerate(reminders)
+            )
+        )
+        
+        await ctx.send(embed=embed)
+    
+    @reminder.command(
+        name="remove",
+        aliases=["delete"],
+        brief="Remove a reminder",
+        example=",reminder remove 1"
+    )
+    async def reminder_remove(self, ctx: Context, index: int):
+        """
+        Remove a reminder by its index
+        """
+        reminders = await self.bot.db.fetch(
+            "SELECT * FROM reminders WHERE user_id = $1", ctx.author.id
+        )
+        
+        if not reminders:
+            return await ctx.fail("You don't have any reminders set")
+        
+        try:
+            reminder = reminders[index - 1]
+        except IndexError:
+            return await ctx.fail("Invalid reminder index")
+        
+        await self.bot.db.execute(
+            "DELETE FROM reminders WHERE user_id = $1 AND time = $2",
+            ctx.author.id,
+            reminder["time"],
+        )
+        
+        await ctx.success("Reminder removed")
+
+    
 
 async def setup(bot: "Greed") -> None: 
     await bot.add_cog(Miscellaneous(bot))

@@ -199,12 +199,31 @@ def format_duration(duration: int, ms: bool = True):
 class Player(pomice.Player):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.bound_channel: discord.TextChannel = None
+        self._bound_channel: discord.abc.MessageableChannel = None
         self.message: discord.Message = None
         self.track: pomice.Track = None
         self.queue: asyncio.Queue = asyncio.Queue()
         self.waiting: bool = False
         self.loop: str = False
+
+    @property 
+    def bound_channel(self) -> Optional[discord.TextChannel]:
+        if not self._bound_channel and self.channel:
+            if self.channel.category:
+                for channel in self.channel.category.text_channels:
+                    if channel.permissions_for(self.guild.me).send_messages:
+                        self._bound_channel = channel
+                        break
+            if not self._bound_channel:
+                for channel in self.guild.text_channels:
+                    if channel.permissions_for(self.guild.me).send_messages:
+                        self._bound_channel = channel
+                        break
+        return self._bound_channel
+
+    @bound_channel.setter
+    def bound_channel(self, channel: discord.TextChannel):
+        self._bound_channel = channel
 
     def _format_socket_track(self, track: pomice.Track):
         return {

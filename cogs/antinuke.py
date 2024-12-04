@@ -247,7 +247,7 @@ class AntiNuke(Cog):
             if audit.user_id == self.bot.user.id:
                 if "|" in audit.reason:
                     audit.user = self.bot.get_user(
-                        int(audit.reason.split(" | ")[-1].rstrip().lstrip())
+                        int(audit.reason.split(" | ")[-1].strip())
                     )
                     if audit.guild.id == 1237821518940209212:
                         logger.info(
@@ -287,7 +287,7 @@ class AntiNuke(Cog):
         if entry.user_id == self.bot.user.id:
             if "|" in entry.reason:
                 entry.user = self.bot.get_user(
-                    int(entry.reason.split(" | ")[-1].rstrip().lstrip())
+                    int(entry.reason.split(" | ")[-1].strip())
                 )
         if await self.check_entry(entry.guild, entry) is not True:
             await self.do_punishment(entry.guild, entry.user, reason)

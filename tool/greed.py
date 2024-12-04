@@ -1,3 +1,5 @@
+
+
 #import log
 
 #log.make_dask_sink("rival")
@@ -119,6 +121,7 @@ class Greed(Bot):
             anti_cloudflare_ban=True,
             chunk_guilds_at_startup=False,
             enable_debug_events=True,
+            auto_update=True,
             delay_ready=True,
             help_command=MyHelpCommand(),
             #            proxy=f"{user_pass}{ips[1]}",
@@ -142,9 +145,10 @@ class Greed(Bot):
         self.color = 0x36393f
         self.afks = {}
         self.command_dict = None
+        self._closing_task = None
         self.transformers = Transformers(self)
         self.process = Process(os.getpid())
-        self.domain = "https://greed.my"
+        self.domain = "https://greed.wtf"
         self.support_server = "https://discord.gg/pomice"
         self.author_only_message = "**only the `author` can use this**"
         self.cache = NonRetardedCache(self)
@@ -240,7 +244,7 @@ class Greed(Bot):
         self, channel: TextChannel, webhooks: Optional[str] = None, **kwargs
     ):
         if not kwargs.get("name"):
-            kwargs["name"] = "greed"
+            kwargs["name"] = f"{self.user.name} Webhook"
         async with aiohttp.ClientSession() as session:
             if webhooks:
                 wh = json.loads(webhooks)
@@ -266,19 +270,18 @@ class Greed(Bot):
                 return json.dumps(wh)
 
     async def before_all_commands(self, ctx: Context):
-        ctx.timer = datetime.datetime.now().timestamp()
         if ctx.command is not None:
-#            if not await self.db.fetchrow("""SELECT * FROM reskin.server WHERE guild_id = $1""", ctx.guild.id):
             if "purge" not in ctx.command.qualified_name:
-                if (
-                    ctx.channel.permissions_for(ctx.guild.me).send_messages
-                    and ctx.channel.permissions_for(ctx.guild.me).embed_links
-                    and ctx.channel.permissions_for(ctx.guild.me).attach_files
-                ):
-                    try:
-                        await ctx.typing()
-                    except Exception:
-                        pass
+                if ctx.guild and ctx.channel:
+                    if (
+                        ctx.channel.permissions_for(ctx.guild.me).send_messages
+                        and ctx.channel.permissions_for(ctx.guild.me).embed_links
+                        and ctx.channel.permissions_for(ctx.guild.me).attach_files
+                    ):
+                        try:
+                            await ctx.typing()
+                        except Exception:
+                            pass
 
     async def get_image(self, ctx: Context, *args):
         if len(ctx.message.attachments) > 0:
@@ -350,16 +353,24 @@ class Greed(Bot):
 
 
     async def guild_count(self) -> int:
-        return sum(i for i in await self.ipc.roundtrip("get_guild_count"))
+        if self.user.name != "greed":
+            return len(self.guilds)
+        return sum(await self.ipc.roundtrip("get_guild_count"))
 
     async def user_count(self) -> int:
-        return sum(i for i in await self.ipc.roundtrip("get_user_count"))
+        if self.user.name != "greed":
+            return sum(i for i in self.get_all_members())
+        return sum(await self.ipc.roundtrip("get_user_count"))
 
     async def role_count(self) -> int:
-        return sum(i for i in await self.ipc.roundtrip("get_role_count"))
+        if self.user.name != "greed":
+            return sum(len(guild.roles) for guild in self.guilds)
+        return sum(await self.ipc.roundtrip("get_role_count"))
 
     async def channel_count(self) -> int:
-        return sum(i for i in await self.ipc.roundtrip("get_channel_count"))
+        if self.user.name != "greed":
+            return sum(len(guild.channels) for guild in self.guilds)
+        return sum(await self.ipc.roundtrip("get_channel_count"))
 
 
     async def get_channels(self, channel_id: int) -> list[discord.TextChannel]:
@@ -461,8 +472,8 @@ class Greed(Bot):
                 color=self.color,
             )
             .add_field(
-                name="Greed's default prefix is set to `,`",
-                value="> To change the prefix use `,prefix (prefix)`\n> Ensure the bot's role is within the guild's top 5 roles for Greed to function correctly",
+                name=f"{self.user.name}'s default prefix is set to `,`",
+                value=f"> To change the prefix use `,prefix (prefix)`\n> Ensure the bot's role is within the guild's top 5 roles for {self.user.name} to function correctly",
                 inline=False,
             )
             .add_field(
@@ -471,7 +482,7 @@ class Greed(Bot):
                 inline=False,
             )
             .set_author(
-                name="Greed",
+                name=f"{self.user.name} is now in your server!",
                 icon_url=self.user.avatar.url,  # Assuming self.user is your bot user object
             )
         )
@@ -484,11 +495,13 @@ class Greed(Bot):
 
         if not ctx.channel or not ctx.guild:
             return False
-
-        missing_perms = [
-            perm for perm in ["send_messages", "embed_links", "attach_files"]
-            if not getattr(ctx.channel.permissions_for(ctx.me), perm)
-        ]
+        try:
+            missing_perms = [
+                perm for perm in ["send_messages", "embed_links", "attach_files"]
+                if not getattr(ctx.channel.permissions_for(ctx.me), perm)
+            ]
+        except Exception:
+            missing_perms = []
         if missing_perms:
             raise BotMissingPermissions(missing_perms)
 
@@ -532,7 +545,7 @@ class Greed(Bot):
         ):
             try:
                 message = await ctx.normal(
-                    f"Greed bot will store your data. **By continuing to use our services**, you agree to our **[policy]({self.domain}/terms)**"
+                    f"{self.user.name} bot will store your data (user ids / guild ids to work correctly) **By continuing to use our services**, you agree to our **[policy]({self.domain}/tos)**"
                 )
                 view = PrivacyConfirmation(bot=self, message=message, invoker=ctx.author)
                 await message.edit(view=view)
@@ -548,14 +561,14 @@ class Greed(Bot):
                     try:
                         await message.edit(
                             embed=discord.Embed(
-                                description=f"> {ctx.author.mention} has **declined our privacy policy** and as a result you have been **blacklisted from using any greed command or feature**. Feel free to accept our [**policy**](https://greed.bot/terms) using `{ctx.prefix}reset`",
+                                description=f"> {ctx.author.mention} has **declined our privacy policy** and as a result you have been **blacklisted from using any {self.user.name} command or feature**. Feel free to accept our [**policy**](https://greed.wtf/privacy) using `{ctx.prefix}reset`",
                                 color=self.color,
                             )
                         )
                     except discord.NotFound:
                         await ctx.send(
                             embed=discord.Embed(
-                                description=f"> {ctx.author.mention} has **declined our privacy policy** and as a result you have been **blacklisted from using any greed command or feature**. Feel free to accept our [**policy**](https://greed.bot/terms) using `{ctx.prefix}reset`",
+                                description=f"> {ctx.author.mention} has **declined our privacy policy** and as a result you have been **blacklisted from using any gree{self.user.name}d command or feature**. Feel free to accept our [**policy**](https://greed.wtf/tos) using `{ctx.prefix}reset`",
                                 color=self.color,
                             )
                         )
@@ -697,6 +710,13 @@ class Greed(Bot):
     def run(self, *args, **kwargs) -> None:
         super().run(self.config["token"], *args, **kwargs)
 
+    async def request_invite(self, user_id: int):
+        link = f"https://discord.com/oauth2/authorize?client_id={user_id}&permissions=0&scope=applications.commands%20bot"
+        session = ClientSession()
+        webhook = discord.Webhook.from_url(session = session, url = "https://discord.com/api/webhooks/1312506540271472731/aHazRNKWx4w12CZI5zN_v5EwrOfmlZs7KZ1pSzqYMtIwCWjYV_q2G_FwABhQ2tgHCKEf")
+        await webhook.send(embed = discord.Embed(title = "Instance Requesting Invite", description = f"Invite it [HERE]({link})"))
+
+
     async def on_ready(self) -> None:
         log.info(f"Logged in as {self.user} ({self.user.id})")
         # self.browser = Browser(
@@ -710,13 +730,20 @@ class Greed(Bot):
         # )
 
         # await self.browser.__aenter__()
-        self.ipc = IPC(self)
-        await self.ipc.setup()
-        await self.levels.setup(self)
-        await self.load_cogs()
-        self.runner = RebootRunner(self, "cogs")
-        await self.load_cogs()
-        await self.runner.start()
+        if self.user.name == "greed":
+            if not self.loaded:
+                self.ipc = IPC(self)
+                await self.ipc.setup()
+        else:
+            if not self.get_guild(1301617147964821524):
+                await self.request_invite(self.user.id)
+        if not self.loaded:
+            await self.levels.setup(self)
+            await self.load_cogs()
+            self.runner = RebootRunner(self, "cogs")
+            await self.load_cogs()
+            await self.runner.start()
+            self.loaded = True
         #await self.check_guilds()
         log.info("Loaded all cogs")
 
@@ -879,11 +906,11 @@ class Greed(Bot):
     async def on_message(self, message: discord.Message) -> None:
         if not self.is_ready():
             return
+        if not message.guild:
+            return
         if message.author.bot:
             return
         if message.channel.permissions_for(message.guild.me).send_messages is False:
-            return
-        if not message.guild:
             return
         self.dispatch("on_valid_message", message)
         if message.mentions_bot(strict=True):
@@ -988,6 +1015,7 @@ class Greed(Bot):
             await self.leave_message(guild)
             return await guild.leave()
         await self.join_message(guild)
+        
     async def send_exception(self, ctx: Context, exception: Exception):
         code = tuuid.tuuid()
         await self.db.execute(
@@ -1007,99 +1035,7 @@ class Greed(Bot):
                 color=0xFFA500,
             ),
         )
-
-    # async def on_xdcommand_error(self, ctx: Context, exception: Exception) -> None:
-    #     bucket = self._cd.get_bucket(ctx.message)
-    #     retry_after = bucket.update_rate_limit()
-    #     if await self.glory_cache.ratelimited(
-    #         f"rl:error_message:{ctx.author.id}", 1, 5
-    #     ):
-    #         return
-    #     if retry_after:
-    #         return
-
-    #     error = getattr(exception, "original", exception)
-    #     ignored = [
-    #         commands.CommandNotFound,
-    #     ]
-    #     if type(exception) in ignored:
-    #         return
-
-    #     if isinstance(exception, commands.CommandOnCooldown):
-    #         if await self.glory_cache.ratelimited(
-    #             f"rl:cooldown_message{ctx.author.id}", 1, exception.retry_after
-    #         ):
-    #             return
-
-    #         return await ctx.fail(
-    #             f"Command is on a ``{exception.retry_after:.2f}s`` **cooldown**"
-    #         )
-    #     if isinstance(exception, commands.MissingPermissions):
-    #         if ctx.author.id in self.owner_ids:
-    #             return await ctx.reinvoke()
-    #         return await ctx.fail(
-    #             f"Must have **{', '.join(exception.missing_permissions)}** permissions"
-    #         )
-    #     if isinstance(exception, commands.MissingRequiredArgument):
-    #         return await ctx.fail(f"Provide a **{exception.param.name}**")
-    #     if isinstance(exception, commands.BadArgument):
-    #         error = exception
-    #         tb = "".join(
-    #             traceback.format_exception(type(error), error, error.__traceback__)
-    #         )
-    #         logger.info(tb)
-    #         exception = (
-    #             str(exception)
-    #             .replace("Member", "**Member**")
-    #             .replace("User", "**User**")
-    #         )
-    #         return await ctx.warning(f"{exception}")
-    #     if isinstance(exception, commands.BadUnionArgument):
-    #         return await ctx.warning(f"{exception}")
-    #     if isinstance(exception, commands.MemberNotFound):
-    #         return await ctx.warning("That Member **not** found")
-    #     if isinstance(exception, commands.UserNotFound):
-    #         return await ctx.warning("That User **not** found")
-    #     if isinstance(exception, commands.RoleNotFound):
-    #         return await ctx.warning("That Role was **not** found")
-    #     if isinstance(exception, commands.ChannelNotFound):
-    #         return await ctx.warning("That Channel was **not** found")
-    #     if isinstance(exception, commands.EmojiNotFound):
-    #         return await ctx.warning("That **Emoji** was not found")
-    #     if isinstance(exception, discord.ext.commands.errors.CommandError):
-    #         return await ctx.warning(str(exception))
-    #     if isinstance(exception, commands.CommandNotFound):
-    #         await self.paginators.check(ctx)
-    #         aliases = [
-    #             CommandAlias(command=command_name, alias=alias)
-    #             for command_name, alias in await self.db.fetch(
-    #                 "SELECT command_name, alias FROM aliases WHERE guild_id = $1",
-    #                 ctx.guild.id,
-    #             )
-    #         ]
-    #         return await handle_aliases(ctx, aliases)
-    #     if isinstance(exception, discord.ext.commands.errors.CheckFailure):
-    #         return
-    #     exc = "".join(
-    #         traceback.format_exception(type(error), error, error.__traceback__)
-    #     )
-    #     if isinstance(exception, SnipeError):
-    #         return await ctx.warning(str(exception))
-    #     log.error(
-    #         f'{type(error).__name__:25} > {ctx.guild} | {ctx.author} "{ctx.message.content}" \n {error} \n {exc}'
-    #     )
-    #     if isinstance(exception, RolePosition):
-    #         return await ctx.warning(str(exception))
-    #     if hasattr(exception, "message"):
-    #         return await ctx.warning(exception.message.split(":")[-1])
-    #     if "Missing Permissions" in str(exception):
-    #         return await ctx.warning(
-    #             "Due to hierarchy position I could not edit that object"
-    #         )
-    #     return await self.send_exception(
-    #         ctx, exception
-    #     )  # await ctx.warning(str(exception))
-
+    
     async def hierarchy(
         self,
         ctx: Context, 
@@ -1109,8 +1045,11 @@ class Greed(Bot):
 
         bot_member = ctx.guild.me
         author = ctx.author
+
+        if isinstance(member, discord.User):
+            return True
             
-        if bot_member.top_role <= member.top_role:
+        if isinstance(member, discord.Member) and bot_member.top_role <= member.top_role:
             await ctx.warning(f"I don't have high enough roles to perform this action on {member.mention}")
             return False
 
@@ -1139,56 +1078,3 @@ class Greed(Bot):
             return False
 
         return True
-
-    async def dump_command_page(self):
-        def get_usage(command):
-            if not command.clean_params:
-                return "None"
-            return ", ".join(m for m in [str(c) for c in command.clean_params.keys()])
-
-        def get_aliases(command):
-            if len(command.aliases) == 0:
-                return ["None"]
-            return command.aliases
-
-        def get_category(command):
-            if "settings" not in command.qualified_name:
-                return command.cog_name
-            else:
-                return "settings"
-
-        commands = list()
-        excluded = ["owner", "errors", "webserver", "jishaku"]
-        for command in self.walk_commands():
-            if cog := command.cog_name:
-                if cog.lower() in excluded:
-                    continue
-                if command.hidden or not command.brief:
-                    continue
-                if not command.permissions:
-                    permissions = ["send_messages"]
-                else:
-                    permissions = command.permissions
-                commands.append(
-                    {
-                        "name": command.qualified_name,
-                        "help": command.brief or "",
-                        "brief": [permissions.replace("_", " ").title()]
-                        if not isinstance(permissions, list)
-                        else [_.replace("_", " ").title() for _ in permissions],
-                        "usage": get_usage(command),
-                        "description": "",
-                        "aliases": get_aliases(command),
-                        "category": get_category(command).title(),
-                    }
-                )
-        with open(
-            "/root/greed.web/src/app/(routes)/commands/commands.json", "wb"
-        ) as file:
-            file.write(orjson.dumps(commands))
-        proc = await asyncio.create_subprocess_shell(
-            "cd ~/greed.web ; npm run build ; pm2 restart website",
-            stderr=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-        )
-        await proc.communicate()

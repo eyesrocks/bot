@@ -13,7 +13,7 @@ from datetime import timedelta, datetime  # type: ignore
 from base64 import b64decode  # type: ignore
 from io import StringIO
 from typing import Optional, Union, Dict, List  # type: ignore
-from tool.important.subclasses.parser import Script
+from tool.important.subclasses.parser import Script, EmbedError  # type: ignore
 from io import BytesIO
 from asyncio import gather, sleep
 from discord.ext.commands import (
@@ -165,10 +165,10 @@ class ReactionRoleConverter(commands.Converter):
                 message = ctx.message.reference.jump_url
         if message:
             message = await commands.MessageConverter().convert(
-                ctx, message.lstrip().rstrip()
+                ctx, message.strip()
             )
         if not DEFAULT_EMOJIS.findall(emoji):
-            emoji = await PartialEmojiConverter().convert(ctx, emoji.lstrip().rstrip())
+            emoji = await PartialEmojiConverter().convert(ctx, emoji.strip())
         else:
             emoji = emoji.replace(" ", "")
         role = await Role().convert(ctx, role)
@@ -1547,46 +1547,70 @@ class Servers(Cog):
 
     @sticker.command(
         name="clean",
-        aliases=("strip",),
-        brief="Remove any vanity links from all stickers",
+        aliases=["strip", "cleanse"],
+        brief="Remove any vanity links or .gg/ URLs from all sticker names",
         example=",sticker clean",
     )
-    @bot_has_permissions(manage_emojis_and_stickers=True)
+    @bot_has_permissions(manage_emojis_and_stickers=True) 
     @has_permissions(manage_emojis_and_stickers=True)
     async def sticker_clean(self: "Servers", ctx: Context):
-        """
-        Remove vanity links from every sticker name
-        """
         if not ctx.guild.stickers:
-            return await ctx.fail("There aren't any **stickers** in this server.")
+            return await ctx.fail("This server has no stickers to clean")
+
+        cleaned = []
+        skipped = []
+        failed = []
 
         async def clean_sticker(sticker):
-            if "/" not in sticker.name:
-                return
+            try:
+                if ".gg/" not in sticker.name:
+                    skipped.append(sticker)
+                    return None
 
-            name = multi_replace(
-                sticker.name,
-                {**{word: "" for word in sticker.name.split() if "/" in word}},
-            )
+                name = sticker.name.split(".gg/")[0]
+                
+                if len(name.strip()) < 2:
+                    skipped.append(sticker)
+                    return None
 
-            if len(name) < 2:
-                return
+                cleaned_sticker = await sticker.edit(
+                    name=name.strip(),
+                    reason=f"Cleaned vanity URLs by {str(ctx.author)}"
+                )
+                cleaned.append(cleaned_sticker)
+                return cleaned_sticker
 
-            return await sticker.edit(
-                name=name.strip(),
-                reason=f"{self.bot.user.name.title()} Utilities[{ctx.author}]",
-            )
+            except Exception as e:
+                logger.error(f"Failed to clean sticker {sticker.name}: {str(e)}")
+                failed.append(sticker)
+                return None
 
-        cleaned = tuple(
-            filter(
-                lambda s: s,
-                await gather(
-                    *(clean_sticker(sticker) for sticker in ctx.guild.stickers)
-                ),
-            )
+        await gather(*(clean_sticker(s) for s in ctx.guild.stickers))
+
+        embed = discord.Embed(
+            title="Sticker Cleanup Results",
+            color=self.bot.color,
+            timestamp=discord.utils.utcnow()
+        )
+        embed.add_field(
+            name="Summary",
+            value=f"✅ Cleaned: {len(cleaned)}\n↪️ Skipped: {len(skipped)}\n❌ Failed: {len(failed)}",
+            inline=False
         )
 
-        return await ctx.success(f"**Cleaned** `{len(cleaned)}` stickers")
+        if cleaned:
+            cleaned_names = "\n".join(f"• {s.name}" for s in cleaned[:10])
+            if len(cleaned) > 10:
+                cleaned_names += f"\n+ {len(cleaned)-10} more..."
+            embed.add_field(name="Cleaned Stickers", value=cleaned_names, inline=False)
+
+        if failed:
+            failed_names = "\n".join(f"• {s.name}" for s in failed[:5])
+            if len(failed) > 5:
+                failed_names += f"\n+ {len(failed)-5} more..."
+            embed.add_field(name="Failed Stickers", value=failed_names, inline=False)
+
+        await ctx.send(embed=embed)
 
     @sticker.command(
         name="tag",
@@ -1978,7 +2002,10 @@ class Servers(Cog):
             channel = self.bot.get_channel(data["channel_id"])
             message = data["message"]
             if channel:
-                await self.bot.send_embed(channel, message, user=member)
+                try:
+                    await self.bot.send_embed(channel, message, user=member)
+                except EmbedError as e:
+                    await channel.send(f"fix your welcome message: {e}")
 
     @Cog.listener()
     async def on_member_remove(self, member: discord.Member):
@@ -2011,7 +2038,7 @@ class Servers(Cog):
     @commands.group(
         name="selfprefix",
         invoke_without_command=True,
-        brief="Set a self prefix thats unique to you to use for greed",
+        brief="Set a self prefix thats unique to you to use for the bot",
         example=",selfprefix !",
     )
     async def selfprefix(self, ctx: Context, prefix: str = None):
@@ -2890,7 +2917,7 @@ class Servers(Cog):
         name="autorole",
         aliases=["arole"],
         example=",autorole",
-        brief="Configure autorole settings through greed",
+        brief="Configure autorole settings through the bot",
     )
     @commands.has_permissions(manage_guild=True)
     @commands.bot_has_permissions(administrator=True)

@@ -34,7 +34,7 @@ def get_humanized_time(seconds: Union[float, int]):
     return humanize.naturaldelta(int(seconds))
 
 url_regex = re.compile(
-    r"\b((https?|http?|ftp):\/\/)?(www\.)?([a-zA-Z0-9-]+(\.[a-zA-Z]{2,})+)(\/[^\s]*)?\b",
+    r"https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+",
     re.I,
 )
 
@@ -201,9 +201,10 @@ class Events(commands.Cog):
         if await self.bot.db.fetchval(
             "SELECT * FROM imageonly WHERE channel_id = $1", message.channel.id
         ):
-            if message.attachments or message.embeds:
+            if message.content and not message.attachments or message.embeds:
+                return await message.delete()
+            else:
                 return
-            await message.delete()       
 
     @commands.Cog.listener("on_audit_log_entry_create")
     async def moderation_logs(self, entry: discord.AuditLogEntry):
@@ -501,8 +502,8 @@ class Events(commands.Cog):
                     if trigger.strip("*").lower() in message.content.lower():
                         await self.do_autoresponse(trigger, message)
                 else:
-                    trigger.rstrip().lstrip()
-                    content = message.content  # )
+                    trigger = trigger.strip()
+                    content = message.content
                     if (
                         content.lower().startswith(f"{trigger.lower()} ")
                         or content.lower() == trigger.lower()
@@ -752,54 +753,6 @@ class Events(commands.Cog):
                         )
                     return True
         return False
-
-    # @commands.Cog.listener("on_message")
-    # async def uwulock_event(self, message: discord.Message) -> None:
-    #     if message.content and message.content != "":
-    #         if data := await self.bot.db.fetchval(
-    #             """SELECT webhook FROM niggertalk WHERE guild_id = $1 AND channel_id = $2 AND user_id = $3""",
-    #             message.guild.id,
-    #             message.channel.id,
-    #             message.author.id,
-    #         ):
-    #             try:
-    #                 async with aiohttp.ClientSession() as session:
-    #                     webhook = discord.Webhook.from_url(f"{data}", session=session)
-    #                     await message.delete()
-    #                     return await webhook.send(self.nigger_talk(message.content))
-    #             except discord.errors.NotFound:
-    #                 await self.bot.db.execute(
-    #                     """DELETE FROM niggertalk WHERE guild_id = $1 AND channel_id = $2 AND user_id = $3""",
-    #                     message.guild.id,
-    #                     message.channel.id,
-    #                     message.author.id,
-    #                 )
-    #                 logger.error(
-    #                     f"Failed to send niggertalk message to {message.author.name} in {message.guild.name} due to webhook not found"
-    #                 )
-    #         if data := await self.bot.db.fetchval(
-    #             """SELECT webhook FROM uwulock WHERE guild_id = $1 AND channel_id = $2 AND user_id = $3""",
-    #             message.guild.id,
-    #             message.channel.id,
-    #             message.author.id,
-    #         ):
-    #             try:
-    #                 async with aiohttp.ClientSession() as session:
-    #                     webhook = discord.Webhook.from_url(f"{data}", session=session)
-    #                     await message.delete()
-    #                     return await webhook.send(
-    #                         self.uwu_catgirl_mode(message.content)
-    #                     )
-    #             except discord.errors.NotFound:
-    #                 await self.bot.db.execute(
-    #                     """DELETE FROM uwulock WHERE guild_id = $1 AND channel_id = $2 AND user_id = $3""",
-    #                     message.guild.id,
-    #                     message.channel.id,
-    #                     message.author.id,
-    #                 )
-    #                 logger.error(
-    #                     f"Failed to send uwulock message to {message.author.name} in {message.guild.name} due to webhook not found"
-    #                 )
 
     @commands.Cog.listener("on_message_edit")
     async def filter_response_edit(
@@ -1132,54 +1085,29 @@ class Events(commands.Cog):
 
             async def do_autoreact():
                 try:
-
-                    def check_emoji(react: Any):  # type: ignore
-                        if not isinstance(react, str):
-                            return True
-                        if match := EMOJI_REGEX.match(react):
-                            emoji = match.groupdict()
-                            if re := message.guild.get_emoji(int(emoji["id"])):  # type: ignore  # noqa: F841
-                                return True
-                            else:
-                                return False
-                        return True
-
                     keywords_covered = []
-                    for keyword, reaction in self.bot.cache.autoreacts[  # type: ignore
-                        message.guild.id
-                    ].items():
+                    for keyword, reactions in self.bot.cache.autoreacts[message.guild.id].items():
                         if keyword not in ["spoilers", "images", "emojis", "stickers"]:
                             if keyword in message.content:
-                                reactions = self.bot.cache.autoreacts[message.guild.id][
-                                    keyword
-                                ]
-                                reactions = [reaction for reaction in reactions]
-                                reactions = [r for r in reactions]
-
-                                async def do_reaction(
-                                    message: discord.Message, reaction: str
-                                ):
+                                async def do_reaction(message: discord.Message, reaction: str):
                                     try:
                                         name = unicodedata.name(reaction)
                                         if "variation" in name.lower():
-                                            #                                           logger.info(f"not adding {reaction} due to the name being {name}")
                                             return
-                                    #                                        logger.info(f"emoji name: {name}")
                                     except Exception:
                                         pass
                                     try:
-                                        #                  if message.author.name == "aiohttp": logger.info(reaction)
                                         await message.add_reaction(reaction)
                                     except Exception:
-                                        self.bot.eee = reaction
-                                        #                                      logger.info(f"An Autoreaction error occurred : {e} : for emoji {reaction} with type {type(reaction)}")
-                                        # return await message.channel.send(
-                                        #     embed=discord.Embed(
-                                        #         color=self.bot.color,
-                                        #         description=f"i cannot react to messages due to an error, please report this: {e}",
-                                        #     )
-                                        # )
-                                        pass  # type: ignore
+                                        pass
+
+                                if await self.bot.glory_cache.ratelimited(f"autoreact:{message.guild.id}:{keyword}", 3, 5):
+                                    continue
+
+                                await asyncio.gather(
+                                    *[do_reaction(message, reaction) for reaction in reactions]
+                                )
+                                keywords_covered.append(keyword)
 
                                 asyncio.gather(
                                     *(

@@ -140,6 +140,40 @@ class IPC:
     async def get_channel_count(self, source: str):
         return sum(len(guild.channels) for guild in self.bot.guilds)
     
+    async def start_instance(self, source: str, token: str, user_id: int):
+        cog = self.bot.get_cog("Instances")
+        if cog:
+            await cog.start_instance(token, user_id)
+            return True
+        return False
+    
+    async def stop_instance(self, source: str, token: str, user_id: int):
+        cog = self.bot.get_cog("Instances")
+        if cog:
+            await cog.stop_instance(token, user_id)
+            return True
+        return False
+
+    async def restart_instance(self, source: str, token: str, user_id: int):
+        cog = self.bot.get_cog("Instances")
+        if cog:
+            await cog.restart_instance(token, user_id)
+            return True
+        return False
+    
+    async def get_instance(self, source: str, user_id: int):
+        cog = self.bot.get_cog("Instances")
+        if cog:
+            if user_id in self.bot.instances:
+                return True
+        return False
+    
+    async def get_instance_count(self, source: str):
+        if hasattr(self.bot, "instances"):
+            return len(self.bot.instances)
+        else:
+            return 0
+    
     async def ipc_get_user_from_cache(
         self, source, user: Union[User, int]
     ):
@@ -185,15 +219,26 @@ class IPC:
     async def get_channel(self, source: str, channel_id: int):
         channel = self.bot.get_channel(channel_id)
         if channel:
-            return self.transformers.transform_channel(channel)
+            return {self.transformers.transform_channel(channel)}
         else:
-            return None
+            return {}
 
-    async def send_message(self, source: str, channel_id: int, message: str, user_id: Union[Member, int], **kwargs):
-        """Send an embed message to a channel via IPC"""
-        if channel := self.bot.get_channel(channel_id):
-            try:
-                return await self.bot.send_embed(channel, message, user=user_id, **kwargs)
-            except Exception as e:
-                logger.error(f"Failed to send embed via IPC: {e}")
-        return None
+    async def send_message(self, source: str, channel_id: int, content: Optional[str] = None, embed: Optional[Union[dict, Any]] = None):
+        if not isinstance(channel_id, list):
+            channel_id = [channel_id]
+
+        channels = [self.bot.get_channel(cid) for cid in channel_id]
+        messages = {}
+        for channel in channels:
+            if channel and channel.permissions_for(channel.guild.me).send_messages:
+                embed_obj = None
+                if embed:
+                    from discord import Embed
+                    embed_obj = Embed.from_dict(embed)
+                if content and embed:
+                    messages[str(channel.id)] = await channel.send(content=content, embed=embed_obj)
+                elif content:
+                    messages[str(channel.id)] = await channel.send(content=content)
+                elif embed:
+                    messages[str(channel.id)] = await channel.send(embed=embed_obj)
+        return {k: {"id": v.id, "content": v.content, "embeds": [embed_obj.to_dict()] if embed else []} for k, v in messages.items()}

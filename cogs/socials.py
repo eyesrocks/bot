@@ -18,10 +18,11 @@ from yt_dlp import DownloadError, YoutubeDL
 from yarl import URL
 from jishaku.functools import executor_function
 import aiohttp
-from lxml import html
 from loguru import logger
 from re import search, compile
 from io import BytesIO
+from bs4 import BeautifulSoup
+import urllib.parse
 
 @dataclass
 class SearchResult:
@@ -44,6 +45,7 @@ class Result:
     extended_links: List[SearchResult] = field(default_factory=list)
 
 
+
 class GoogleScraper:
     def __init__(self):
         self.headers = {
@@ -53,38 +55,94 @@ class GoogleScraper:
             )
         }
 
-    async def search(self, query: str) -> list[SearchResult]:
-        url = URL.build(
-            scheme="https",
-            host="www.google.com",
-            path="/search",
-            query={"q": query}
-        )
-
-        async with aiohttp.ClientSession(headers=self.headers) as session:
-            async with session.get(url) as response:
-                if response.status != 200:
-                    raise Exception(f"Failed to fetch results: {response.status}")
-
-                content = await response.text()
-
-        tree = html.fromstring(content)
+    async def search(self, query: str, num_pages: int = 3) -> list[SearchResult]:
         results = []
+        
+        for page in range(num_pages):
+            start = page * 10
+            url = URL.build(
+                scheme="https",
+                host="www.google.com",
+                path="/search",
+                query={
+                    "q": query,
+                    "start": str(start),
+                    "safe": "active",
+                    "num": "100"
+                }
+            )
 
-        for result in tree.xpath('//div[@class="tF2Cxc"]')[:30]:
-            title = result.xpath('.//h3/text()')
-            link = result.xpath('.//a/@href')
-            snippet = result.xpath('.//div[@class="VwiC3b"]/text()')
+            async with aiohttp.ClientSession(headers=self.headers) as session:
+                async with session.get(url) as response:
+                    if response.status != 200:
+                        continue
+                    content = await response.text()
 
-            if title and link:
-                results.append(SearchResult(
-                    title=title[0],
-                    link=link[0],
-                    snippet=snippet[0] if snippet else "No description available"
-                ))
+            soup = BeautifulSoup(content, 'html.parser')
+            search_divs = soup.find_all('div', class_=['g', 'tF2Cxc'])
+
+            for div in search_divs:
+                title_elem = div.find('h3')
+                link_elem = div.find('a')
+                snippet_elem = div.find('div', class_=['VwiC3b', 'yXK7lf'])
+
+                if title_elem and link_elem:
+                    title = title_elem.get_text()
+                    link = link_elem.get('href')
+                    snippet = snippet_elem.get_text() if snippet_elem else "No description available"
+
+                    if link.startswith('/url?'):
+                        link = urllib.parse.parse_qs(urllib.parse.urlparse(link).query)['q'][0]
+
+                    if link.startswith('http'):
+                        results.append(SearchResult(
+                            title=title,
+                            link=link,
+                            snippet=snippet
+                        ))
 
         return results
 
+
+class GoogleImages:
+    def __init__(self):
+        self.headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0 Safari/537.36"
+            )
+        }
+
+    async def search(self, query: str, num_pages: int = 5) -> list[str]:
+        results = []
+        
+        for page in range(num_pages):
+            url = URL.build(
+                scheme="https",
+                host="www.google.com",
+                path="/search",
+                query={
+                    "q": query,
+                    "tbm": "isch",
+                    "safe": "active",
+                    "start": str(page * 20)
+                }
+            )
+
+            async with aiohttp.ClientSession(headers=self.headers) as session:
+                async with session.get(url) as response:
+                    if response.status != 200:
+                        continue
+                    content = await response.text()
+
+            soup = BeautifulSoup(content, 'html.parser')
+            for img in soup.find_all('img'):
+                if src := img.get('src'):
+                    if src.startswith('http') and not src.startswith('https://www.google.com'):
+                        results.append(src)
+        logger.info(results)
+        return results[:100]
+    
 client = Client()
 
 @dataclass
@@ -191,7 +249,7 @@ class RobloxUserModel:
         """Fetch a Roblox user by their username."""
         try:
             user = await client.get_user_by_username(username, expand=True)
-        except (UserNotFound, BadRequest):
+        except (UserNotFound, BadRequest, app_commands.errors.CommandInvokeError):
             return None
         except TooManyRequests:
             raise CommandError("The Roblox API rate limit has been exceeded. Please try again later.")
@@ -434,6 +492,79 @@ class Socials(commands.Cog):
             )
 
         await ctx.send(embed=embed)
+
+    @commands.command(
+        name="google",
+        aliases=["search"],
+        brief="Search Google for a query.",
+        example=",google how to make a bot"
+    )
+    async def google(self, ctx: Context, *, query: str):
+        """Search Google for a query."""
+        async with ctx.typing():
+            scraper = GoogleScraper()
+            results = await scraper.search(query)
+
+            if not results:
+                return await ctx.send("No results found.")
+
+            embeds = []
+            current_embed = None
+            counter = 0
+            
+            embed = Embed(title=f"Search Results: {query}")
+            for i, result in enumerate(results):
+                if counter % 3 == 0:
+                    if current_embed:
+                        embeds.append(current_embed)
+                    current_embed = embed.copy()
+                
+                current_embed.add_field(
+                    name=result.title[:256],
+                    value=f"[{result.snippet[:250]}]({result.link})...",
+                    inline=False
+                )
+                counter += 1
+            
+            if current_embed:
+                embeds.append(current_embed)
+
+            await ctx.paginate(embeds)
+
+    @commands.command(
+        name="image",
+        aliases=["images", "img"],
+        brief="Search Google Images for a query.",
+        example=",image cute cats"
+    )
+    async def google_images(self, ctx, *, query: str):
+        """Search Google Images for a query."""
+        async with ctx.typing():
+            scraper = GoogleImages()
+            images = await scraper.search(query)
+
+            if not images:
+                return await ctx.send("No images found.")
+
+            embeds = []
+            current_embed = None
+            counter = 0
+            
+            embed = Embed(title=f"Search Results: {query}")
+            for i, image in enumerate(images):
+                if counter % 3 == 0:
+                    if current_embed:
+                        embeds.append(current_embed)
+                    current_embed = embed.copy()
+                
+                current_embed.set_image(url=image)
+                counter += 1
+            
+            if current_embed:
+                embeds.append(current_embed)
+
+            await ctx.paginate(embeds)
+
 
 async def setup(bot):
     await bot.add_cog(Socials(bot))
