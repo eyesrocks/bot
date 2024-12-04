@@ -18,6 +18,8 @@ from tool.important import Context  # type: ignore
 from typing import Union
 from discord import PartialEmoji 
 import cairosvg
+from gtts import gTTS
+from io import BytesIO
 
 
 def generate(img: bytes) -> bytes:
@@ -88,13 +90,13 @@ class ValorantProfile(BaseModel):
         return cls.parse_raw(data)  # type: ignore
 
 
-class ValorantUser(commands.Converter):
-    async def convert(self, ctx: Context, argument: str):  # type: ignore
-        if "#" not in argument:
-            raise commands.CommandError(
-                "please include a `#` inbetween the user and tag"
-            )
-        return argument.split("#")
+# class ValorantUser(commands.Converter):
+#     async def convert(self, ctx: Context, argument: str):  # type: ignore
+#         if "#" not in argument:
+#             raise commands.CommandError(
+#                 "please include a `#` inbetween the user and tag"
+#             )
+#         return argument.split("#")
 
 
 snipe_message_author = {}
@@ -104,7 +106,7 @@ snipe_message_author_avatar = {}
 snipe_message_time = {}
 snipe_message_sticker = {}
 snipe_message_embed = {}
-from tool import valorant  # noqa: E402
+#from tool import valorant  # noqa: E402
 
 
 class Miscellaneous(Cog):
@@ -158,19 +160,58 @@ class Miscellaneous(Cog):
                 )
     
 
-    @commands.command(
-        name="valorant",
-        brief="lookup a user's valorant stats",
-        usage=",valorant <user>#<tag>",
-        example=",valorant cop#00001",
-    )
-    async def valorant(self, ctx: Context, user: ValorantUser):
-        #      try:
-        return await valorant.valorant(ctx, f"{user[0]}#{user[1]}")
+    # @commands.command(
+    #     name="valorant",
+    #     brief="lookup a user's valorant stats",
+    #     usage=",valorant <user>#<tag>",
+    #     example=",valorant cop#00001",
+    # )
+    # async def valorant(self, ctx: Context, user: ValorantUser):
+    #     #      try:
+    #     return await valorant.valorant(ctx, f"{user[0]}#{user[1]}")
         #        except Exception:
         #           return await ctx.fail(f"that valorant user couldn't be fetched")
-        embed = await data.to_embed(ctx)  # type: ignore  # noqa: F821
-        return await ctx.send(embed=embed)
+        # embed = await data.to_embed(ctx)  # type: ignore  # noqa: F821
+        # return await ctx.send(embed=embed)
+
+    @commands.command(name="tts", help="Converts text to speech and plays it in your voice channel.")
+    async def tts(self, ctx, *, text: str):
+        if not ctx.author.voice:
+            return await ctx.fail("You need to be in a voice channel to use this command!")
+            
+        
+        if ctx.voice_client:
+            if not isinstance(ctx.voice_client, discord.VoiceClient):
+                return await ctx.warning("Cannot use TTS while music is playing!")
+                
+            if ctx.voice_client.channel != ctx.author.voice.channel:
+                await ctx.voice_client.move_to(ctx.author.voice.channel)
+            vc = ctx.voice_client
+        else:
+            vc = await ctx.author.voice.channel.connect()
+        
+        try:
+            fp = BytesIO()
+            tts = gTTS(text=text, lang='en')
+            tts.write_to_fp(fp)
+            fp.seek(0)
+        except Exception as e:
+            return await ctx.fail(f"Error generating TTS: {e}")
+            
+        
+        try:
+            vc.play(discord.FFmpegPCMAudio(fp, pipe=True), 
+                   after=lambda e: print(f"Finished playing: {e}"))
+            vc.source = discord.PCMVolumeTransformer(vc.source)
+            vc.source.volume = 2
+            await ctx.send(f"Speaking: {text}")
+        except Exception as e:
+            await ctx.send(f"Error playing TTS: {e}")
+        finally:
+            while vc.is_playing():
+                await asyncio.sleep(1)
+            fp.close()
+
 
     @commands.command(
         name="variables",

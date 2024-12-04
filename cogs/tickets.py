@@ -74,6 +74,9 @@ def manage_ticket():
         acheck = await ctx.bot.db.fetchrow(
             "SELECT support_id FROM tickets WHERE guild_id = $1", ctx.guild.id
         )
+        fakepermissions = ctx.bot.db.fetchrow(
+            "SELECT role_id, perms FROM fake_permissions WHERE guild_id = $1",
+        )
         if acheck:
             role = ctx.guild.get_role(acheck[0])
             if role:
@@ -94,7 +97,12 @@ def manage_ticket():
                 raise CommandError(
                     "Only members with the **Manage Channels** permission can **add** or **remove** new members from the ticket",
                 )
+        for i in fakepermissions:
+            if i['role_id'] in [role.id for role in ctx.author.roles]:
+                if 'manage_channels' in i['perms']:
+                    return True
         return True
+    
 
     return check(predicate)
 

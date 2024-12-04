@@ -98,6 +98,8 @@ class Handler:
     async def check_user(self, user: Union[Member, User, Object]):
         if isinstance(user, Object):
             user = self.bot.get_user(user.id) or await self.bot.fetch_user(user.id)
+            if not user:
+                return "Unknown User"
         return user.mention
 
     def get_parents(self, ctx: Context):
@@ -578,8 +580,6 @@ class Handler:
                 embed = self.voice_embed(c, kwargs["before"], kwargs["after"])
             else:
                 _type = await self.handle_log(c)
-                if c.guild.id == 1301617147964821524:
-                    logger.info(f"event got type {_type}")
                 if _type is None:
                     return
                 embed = await self.get_embed(c, _type)

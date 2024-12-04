@@ -50,7 +50,7 @@ from rival_tools import ratelimit, lock  # type: ignore
 from tool.rival import RivalAPI, get_statistics as get_stats, Statistics  # type: ignore
 from tool.paginate import Paginate  # type: ignore
 from sys import stdout
-
+from contextlib import suppress
 discord.Interaction.success = GreedInteraction.success
 discord.Interaction.fail = GreedInteraction.fail
 discord.Interaction.warning = GreedInteraction.warning
@@ -71,9 +71,17 @@ if loguru:
         colorize=True,
         enqueue=True,
         backtrace=True,
-        format="<cyan>[</cyan><blue>{time:YYYY-MM-DD HH:MM:SS}</blue><cyan>]</cyan> (<magenta>greed:{function}</magenta>) <yellow>@</yellow> <fg #BBAAEE>{message}</fg #BBAAEE>",
+        format="(<magenta>greed:{function}</magenta>) <yellow>@</yellow> <fg #BBAAEE>{message}</fg #BBAAEE>",
     )
-
+else:
+    logger.add(
+        stdout,
+        level="INFO",
+        colorize=True,
+        enqueue=True,
+        backtrace=True,
+        format="(<magenta>greed:{function}</magenta>) <yellow>@</yellow> <fg #BBAAEE>{message}</fg #BBAAEE>",
+    )
 
 class iteration(object):
     def __init__(self, data: Any):
@@ -543,43 +551,47 @@ class Greed(Bot):
         if not await self.db.fetchval(
             """SELECT state FROM terms_agreement WHERE user_id = $1""", ctx.author.id
         ):
+            message = None
             try:
                 message = await ctx.normal(
                     f"{self.user.name} bot will store your data (user ids / guild ids to work correctly) **By continuing to use our services**, you agree to our **[policy]({self.domain}/tos)**"
                 )
                 view = PrivacyConfirmation(bot=self, message=message, invoker=ctx.author)
                 await message.edit(view=view)
-                await view.wait()
-
-                state = view.value if view.value is not None else False
+                await view.wait()                
+                state = bool(view.value)                
                 await self.db.execute(
-                    """INSERT INTO terms_agreement (user_id, state) VALUES ($1, $2) ON CONFLICT DO NOTHING;""",
+                    """INSERT INTO terms_agreement (user_id, state) VALUES ($1, $2) 
+                       ON CONFLICT (user_id) DO UPDATE SET state = $2;""",
                     ctx.author.id,
                     state,
                 )
+
                 if not state:
+                    decline_embed = discord.Embed(
+                        description=f"> {ctx.author.mention} has **declined our privacy policy** and as a result you have been **blacklisted from using any {self.user.name} command or feature**. Feel free to accept our [**policy**]({self.domain}/tos) using `{ctx.prefix}reset`",
+                        color=self.color,
+                    )
+                    
                     try:
-                        await message.edit(
-                            embed=discord.Embed(
-                                description=f"> {ctx.author.mention} has **declined our privacy policy** and as a result you have been **blacklisted from using any {self.user.name} command or feature**. Feel free to accept our [**policy**](https://greed.wtf/privacy) using `{ctx.prefix}reset`",
-                                color=self.color,
-                            )
-                        )
+                        if message:
+                            await message.edit(embed=decline_embed, view=None)
+                        else:
+                            await ctx.send(embed=decline_embed)
                     except discord.NotFound:
-                        await ctx.send(
-                            embed=discord.Embed(
-                                description=f"> {ctx.author.mention} has **declined our privacy policy** and as a result you have been **blacklisted from using any gree{self.user.name}d command or feature**. Feel free to accept our [**policy**](https://greed.wtf/tos) using `{ctx.prefix}reset`",
-                                color=self.color,
-                            )
-                        )
+                        await ctx.send(embed=decline_embed)
                     return False
-                try:
-                    await message.delete()
-                except discord.NotFound:
-                    pass  # Message was already deleted
-                
+                else:
+                    with suppress(discord.NotFound, discord.HTTPException):
+                        if message:
+                            await message.delete()
+                    return True
+                    
             except Exception as e:
                 logger.error(f"Privacy confirmation error: {str(e)}")
+                if message:
+                    with suppress(discord.NotFound, discord.HTTPException):
+                        await message.delete()
                 return False
 
         data = await self.db.fetchrow(
