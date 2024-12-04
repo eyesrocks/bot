@@ -180,7 +180,7 @@ class OpenTicket(
         self.guild_id = guild_id
 
     @classmethod
-    async def from_custom_id(cls, interaction: discord.Interaction, item: discord.ui.Button, match: re.Match[str]):  # type: ignore
+    async def from_custom_id(cls, interaction: Interaction, item: Button, match: re.Match[str]):  # type: ignore
         guild_id = int(match["guild_id"])
         return cls(guild_id)
 
@@ -335,7 +335,7 @@ class DeleteTicket(
         self.guild_id = guild_id
 
     @classmethod
-    async def from_custom_id(cls, interaction: discord.Interaction, item: discord.ui.Button, match: re.Match[str], /):  # type: ignore
+    async def from_custom_id(cls, interaction: Interaction, item: Button, match: re.Match[str], /):  # type: ignore
         guild_id = int(match["guild_id"])
         return cls(guild_id)
 
