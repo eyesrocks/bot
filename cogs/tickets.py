@@ -97,10 +97,12 @@ def manage_ticket():
                 raise CommandError(
                     "Only members with the **Manage Channels** permission can **add** or **remove** new members from the ticket",
                 )
-        for i in fakepermissions:
-            if i['role_id'] in [role.id for role in ctx.author.roles]:
-                if 'manage_channels' in i['perms']:
-                    return True
+            if fakepermissions:
+                if fakepermissions[0] == ctx.author.id:
+                    if "manage_channels" not in fakepermissions[1]:
+                        raise CommandError(
+                            "Only members with the **Manage Channels** permission can **add** or **remove** new members from the ticket",
+                        )
         return True
     
 
