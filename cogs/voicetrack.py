@@ -7,7 +7,7 @@ from io import BytesIO
 class VoiceTrack(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        
+        bot.loop.create_task(self.create_table())
     async def create_table(self):
         await self.bot.db.execute("""
             CREATE TABLE IF NOT EXISTS voicetime_overall (
