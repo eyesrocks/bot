@@ -530,7 +530,7 @@ class Automod(commands.Cog):
         for event_type in event_types:
             if event_type.lower() not in e:
                 rows.append(
-                    f"**filter [{event_type.lower()}]({self.bot.domain}/commands):** <:deny2:1302206609719824425>"
+                    f"**filter [{event_type.lower()}]({self.bot.domain}/commands):** f{self.get_state(False)}"
                 )
 
         embed = discord.Embed(
