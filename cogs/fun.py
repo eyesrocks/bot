@@ -1064,7 +1064,86 @@ class Fun(commands.Cog):
         await ctx.send(f"{opponent.mention}, you have been challenged to a game of Tic Tac Toe!", view=view)
 
 
-z
+    @commands.command(name="image")
+    @commands.cooldown(1, 5, commands.BucketType.user)
+    async def image(self, ctx, *, query: str):
+        """Search for images using Google's Custom Search JSON API with button-based navigation."""
+        try:
+            # Build the Google Custom Search service
+            service = build("customsearch", "v1", developerKey=GOOGLE_API_KEY)
+
+            # Perform the search (fetch up to 10 results)
+            result = service.cse().list(
+                q=query,              # Query string
+                cx=SEARCH_ENGINE_ID,  # Custom Search Engine ID
+                searchType="image",   # Search type: Image
+                safe="active",        # SafeSearch filter
+                num=10                # Number of results to fetch (max 10 per API call)
+            ).execute()
+
+            # Extract the results
+            items = result.get("items", [])
+            if not items:
+                await ctx.send("No images found for your query.")
+                return
+
+            # Create a list of embeds for pagination
+            embeds = []
+            for index, item in enumerate(items):
+                image_url = item.get("link")
+                embed = discord.Embed(
+                    description=f":mag_right: Search results for: **{query}**\nPage {index + 1}/{len(items)}",
+                    color=self.bot.color
+                )
+                embed.set_image(url=image_url)
+                embed.set_footer(text="/pomice")
+                embeds.append(embed)
+
+            # Send the first embed with buttons
+            view = ImagePaginationView(ctx.author, embeds)
+            await ctx.send(embed=embeds[0], view=view)
+
+        except Exception as e:
+            await ctx.send(f"An error occurred: {e}")
+
+
+class ImagePaginationView(discord.ui.View):
+    def __init__(self, user: discord.Member, embeds: list[discord.Embed]):
+        super().__init__(timeout=60)
+        self.user = user
+        self.embeds = embeds
+        self.current_page = 0
+
+    @discord.ui.button(label="Previous", style=discord.ButtonStyle.secondary, disabled=True)
+    async def previous_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Handles the Previous button click."""
+        if interaction.user != self.user:
+            await interaction.response.send_message("You cannot control this interaction.", ephemeral=True)
+            return
+
+        self.current_page -= 1
+        self.update_buttons()
+        embed = self.embeds[self.current_page]
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(label="Next", style=discord.ButtonStyle.success)
+    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Handles the Next button click."""
+        if interaction.user != self.user:
+            await interaction.response.send_message("You cannot control this interaction.", ephemeral=True)
+            return
+
+        self.current_page += 1
+        self.update_buttons()
+        embed = self.embeds[self.current_page]
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    def update_buttons(self):
+        """Enable or disable buttons based on the current page."""
+        self.previous_button.disabled = self.current_page == 0
+        self.next_button.disabled = self.current_page == len(self.embeds) - 1
+
+
 
 
 
