@@ -10,6 +10,7 @@ from typing import Optional
 from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
 from typing import List
+import base64
 import textwrap
 import random
 import aiohttp
