@@ -1801,7 +1801,7 @@ class Information(commands.Cog):
             title="Purchase Wrath",
             description=(
                 "Purchase Wrath for 10 **$10** one time or **$3.50** monthly\n\n"
-                "If you're interested in purchasing a subscription for a Discord server of your choice, "
+                "If you're interested in purchasing Wrath for a Discord server of your choice, "
                 "please open a ticket below to buy or if you purchased a server subscription\n\n"
                 "Prices and the available payment methods are listed here.\n\n"
                 "Please do not ask to pay with Discord Nitro, or to negotiate the price. "
