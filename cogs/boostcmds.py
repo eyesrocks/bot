@@ -7,7 +7,7 @@ import tweepy
 API_KEY = "0tu5fzJfWqv0wf3PZKYw4Fb7r"
 API_SECRET_KEY = "frYCbYrvZqbX60YWz1mB6XxUYasM2M6zPLlOJsZlumHdOwB1Rp"
 ACCESS_TOKEN = "1864548564568854528-IDHDW5mmQwLgghIzxShW60JVuWsgrt"
-ACCESS_TOKEN_SECRET = "your_access_token_secret"
+ACCESS_TOKEN_SECRET = "MprtudTzpC9KgrwMxyTHJMv93lFLCJPFA24q577kxHydr"
 
 # Set up the Twitter API client
 auth = tweepy.OAuthHandler(API_KEY, API_SECRET_KEY)
