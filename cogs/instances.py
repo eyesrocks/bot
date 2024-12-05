@@ -90,7 +90,7 @@ class Instances(Cog):
     async def cog_load(self):
         if self.bot.connection.local_name != "cluster1":
             return
-        for row in await self.bot.db.fetch("""SELECT * FROM instances"""):
+        async def check(row):
             user_data = await self.bot.db.fetchrow("""SELECT expiration FROM instance_whitelist WHERE user_id = $1""", row.user_id)
             if not user_data:
                 continue
@@ -109,6 +109,12 @@ class Instances(Cog):
                             if await self.bot.connection.request("get_instance", source = source, user_id = row.user_id) != False:
                                 continue
                     await self.start_instance(row.token, row.user_id)
+
+        for row in await self.bot.db.fetch("""SELECT * FROM instances"""):
+            try:
+                await check(row)
+            except Exception:
+                pass
 
     async def cog_check(self, ctx: Context):
         if ctx.author.id in self.bot.owner_ids:

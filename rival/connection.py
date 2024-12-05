@@ -534,7 +534,7 @@ class Connection:
                         break
                 else:
                     break
-            logger.info(f"message {message.to_dict()}")
+#            logger.info(f"message {message.to_dict()}")
             if message.type == PayloadType.success:
                 logger.info(f"successful message but self._authorized is currently {self._authorized}")
             else:
