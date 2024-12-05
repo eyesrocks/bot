@@ -836,7 +836,7 @@ class Information(commands.Cog):
         flags = user.public_flags
 
         emojis = {
-            "staff2": "<:staff_badge_2:1304259736983834694>",
+            "staff2": EMOJIS["badgediscordstaff"]
             "nitro": EMOJIS["Nitro_badge"],
             "hypesquad_brilliance": EMOJIS["Icon_Hypesquad_Brilliance"],
             "hypesquad_bravery": EMOJIS["Icon_Hypesquad_Bravery"],

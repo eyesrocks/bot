@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from discord import Embed
 from typing import Union
 from discord.ui import Button
-
+from .emotes import EMOJIS
 class PlayModal(discord.ui.Modal, title="Play"):
     def __init__(self, bot):
         super().__init__()
@@ -939,7 +939,7 @@ class EmojiConfirmation(View):
         self.value = True
         await self.confirmation(interaction, True)
 
-    @button(style=ButtonStyle.red, emoji="<:stop:1110883418708901928>")
+    @button(style=ButtonStyle.red, emoji=EMOJIS["stop"])
     async def decline(self: "Confirmation", interaction: Interaction, _: None):
         """
         The decline button.

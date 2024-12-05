@@ -12,7 +12,7 @@ from logging import getLogger
 from contextlib import asynccontextmanager
 import inspect
 from tuuid import tuuid
-
+from tool.emotes import EMOJIS
 logger = getLogger(__name__)
 GLOBAL_COMMANDS = {}
 
@@ -207,7 +207,7 @@ class MyHelpCommand(commands.HelpCommand):
 
         embed = discord.Embed(
             title="Help",
-            description="<:luma_info:1302336751599222865> **support: [/pomice](https://discord.gg/pomice)**\n<a:loading:1302351366584270899> **site: [greed](http://greed.wtf)**\n\n Use **,help [command name]** or select a category from the dropdown",
+            description=f"{EMOJIS["luma_info"]} **support: [/pomice](https://discord.gg/pomice)**\n<a:loading:1302351366584270899> **site: [greed](http://greed.wtf)**\n\n Use **,help [command name]** or select a category from the dropdown",
             color=0x36393f,
         )
         embed.set_author(name=self.context.bot.user.name, icon_url=self.context.bot.user.avatar)
@@ -268,7 +268,7 @@ class MyHelpCommand(commands.HelpCommand):
                     color=0x36393f,
                     title=f'**Need help with {group.qualified_name}?**',
                     url='https://greed.wtf/Commands',
-                    description=f"<:settings_icon:1302207796737085533> **Usage**\n> **{group.qualified_name}** has {len([i for i in group.walk_commands()])} sub commands that can be used. To view all commands for **{group.qualified_name}**, use the help menu below or visit our [**website**](https://greed.wtf/)",
+                    description=f"{EMOJIS['settings_icon']} **Usage**\n> **{group.qualified_name}** has {len([i for i in group.walk_commands()])} sub commands that can be used. To view all commands for **{group.qualified_name}**, use the help menu below or visit our [**website**](https://greed.wtf/)",
                 ),
                 view=HelpInterface(self.context.bot, embeds)
             )

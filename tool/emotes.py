@@ -58,4 +58,7 @@ EMOJIS = {
     "pomelo": "",
     "bot_owner": "",
     "d_smoke": "",
+    "filter": "",
+    "stop": "",
+    "badgediscordstaff": "",
 }
