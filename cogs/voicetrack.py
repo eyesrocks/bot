@@ -85,17 +85,6 @@ class VoiceTrack(commands.Cog):
                 "join_time": now
             }
 
-    def map_channel_to_vc(self, channel_id):
-        """Map channel IDs to VC IDs (1-5). Customize this as needed."""
-        # Replace with actual channel-to-VC mappings
-        channel_map = {
-            123456789012345678: 1,  # Example channel ID for VC1
-            223456789012345678: 2,  # Example channel ID for VC2
-            323456789012345678: 3,  # Example channel ID for VC3
-            423456789012345678: 4,  # Example channel ID for VC4
-            523456789012345678: 5,  # Example channel ID for VC5
-        }
-        return channel_map.get(channel_id, 1)  # Default to VC1 if not mapped
 
 # Setup function to add the cog to the bot
 async def setup(bot):
