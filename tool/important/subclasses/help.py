@@ -166,12 +166,21 @@ class CogConverter(commands.Converter):
         return None
 
 class CommandSelect(discord.ui.Select):
+    ctx: Context
     def __init__(self, categories):
         options = [
             discord.SelectOption(label=category, description=f"View commands in {category}")
             for category in categories
         ]
         super().__init__(placeholder="Choose a category", options=options)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user != self.ctx.author:
+            embed = Embed(
+                description=f"This is {self.ctx.author.mention}'s selection!",
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        return interaction.user == self.ctx.author
 
     async def callback(self, interaction: discord.Interaction):
         selected_category = self.values[0]
@@ -188,17 +197,14 @@ class CommandSelect(discord.ui.Select):
     def get_commands_by_category(self, category):
         return [command.name for command in self.view.bot.commands if command.cog_name and command.cog_name.lower() == category.lower()]
 
-class CommandMenuView(discord.ui.View):
-    def __init__(self, bot, categories):
-        super().__init__()
-        self.bot = bot
-        self.add_item(CommandSelect(categories))
-
 class HelpView(discord.ui.View):
-    def __init__(self, bot, categories):
+    def __init__(self, bot, categories, ctx):
         super().__init__()
         self.bot = bot
-        self.add_item(CommandSelect(categories))
+        self.ctx = ctx
+        select = CommandSelect(categories)
+        select.ctx = ctx
+        self.add_item(select)
 
 class MyHelpCommand(commands.HelpCommand):
     async def send_bot_help(self, mapping: Optional[Mapping[str, commands.Command]]):
@@ -207,13 +213,13 @@ class MyHelpCommand(commands.HelpCommand):
 
         embed = discord.Embed(
             title="Help",
-            description=f"{EMOJIS["luma_info"]} **support: [/pomice](https://discord.gg/pomice)**\n<a:loading:1302351366584270899> **site: [greed](http://greed.wtf)**\n\n Use **,help [command name]** or select a category from the dropdown",
+            description=f"{EMOJIS['luma_info']} **support: [/pomice](https://discord.gg/pomice)**\n<a:loading:1302351366584270899> **site: [greed](http://greed.wtf)**\n\n Use **,help [command name]** or select a category from the dropdown",
             color=0x36393f,
         )
         embed.set_author(name=self.context.bot.user.name, icon_url=self.context.bot.user.avatar)
         
         categories = {command.cog_name for command in self.context.bot.walk_commands() if command.cog_name and command.cog_name.lower() not in ["owner", "jishaku", "errors", "webserver"]}
-        view = HelpView(self.context.bot, sorted(categories))
+        view = HelpView(self.context.bot, sorted(categories), self.context)
         await self.context.send(embed=embed, view=view)
 
     async def send_cog_help(self, cog):

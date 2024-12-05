@@ -828,7 +828,7 @@ class Greed(Bot):
         return {
             "embed": discord.Embed(
                 color=0xFFA500,
-                description=f"{EMOJIS["icons_warning"]} {message}",
+                description=f"{EMOJIS['icons_warning']} {message}",
             )
         }
 
@@ -1085,7 +1085,7 @@ class Greed(Bot):
         return await ctx.send(
             content=f"`{code}`",
             embed=discord.Embed(
-                description=f"{EMOJIS["icons_warning"]} {ctx.author.mention}: Error occurred while performing command **{ctx.command.qualified_name}**. Use the given error code to report it to the developers in the [support server]({self.support_server})",
+                description=f"{EMOJIS['icons_warning']} {ctx.author.mention}: Error occurred while performing command **{ctx.command.qualified_name}**. Use the given error code to report it to the developers in the [support server]({self.support_server})",
                 color=0xFFA500,
             ),
         )
