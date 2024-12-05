@@ -5,7 +5,7 @@ import tweepy
 
 
 API_KEY = "0tu5fzJfWqv0wf3PZKYw4Fb7r"
-API_SECRET_KEY = "your_api_secret_key"
+API_SECRET_KEY = "frYCbYrvZqbX60YWz1mB6XxUYasM2M6zPLlOJsZlumHdOwB1Rp"
 ACCESS_TOKEN = "your_access_token"
 ACCESS_TOKEN_SECRET = "your_access_token_secret"
 
