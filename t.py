@@ -1,4 +1,6 @@
-import requests
+from pathlib import Path
 
-r = requests.get("https://discord.com/api/v10/users/@me", headers = {"Authorization": f"Bot MTE0OTUzNTgzNDc1Njg3NDI1MA.Gao7xE.lq-Qj_UlaPInoZxrjBt_2IhME5t4YuJLjlW9oU"})
-print(r.json())
+emojis = [str(s) for s in Path("assets/").glob("*")]
+
+emojis = {e.split('/')[-1].split(".")[0]: "" for e in emojis}
+print(emojis)

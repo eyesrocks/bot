@@ -149,8 +149,10 @@ class AntiNuke(Cog):
             await user.kick(reason=reason)
         return
 
-    async def do_strip(self, guild: Guild, user: Member, reason: str):
+    async def do_strip(self, guild: Guild, user: Union[Member, User], reason: str):
         async with self.locks[guild.id]:
+            if isinstance(user, User):
+                return False
             if user.top_role >= guild.me.top_role:
                 return False
             if user.id == guild.owner_id:

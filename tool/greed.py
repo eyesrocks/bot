@@ -13,7 +13,7 @@ import orjson
 import aiohttp
 from tool.important.levels import Level
 import json
-from tool.worker import start_dask  # type: ignore
+from tool.worker import start_dask, offloaded  # type: ignore
 import asyncio  # type: ignore
 import tuuid
 from tool.views import VoicemasterInterface  # type: ignore
@@ -33,7 +33,8 @@ from discord.ext.commands import (
 )
 from tool.aliases import fill_commands  # type: ignore
 from tool.modlogs import Handler  # type: ignore
-
+from cashews import cache
+from .emotes import EMOJIS
 # from cogs.tickets import TicketView
 from tool.processing import Transformers  # type: ignore # noqa: E402
 from tool.managers.ipc import IPC
@@ -61,7 +62,15 @@ get_changes = Union[
     Guild,
     AuditLogEntry,
 ]
+
+@offloaded
+def read_file(filepath: str, mode: str = "rb"):
+    with open(filepath, mode) as file:
+        data = file.read()
+    return data
+
 loguru = False
+cache.setup("mem://")
 
 if loguru:
     logger.remove()
@@ -997,6 +1006,24 @@ class Greed(Bot):
             )
         except Exception:
             return
+
+    @cache(key = "emojis", ttl = "300")
+    async def get_emojis(self):
+        return await self.fetch_application_emojis()
+    
+    async def create_emoji(self, name: str, data: bytes):
+        app_emojis = await self.get_emojis()
+        for emoji in app_emojis:
+            if emoji.name == name:
+                return emoji
+        return await self.create_application_emoji(name = name, image = data)
+    
+    async def setup_emojis(self):
+        for key, value in EMOJIS.items():
+            if value == "":
+
+    
+
 
     async def on_guild_join(self, guild: discord.Guild):
         await self.wait_until_ready()
