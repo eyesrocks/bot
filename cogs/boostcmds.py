@@ -116,7 +116,7 @@ class Booster(commands.Cog):
             await ctx.send(profile_info)
         
         except tweepy.TweepError as e:
-            await ctx.send(f"Error fetching Twitter profile: {e}")
+            await ctx.fail(f"Error fetching Twitter profile: {e}")
 
             
 async def setup(bot):
