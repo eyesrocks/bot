@@ -6,6 +6,7 @@ from tool.important import Context  # type: ignore
 from typing import Union  # type: ignore
 from discord import Guild
 from tool.greed import Greed  # type: ignore
+from tool.emotes import EMOJIS
 
 TUPLE = ()
 DICT = {}
@@ -428,9 +429,9 @@ class Automod(commands.Cog):
 
     def get_state(self: "Automod", state: bool) -> str:
         if state:
-            return "<:check2:1302206610701287526> "
+            return EMOJIS["UB_Check_Icon"]
         else:
-            return "<:deny2:1302206609719824425> "
+            return EMOJIS["UB_X_Icon"]
 
     @_filter.command(
         name="snipe",

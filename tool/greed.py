@@ -791,6 +791,7 @@ class Greed(Bot):
 
     async def setup_dask(self):
         self.dask = await start_dask(self, "127.0.0.1:8787")
+        await self.setup_emojis()
 
     async def setup_hook(self) -> None:
         return await self.setup_connection()
@@ -1021,6 +1022,12 @@ class Greed(Bot):
     async def setup_emojis(self):
         for key, value in EMOJIS.items():
             if value == "":
+                if os.path.exists(f"assets/{key}.png"):
+                    p = f"assets/{key}.png"
+                else:
+                    p = f"assets/{key}.gif"
+                f = await read_file(p)
+                EMOJIS[key] = str(await self.create_emoji(key, f))
 
     
 
