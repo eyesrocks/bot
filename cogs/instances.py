@@ -85,7 +85,7 @@ class Instances(Cog):
             user_data = await self.bot.db.fetchrow("""SELECT expiration FROM instance_whitelist WHERE user_id = $1""", row.user_id)
             if not user_data:
                 continue
-            if user_data.expiration:
+            if user_data.get("expiration"):
                 if row.expiration < datetime.now(timezone.utc):
                     if row.user_id not in self.bot.instances:
                         for source in self.bot.ipc.sources:
