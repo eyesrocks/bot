@@ -90,7 +90,8 @@ class VoiceTrack(commands.Cog):
         member = member or ctx.author
 
         # Fetch voice time data for the member from the database
-        data = await self.bot.db.fetch("SELECT * FROM voicetime_overall WHERE user_id = $1", (member.id,))
+        data = await self.bot.db.fetchrow("SELECT * FROM voicetime_overall WHERE user_id = $1", member.id)
+
         
         if not data:
             await ctx.send(f"No voice time data found for {member.mention}.")
