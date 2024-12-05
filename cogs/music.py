@@ -367,13 +367,15 @@ class Music(commands.Cog):
             except Exception as e:
                 logger.error(f"Failed to connect to voice channel: {e}")
                 raise commands.CommandError("Could not connect to the voice channel")
+
         try:
-            if not player.bound_channel:
+            if not player.bound_channel or player.bound_channel.id != ctx.channel.id:
                 player.bound_channel = ctx.channel
-                logger.info(f"Bound channel set to: {ctx.channel.name}")
-        except AttributeError as e:
+                logger.info(f"Bound channel successfully set to: {ctx.channel.name}")
+        except Exception as e:
             logger.error(f"Failed to set bound channel: {e}")
-            raise commands.CommandError("Failed to bind the text channel for the player")
+            raise commands.CommandError("Failed to bind the text channel for the player. Please check permissions.")
+
         if not bot_voice:
             await ctx.voice_client.set_volume(65)
 
