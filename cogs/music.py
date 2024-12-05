@@ -220,177 +220,45 @@ def format_duration(duration: int, ms: bool = True) -> str:
 class Player(pomice.Player):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Type-hinted instance variables
-        self.bound_channel: Optional[discord.abc.MessageableChannel] = None
+        self._bound_channel: Optional[discord.TextChannel] = None
         self.message: Optional[discord.Message] = None
         self.track: Optional[pomice.Track] = None
-        self.context: Optional[Context] = None
+        self.context: Optional[commands.Context] = None
         self.queue: asyncio.Queue = asyncio.Queue()
         self.waiting: bool = False
         self.loop: Union[str, bool] = False
         self._volume: int = 65
 
-    @property 
+    @property
     def bound_channel(self) -> Optional[discord.TextChannel]:
-        if not self._bound_channel and self.channel:
-            if self.channel.category:
-                for channel in self.channel.category.text_channels:
-                    if channel.permissions_for(self.guild.me).send_messages:
-                        self._bound_channel = channel
-                        break
+        if not self._bound_channel:
+            # Find a channel with permission to send messages
+            if self.channel and self.channel.category:
+                # Check within the category first
+                self._bound_channel = next(
+                    (channel for channel in self.channel.category.text_channels 
+                     if channel.permissions_for(self.guild.me).send_messages), None)
             if not self._bound_channel:
-                for channel in self.guild.text_channels:
-                    if channel.permissions_for(self.guild.me).send_messages:
-                        self._bound_channel = channel
-                        break
+                # Fallback to the entire guild's text channels
+                self._bound_channel = next(
+                    (channel for channel in self.guild.text_channels 
+                     if channel.permissions_for(self.guild.me).send_messages), None)
+        if not self._bound_channel:
+            raise ValueError(
+                "Failed to locate a suitable bound_channel where the bot can send messages. "
+                "Please ensure the bot has proper permissions."
+            )
         return self._bound_channel
 
     @bound_channel.setter
     def bound_channel(self, channel: discord.TextChannel):
         self._bound_channel = channel
 
-
-    def _format_socket_track(self, track: pomice.Track) -> dict:
-        """Format track data for socket communication."""
-        return {
-            "url": track.uri,
-            "title": track.title,
-            "author": track.author,
-            "length": track.length,
-            "image": track.thumbnail,
-        }
-
-    def _format_socket_channel(self) -> dict:
-        """Format channel data for socket communication."""
-        voice = None
-        if self.channel:
-            voice = {
-                "id": self.channel.id,
-                "name": self.channel.name,
-                "members": [
-                    {
-                        "id": member.id,
-                        "name": str(member),
-                        "avatar": member.display_avatar.url if member.display_avatar else None,
-                    }
-                    for member in self.channel.members if not member.bot
-                ],
-            }
-        
-        text = {"id": self.bound_channel.id, "name": self.bound_channel.name} if self.bound_channel else None
-        return {"voice": voice, "text": text}
-
-    @property
-    def get_percentage(self) -> int:
-        """Calculate current track progress percentage."""
-        if not self.current:
-            return 0
-        pos_seconds = self.position // 1000 if self.position else 0
-        total_seconds = self.current.length // 1000
-        return min(int((pos_seconds / total_seconds) * 100), 100)
-
-    @property
-    def progress(self) -> str:
-        """Generate visual progress bar."""
-        bar_length = 10
-        filled = self.get_percentage // 10
-        return "██" * filled + "  " * (bar_length - filled)
-
-    @property
-    def volume_bar(self) -> str:
-        """Generate visual volume bar."""
-        filled_slots = self._volume // 10
-        empty_slots = 10 - filled_slots
-        return "<a:CatJam:1304239102257922148>" * filled_slots + "<a:CatJam:1304239102257922148>" * empty_slots
-
-    async def play(self, track: pomice.Track) -> Optional[bool]:
-        """Play a track with error handling."""
-        try:
-            return await super().play(track)
-        except pomice.exceptions.TrackLoadError as e:
-            logger.error(f"Failed to play track {track.title}: {str(e)}")
-            if self.context:
-                await self.context.fail(f"Could not play **[{track.title}]({track.uri})**")
-            
-            if self.queue._queue:
-                try:
-                    self.queue._queue.remove(track)
-                    next_track = self.queue._queue[0]
-                    await self.play(next_track)
-                except (IndexError, ValueError):
-                    await self.teardown()
-            
-            logger.info(f"Queue size after error: {len(self.queue._queue)}")
-            return None
-
-    async def get_tracks(
-        self,
-        query: str,
-        *,
-        ctx: Optional[commands.Context] = None,
-        search_type: Optional[pomice.SearchType] = None,
-    ) -> list[pomice.Track]:
-        """Get tracks with context saving."""
-        if ctx:
-            self.context = ctx
-        return await super().get_tracks(
-            query=query, 
-            ctx=ctx, 
-            search_type=search_type or pomice.SearchType.scsearch
-        )
-
-    async def insert(self, track: pomice.Track, filter: bool = True, bump: bool = False) -> bool:
-        """Insert track into queue with optional filtering and bumping."""
-        if filter and track.info.get("sourceName") == "youtube":
-            try:
-                async with self.bot.session.get(
-                    "https://metadata-filter.vercel.app/api/youtube",
-                    params={"track": track.title}
-                ) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        if data.get("status") == "success":
-                            track.title = data["data"].get("track", track.title)
-            except Exception as e:
-                logger.error(f"Failed to filter track metadata: {e}")
-
-        if bump:
-            self.queue._queue.insert(0, track)
-        else:
-            await self.queue.put(track)
-        return True
-
-    async def next_track(self, ignore_playing: bool = False) -> Optional[pomice.Track]:
-        """Get and play next track in queue."""
-        if not ignore_playing and (self.is_playing or self.waiting):
-            return None
-
-        self.waiting = True
-        try:
-            track = self.track if self.loop == "track" else None
-            if not track:
-                async with async_timeout.timeout(300):
-                    track = await self.queue.get()
-                    if self.loop == "queue":
-                        await self.queue.put(track)
-
-            self.track = track
-            await self.play(track)
-
-            if self.bound_channel:
-                await self._update_now_playing_message(track)
-
-            return track
-
-        except asyncio.TimeoutError:
-            await self.teardown()
-            return None
-        finally:
-            self.waiting = False
-
     async def _update_now_playing_message(self, track: pomice.Track):
         """Update the now playing message."""
         try:
+            if not self.bound_channel:
+                raise ValueError("Bound channel not found while updating now playing message.")
             if self.message:
                 await self.message.delete()
             
@@ -401,36 +269,40 @@ class Player(pomice.Player):
                 embed.set_image(url=track.thumbnail)
             else:
                 embed.set_thumbnail(url=track.thumbnail)
-                
+            
             self.message = await self.bound_channel.send(embed=embed)
+        except ValueError as ve:
+            logger.error(f"Channel error: {ve}")
         except Exception as e:
             logger.error(f"Failed to update now playing message: {e}")
-            self.bound_channel = None
+            self._bound_channel = None
 
-    async def skip(self):
-        """Skip current track."""
-        if self.is_paused:
-            await self.set_pause(False)
-        if self.loop == "track":
-            await self.seek(self.current.length)
-        else:
-            await self.stop()
-
-    async def set_loop(self, state: Union[str, bool]):
-        """Set loop state."""
-        self.loop = state
-
-    async def teardown(self):
-        """Clean up player resources."""
-        self.queue._queue.clear()
-        await self.reset_filters()
-        with suppress(KeyError):
-            if self.guild.id in self._node._players:
-                await self.destroy()
-
-
-    def __repr__(self) -> str:
-        return f"<Player guild={self.guild.id} connected={self.is_connected} playing={self.is_playing}>"
+    async def play(self, track: pomice.Track) -> Optional[bool]:
+        """Play a track with error handling."""
+        try:
+            if not self.bound_channel:
+                raise ValueError("Bound channel not found. Cannot play track.")
+            return await super().play(track)
+        except ValueError as ve:
+            logger.error(f"ValueError while playing track: {ve}")
+            if self.context:
+                await self.context.send(
+                    "Cannot play the track as no valid text channel is bound. "
+                    "Please check the bot's permissions and try again."
+                )
+        except pomice.exceptions.TrackLoadError as e:
+            logger.error(f"Failed to play track {track.title}: {str(e)}")
+            if self.context:
+                await self.context.fail(f"Could not play **[{track.title}]({track.uri})**")
+            if self.queue._queue:
+                try:
+                    self.queue._queue.remove(track)
+                    next_track = self.queue._queue[0]
+                    await self.play(next_track)
+                except (IndexError, ValueError):
+                    await self.teardown()
+            logger.info(f"Queue size after error: {len(self.queue._queue)}")
+        return None
 
 class MusicError(commands.CommandError):
     def __init__(self, message: str, **kwargs):
