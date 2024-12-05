@@ -444,7 +444,6 @@ class Music(commands.Cog):
             apple_music=True,
         )
         logger.info("Created LavaLink Node Pool Connection")
-
     async def get_player(self, ctx: Context, *, connect: bool = True, check_connected: bool = True) -> Optional[Player]:
         if not hasattr(self.bot, "node"):
             raise commands.CommandError("The **Lavalink** node hasn't been **initialized** yet")
