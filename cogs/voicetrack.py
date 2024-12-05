@@ -91,27 +91,27 @@ class VoiceTrack(commands.Cog):
 
         # Fetch voice time data for the member from the database
         data = await self.bot.db.fetchrow("SELECT * FROM voicetime_overall WHERE user_id = $1", member.id)
-
         
         if not data:
             await ctx.send(f"No voice time data found for {member.mention}.")
             return
 
-        # Prepare data for the chart
-        channel_ids = [row["channel_id"] for row in data]
-        total_time = [row["total_minutes"] for row in data]
+        # Extract VC time data
+        vcs = [data['vc1'], data['vc2'], data['vc3'], data['vc4'], data['vc5']]
+        vc_names = ['VC 1', 'VC 2', 'VC 3', 'VC 4', 'VC 5']
+        total_minutes = sum(vcs)
 
         # If no voice time data is available
-        if not total_time:
-            await ctx.send(f"No voice time data recorded for {member.mention}.")
+        if total_minutes == 0:
+            await ctx.send(f"No voice time recorded for {member.mention}.")
             return
-        
-        # Create pie chart for the voice time distribution
+
+        # Create grayscale pie chart for the voice time distribution
         plt.figure(figsize=(8, 8))
         colors = [f"#{i:02x}{i:02x}{i:02x}" for i in range(50, 250, 50)]  # Grayscale colors
 
         # Generate the pie chart
-        plt.pie(total_time, labels=channel_ids, autopct="%.1f%%", startangle=140, colors=colors)
+        plt.pie(vcs, labels=vc_names, autopct="%.1f%%", startangle=140, colors=colors)
         plt.title(f"{member.name}'s Voice Time Distribution")
 
         # Save pie chart to a buffer
@@ -131,6 +131,11 @@ class VoiceTrack(commands.Cog):
         avatar_img = avatar_img.resize((pie_size[0] // 3, pie_size[1] // 3))
         pie_img.paste(avatar_img, ((pie_size[0] - avatar_img.size[0]) // 2, (pie_size[1] - avatar_img.size[1]) // 2), avatar_img)
 
+        # Add total time text
+        draw = ImageDraw.Draw(pie_img)
+        font = ImageFont.truetype("arial.ttf", 40)
+        draw.text((20, 20), f"Total Time: {total_minutes} mins", fill="black", font=font)
+
         # Save final image to a buffer
         final_buffer = BytesIO()
         pie_img.save(final_buffer, format="PNG")
@@ -138,6 +143,7 @@ class VoiceTrack(commands.Cog):
 
         # Send the image
         await ctx.send(file=discord.File(final_buffer, "voicetrack.png"))
+
 
 # Setup function to add the cog to the bot
 async def setup(bot):
