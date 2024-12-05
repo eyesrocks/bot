@@ -10,6 +10,7 @@ import humanfriendly, os
 from asyncio import ensure_future
 from pydantic import BaseModel
 import humanize
+from discord.ext import tasks
 from loguru import logger
 from tool.greed import Greed
 
@@ -165,6 +166,13 @@ class Instances(Cog):
         kwargs = {"status": Status.idle} if status_type == 1 else {}
         await bot.change_presence(activity=Activity(name=status_text, type=status_type, url="https://twitch.tv/clock"), **kwargs)
         return True
+
+    @tasks.loop(minutes = 10)
+    async def check_instance(self):
+        for user_id in self.bot.instances.keys():
+            if user_data := await self.bot.db.fetchrow("""SELECT user_id, expiration FROM instance_whitelist WHERE user_id = $1""", user_id):
+                if user_data.expiration:
+         
 
     async def cog_load(self):
         try:
