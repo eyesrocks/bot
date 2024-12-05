@@ -836,7 +836,6 @@ class Information(commands.Cog):
         flags = user.public_flags
 
         emojis = {
-            "lim": "<:woah:1303263321583128650>",
             "staff2": "<:staff_badge_2:1304259736983834694>",
             "nitro": EMOJIS["Nitro_badge"],
             "hypesquad_brilliance": EMOJIS["Icon_Hypesquad_Brilliance"],
@@ -849,28 +848,28 @@ class Information(commands.Cog):
             "verified_bot_developer": EMOJIS["discord_developer"],
             "partner": EMOJIS["Partner_server_owner"],
             "staff": EMOJIS["Verified_badge_1_staff"],
-            "verified_bot": "<:694579695567503381:1302748499607289928>",
-            "server_boost": "<:nitro24:1310672012330532936>",
+            "verified_bot": EMOJIS["6_bot"],
+            "server_boost": EMOJIS["boost_badge"],
             "active_developer": EMOJIS["ActiveDeveloper"],
             "pomelo": EMOJIS["pomelo"],
-            "web_idle": "<:status_idle:1302238592172822569>",
-            "web_dnd": "<:status_dnd:1302238595515551784>",
-            "web_online": "<:status_online:1302238596580773980>",
-            "desktop_dnd": "<:IconStatusWebDND:1302229187842674780>",
-            "desktop_idle": "<:IconStatusWebIdle:1302229188769747036>",
-            "desktop_online": "<:IconStatusWebOnline:1302229189742825522>",
-            "mobile_dnd": "<:dndphone:1309554292998406164>",
-            "mobile_idle": " <:idlephone:1309554307611365418>",
-            "mobile_online": "<:onlinephone:1309554275088863404>",
+            "web_idle": EMOJIS["status_idle"],
+            "web_dnd": EMOJIS["status_dnd"],
+            "web_online": EMOJIS["status_online"],
+            "desktop_dnd": EMOJIS["IconStatusWebDND"],
+            "desktop_idle": EMOJIS["IconStatusWebIdle"],
+            "desktop_online": EMOJIS["IconStatusWebOnline"],
+            "mobile_dnd": EMOJIS["dndphone"],
+            "mobile_idle": EMOJIS["idlephone"],
+            "mobile_online": EMOJIS["onlinephone"],
             "web_offline": "",
             "mobile_offline": "",
             "desktop_offline": "",
         }
 
         _staff = {
-            "staff1": "<:Verified_badge_1_staff:1302154827714789396>",
-            "lim": "<:greed:1307532936932757555>",
-            "dev": "<:buildbadge:1302156325735764060>",
+            "staff1": EMOJIS["Verified_badge_1_staff"],
+            "lim": EMOJIS["bot_owner"],
+            "dev": EMOJIS["buildbadge"],
         }
 
         for flag in (
