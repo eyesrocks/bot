@@ -445,7 +445,7 @@ class Fun(commands.Cog):
                 )
                 await ctx.send(embed=embed)
             else:
-                remaining_time = timedelta(seconds=300) - (
+                remaining_time = timedelta(seconds=300) - ( #
                     datetime.now() - last_sparked
                 )
                 remaining_minutes, remaining_seconds = divmod(
