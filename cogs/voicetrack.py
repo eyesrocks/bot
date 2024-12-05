@@ -8,8 +8,7 @@ class VoiceTrack(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-        self.bot.db.execute("""CREATE TABLE IF NOT EXISTS voicetime_overall (user_id BIGINT NOT NULL,vc1 DECIMAL DEFAULT 0.0,vc2 DECIMAL DEFAULT 0.0,vc3 DECIMAL DEFAULT 0.0,vc4 DECIMAL DEFAULT 0.0,
-                vc5 DECIMAL DEFAULT 0.0,
+        self.bot.db.execute("""CREATE TABLE IF NOT EXISTS voicetime_overall (user_id BIGINT NOT NULL,vc1 DECIMAL DEFAULT 0.0,vc2 DECIMAL DEFAULT 0.0,vc3 DECIMAL DEFAULT 0.0,vc4 DECIMAL DEFAULT 0.0,vc5 DECIMAL DEFAULT 0.0,
                 PRIMARY KEY (user_id)
             );
         """)
