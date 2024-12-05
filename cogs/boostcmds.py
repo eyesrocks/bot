@@ -2,6 +2,19 @@ import discord
 from discord.ext import commands
 import tweepy
 
+
+
+API_KEY = "your_api_key"
+API_SECRET_KEY = "your_api_secret_key"
+ACCESS_TOKEN = "your_access_token"
+ACCESS_TOKEN_SECRET = "your_access_token_secret"
+
+# Set up the Twitter API client
+auth = tweepy.OAuthHandler(API_KEY, API_SECRET_KEY)
+auth.set_access_token(ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
+api = tweepy.API(auth)
+
+
 def check():
     async def predicate(ctx):
         guild = ctx.bot.get_guild(1301617147964821524)
