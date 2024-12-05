@@ -7,6 +7,7 @@ from typing import Optional, Any, Union
 from config import CONFIG_DICT
 import humanfriendly
 from asyncio import ensure_future
+from pydantic import BaseModel
 import humanize
 from loguru import logger
 from tool.greed import Greed
@@ -30,6 +31,8 @@ class Instance(Greed):
         return await super().on_ready()
 
     async def setup_hook(self) -> None:
+        if data := await self.db.fetchrow("""SELECT status_type, status_text FROM instances WHERE bot_id = $1""", self.user.id):
+            await self.change_presence(activity = Activity(name=data.status_text, type=data.status_type, url="https://twitch.tv/clock"))
         return await super().setup_connection(False)
 
     async def start(self, token: str, reconnect: bool = True) -> None:
@@ -110,12 +113,59 @@ class Variable(Converter):
         if not r:
             raise CommandError("that is not a valid variable")
         return VariableResponse(variable = VARMAP[r]["value"], name = r)
+
+class Value(Converter):
+    async def convert(self, ctx: Context, argument: str):
+        if ":" in argument:
+            key, value = argument.split(":", 1)
+            return {"key": key.lower(), "value": value}
+        else:
+            return {"key": None, "value": argument}
+
+
+def to_status_type(value: str):
+    value = value.lower()
+    if value in ("play", "playing"):
+        return 0
+    elif value in ("streaming", "stream"):
+        return 1
+    elif value in ("listening", "listen"):
+        return 2
+    elif value in ("watching", "watch"):
+        return 3
+    elif value in ("competing", "compete"):
+        return 5
+    else:
+        return 4
+
+
+class ActivityConverter(Converter):
+    async def convert(self, ctx: Context, argument: str):
+        if ":" in argument:
+            status_type, text = argument.split(":", 1)
+            status_type = to_status_type(status_type.lower())
+        else:
+            status_type = 4
+            text = argument
+        return {"type": status_type, "text": text}
+
 class Instances(Cog):
     def __init__(self, bot: Client):
         self.bot = bot
         self.bot.instances = {}
 
+    async def change_instance_presence(self, source: str, user_id: int, status_type: int, status_text: str):
+        if user_id not in self.bot.instances:
+            return
+        bot = self.bot.instances[user_id]
+        await bot.change_presence(activity=Activity(name=status_text, type=status_type, url="https://twitch.tv/clock"))
+        return True
+
     async def cog_load(self):
+        try:
+            await self.bot.connection.add_route(self.change_instance_presence)
+        except Exception:
+            pass
         if self.bot.connection.local_name != "cluster1":
             return
         async def check(row):
@@ -150,6 +200,7 @@ class Instances(Cog):
                await s.close()
            except Exception:
                pass
+
     async def cog_check(self, ctx: Context):
         if ctx.author.id in self.bot.owner_ids:
             return True
@@ -180,14 +231,29 @@ class Instances(Cog):
             await self.stop_instance(token, user_id)
             await self.start_instance(token, user_id)
         return True
+
+    async def change_pres(self, ctx: Context, status_type: int, status_text: str):
+        try:
+            await self.change_instance_presence("yes", ctx.author.id, status_type, status_text)
+        except Exception: pass
+        for s in self.bot.ipc.sources:
+            if s != self.bot.connection.local_name:
+                await self.bot.connection.request("change_instance_presence", source = s, user_id = ctx.author.id, status_type = status_type, status_text = status_text)
+        return True
     
     @group(name = "instance", brief = "manage your instance of greed", invoke_without_command = True)
     async def instance(self, ctx: Context):
         return await ctx.send_help(ctx.command)
     
-    @name(name = "edit", brief = "edit a variable regarding your instance of greed", example = ",instance edit status streaming:whats up")
+#    @name(name = "edit", brief = "edit a variable regarding your instance of greed", example = ",instance edit status streaming:whats up")
     async def instance_edit(self, ctx: Context, variable: Variable, *, value: Value):
-        return 
+        return
+
+    @instance.command(name="status", brief = "edit the status of your instance", example = ",instance status streaming:whats up my ninja fortnite ballsers")
+    async def instance_status(self, ctx: Context, *, status: ActivityConverter):
+        await self.bot.db.execute("""UPDATE instances SET status_type = $1, status_text = $2 WHERE user_id = $3""", status['type'], status['text'], ctx.author.id)
+        await self.change_pres(ctx, status['type'], status['text'])
+        return await ctx.success("successfully changed your instance's status")
 
     @instance.command(name = "create", brief = "create your instance of greed", example = ",instance create Mz.dasdssa 373747373")
     async def instance_create(self, ctx: Context, token: TokenConverter, guild_id: int):
