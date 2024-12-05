@@ -1073,7 +1073,7 @@ class Fun(commands.Cog):
         """Search for images using Google's Custom Search JSON API with button-based navigation."""
         try:
             # Build the Google Custom Search service
-            service = build("customsearch", "v1", developerKey=GOOGLE_API_KEY)
+            service = build("customsearch", "v1", developerKey=GOOGLE_API_KEY) # type: ignore
 
             # Perform the search (fetch up to 10 results)
             result = service.cse().list(
