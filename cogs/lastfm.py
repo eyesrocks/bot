@@ -194,7 +194,7 @@ class LastFMLikes(discord.ui.View, menus.MenuPages):
         # await interaction.response.defer()
 
     @discord.ui.button(
-        emoji="<:next:1302401794487619655>", style=discord.ButtonStyle.grey
+        emoji=EMOJIS['next'], style=discord.ButtonStyle.grey
     )
     async def next_page(self, interaction, button):  # type: ignore
         if self.current_page == self._source.get_max_pages() - 1:
@@ -205,7 +205,7 @@ class LastFMLikes(discord.ui.View, menus.MenuPages):
             await self.show_checked_page(self.current_page + 1)
 
     @discord.ui.button(
-        emoji="<:deny2:1302206609719824425>", style=discord.ButtonStyle.grey
+        emoji=EMOJIS["stop"], style=discord.ButtonStyle.grey
     )
     async def delete(self, interaction, button):  # type: ignore
         return await interaction.response.send_modal(
