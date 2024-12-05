@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
-import
+import tweepy
+
 def check():
     async def predicate(ctx):
         guild = ctx.bot.get_guild(1301617147964821524)
