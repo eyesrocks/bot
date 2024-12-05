@@ -1,5 +1,5 @@
 from discord.ext.commands import Context, Cog, CommandError, check, group, command, Converter
-from discord import Client, Member, User, Guild, Activity
+from discord import Client, Member, User, Guild, Activity, Status
 from datetime import datetime, timedelta, timezone
 from aiohttp import ClientSession
 from dataclasses import dataclass
@@ -32,7 +32,8 @@ class Instance(Greed):
 
     async def setup_hook(self) -> None:
         if data := await self.db.fetchrow("""SELECT status_type, status_text FROM instances WHERE bot_id = $1""", self.user.id):
-            await self.change_presence(activity = Activity(name=data.status_text, type=data.status_type, url="https://twitch.tv/clock"))
+            kwargs = {"status": Status.idle} if data.status_type == 1 else {}
+            await self.change_presence(activity = Activity(name=data.status_text, type=data.status_type, url="https://twitch.tv/clock"), **kwargs)
         return await super().setup_connection(False)
 
     async def start(self, token: str, reconnect: bool = True) -> None:
@@ -158,7 +159,8 @@ class Instances(Cog):
         if user_id not in self.bot.instances:
             return
         bot = self.bot.instances[user_id]
-        await bot.change_presence(activity=Activity(name=status_text, type=status_type, url="https://twitch.tv/clock"))
+        kwargs = {"status": Status.idle} if status_type == 1 else {}
+        await bot.change_presence(activity=Activity(name=status_text, type=status_type, url="https://twitch.tv/clock"), **kwargs)
         return True
 
     async def cog_load(self):
