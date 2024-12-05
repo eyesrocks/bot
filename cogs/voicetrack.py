@@ -9,7 +9,7 @@ class VoiceTrack(commands.Cog):
         self.bot = bot
         
     async def create_table(self):
-        # Ensure the table exists with the necessary columns
+        # Ensure the table exists with the necessary columns and a composite primary key on user_id and channel_id
         await self.bot.db.execute("""
             CREATE TABLE IF NOT EXISTS voicetime_overall (
                 user_id BIGINT NOT NULL, 
@@ -19,13 +19,12 @@ class VoiceTrack(commands.Cog):
                 vc3 DECIMAL DEFAULT 0.0,
                 vc4 DECIMAL DEFAULT 0.0,
                 vc5 DECIMAL DEFAULT 0.0,
-                PRIMARY KEY (user_id, channel_id)
+                PRIMARY KEY (user_id, channel_id)  -- Composite primary key
             );
         """)
 
     async def update_voicetime(self, user_id, channel_id, minutes):
         """Update the voice time for a specific VC."""
-        # We are assuming vc1 is the current VC. You can extend this logic for other VCs
         query = """
         INSERT INTO voicetime_overall (user_id, channel_id, vc1)
         VALUES ($1, $2, $3)
