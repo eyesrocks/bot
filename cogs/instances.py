@@ -29,7 +29,7 @@ class Instance(Greed):
 
     async def start(self, token: str, reconnect: bool = True) -> None:
         await super().login(token)
-        ensure_future(super().connect(True))
+        ensure_future(super().connect(reconnect = True))
 
 async def setup_connection(bot: Greed, instance: Instance) -> bool:
     instance.db = bot.db
