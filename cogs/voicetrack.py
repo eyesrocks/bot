@@ -1,14 +1,15 @@
 import discord
 from discord.ext import commands
-from PIL import Image, ImageDraw, ImageFont
-import matplotlib.pyplot as plt
-from io import BytesIO
+from datetime import datetime
 
 class VoiceTrack(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.user_voice_states = {}  # To track user voice channel join times
         bot.loop.create_task(self.create_table())
+
     async def create_table(self):
+        """Create the database table for tracking voice time."""
         await self.bot.db.execute("""
             CREATE TABLE IF NOT EXISTS voicetime_overall (
                 user_id BIGINT NOT NULL,
@@ -21,9 +22,9 @@ class VoiceTrack(commands.Cog):
             );
         """)
 
-    async def update_voicetime(self, user_id, vc_index, minutes):
+    async def update_voicetime(self, user_id, vc_id, minutes):
         """Update the voice time for a specific VC."""
-        column = f"vc{vc_index}"
+        column = f"vc{vc_id}"
         query = f"""
             INSERT INTO voicetime_overall (user_id, {column})
             VALUES ($1, $2)
@@ -32,62 +33,69 @@ class VoiceTrack(commands.Cog):
         """
         await self.bot.db.execute(query, user_id, minutes)
 
-    @commands.command()
-    async def voicetrack(self, ctx, member: discord.Member = None):
-        """Generates a visual representation of voice time."""
-        member = member or ctx.author
-
-        # Fetch voice time data
-        data = await self.bot.db.fetchrow("SELECT * FROM voicetime_overall WHERE user_id = $1", member.id)
-
-        if not data:
-            await ctx.send(f"No data found for {member.mention}.")
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member, before, after):
+        """Tracks users joining and leaving voice channels."""
+        # Ignore bot users
+        if member.bot:
             return
 
-        # Extract data for the chart
-        vcs = data[1:]  # Skip user_id
-        vc_names = [f"VC {i+1}" for i in range(len(vcs))]
-        total_minutes = sum(vcs)
+        user_id = member.id
+        now = datetime.utcnow()
 
-        if total_minutes == 0:
-            await ctx.send(f"No voice activity recorded for {member.mention}.")
-            return
+        # User joins a voice channel
+        if before.channel is None and after.channel is not None:
+            self.user_voice_states[user_id] = {
+                "channel_id": after.channel.id,
+                "join_time": now
+            }
+            print(f"{member.name} joined {after.channel.name} at {now}.")
 
-        # Generate grayscale pie chart
-        plt.figure(figsize=(8, 8))
-        colors = [f"#{i:02x}{i:02x}{i:02x}" for i in range(50, 250, 50)]
-        plt.pie(vcs, labels=vc_names, autopct="%.1f%%", startangle=140, colors=colors)
-        plt.title(f"{member.name}'s Voice Time Distribution")
-        
-        # Save pie chart to a buffer
-        pie_buffer = BytesIO()
-        plt.savefig(pie_buffer, format="PNG")
-        pie_buffer.seek(0)
-        plt.close()
+        # User leaves a voice channel
+        elif before.channel is not None and after.channel is None:
+            if user_id in self.user_voice_states:
+                data = self.user_voice_states.pop(user_id)
+                join_time = data["join_time"]
+                vc_id = self.map_channel_to_vc(data["channel_id"])
 
-        # Load profile picture
-        avatar_url = member.avatar.url
-        avatar_data = BytesIO(await avatar_url.read())
-        avatar_img = Image.open(avatar_data).convert("RGBA")
+                # Calculate time spent in the channel
+                time_spent = (now - join_time).total_seconds() / 60  # Convert to minutes
+                print(f"{member.name} left {before.channel.name} after {time_spent:.2f} minutes.")
 
-        # Load the pie chart and paste the avatar in the center
-        pie_img = Image.open(pie_buffer).convert("RGBA")
-        pie_size = pie_img.size
-        avatar_img = avatar_img.resize((pie_size[0] // 3, pie_size[1] // 3))
-        pie_img.paste(avatar_img, ((pie_size[0] - avatar_img.size[0]) // 2, (pie_size[1] - avatar_img.size[1]) // 2), avatar_img)
+                # Update the database
+                await self.update_voicetime(user_id, vc_id, time_spent)
 
-        # Add total time text
-        draw = ImageDraw.Draw(pie_img)
-        font = ImageFont.truetype("arial.ttf", 40)
-        draw.text((20, 20), f"Total Time: {total_minutes} mins", fill="black", font=font)
+        # User switches voice channels
+        elif before.channel is not None and after.channel is not None and before.channel.id != after.channel.id:
+            if user_id in self.user_voice_states:
+                data = self.user_voice_states.pop(user_id)
+                join_time = data["join_time"]
+                vc_id = self.map_channel_to_vc(data["channel_id"])
 
-        # Save final image to a buffer
-        final_buffer = BytesIO()
-        pie_img.save(final_buffer, format="PNG")
-        final_buffer.seek(0)
+                # Calculate time spent in the old channel
+                time_spent = (now - join_time).total_seconds() / 60  # Convert to minutes
+                print(f"{member.name} switched from {before.channel.name} to {after.channel.name} after {time_spent:.2f} minutes.")
 
-        # Send the image
-        await ctx.send(file=discord.File(final_buffer, "voicetrack.png"))
+                # Update the database for the old channel
+                await self.update_voicetime(user_id, vc_id, time_spent)
+
+            # Log the new channel
+            self.user_voice_states[user_id] = {
+                "channel_id": after.channel.id,
+                "join_time": now
+            }
+
+    def map_channel_to_vc(self, channel_id):
+        """Map channel IDs to VC IDs (1-5). Customize this as needed."""
+        # Replace with actual channel-to-VC mappings
+        channel_map = {
+            123456789012345678: 1,  # Example channel ID for VC1
+            223456789012345678: 2,  # Example channel ID for VC2
+            323456789012345678: 3,  # Example channel ID for VC3
+            423456789012345678: 4,  # Example channel ID for VC4
+            523456789012345678: 5,  # Example channel ID for VC5
+        }
+        return channel_map.get(channel_id, 1)  # Default to VC1 if not mapped
 
 # Setup function to add the cog to the bot
 async def setup(bot):
