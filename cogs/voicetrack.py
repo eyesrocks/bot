@@ -9,16 +9,28 @@ class VoiceTrack(commands.Cog):
         self.bot = bot
         
     async def create_table(self):
-        await self.bot.db.execute("""CREATE TABLE IF NOT EXISTS voicetime_overall (user_id BIGINT NOT NULL,vc1 DECIMAL DEFAULT 0.0,vc2 DECIMAL DEFAULT 0.0,vc3 DECIMAL DEFAULT 0.0,vc4 DECIMAL DEFAULT 0.0,vc5 DECIMAL DEFAULT 0.0,PRIMARY KEY (user_id));""")
+        await self.bot.db.execute("""
+            CREATE TABLE IF NOT EXISTS voicetime_overall (
+                user_id BIGINT NOT NULL,
+                vc1 DECIMAL DEFAULT 0.0,
+                vc2 DECIMAL DEFAULT 0.0,
+                vc3 DECIMAL DEFAULT 0.0,
+                vc4 DECIMAL DEFAULT 0.0,
+                vc5 DECIMAL DEFAULT 0.0,
+                PRIMARY KEY (user_id)
+            );
+        """)
 
     async def update_voicetime(self, user_id, vc_index, minutes):
         """Update the voice time for a specific VC."""
         column = f"vc{vc_index}"
-        await self.bot.db.execute(f"""
+        query = f"""
             INSERT INTO voicetime_overall (user_id, {column})
-            VALUES (%s, %s)
-            ON CONFLICT(user_id) DO UPDATE SET {column} = {column} + %s;
-        """, (user_id, minutes, minutes))
+            VALUES ($1, $2)
+            ON CONFLICT (user_id) DO UPDATE
+            SET {column} = voicetime_overall.{column} + $2;
+        """
+        await self.bot.db.execute(query, user_id, minutes)
 
     @commands.command()
     async def voicetrack(self, ctx, member: discord.Member = None):
@@ -26,7 +38,7 @@ class VoiceTrack(commands.Cog):
         member = member or ctx.author
 
         # Fetch voice time data
-        data = await self.bot.db.fetchrow("SELECT * FROM voicetime_overall WHERE user_id = %s", (member.id,))
+        data = await self.bot.db.fetchrow("SELECT * FROM voicetime_overall WHERE user_id = $1", member.id)
 
         if not data:
             await ctx.send(f"No data found for {member.mention}.")
