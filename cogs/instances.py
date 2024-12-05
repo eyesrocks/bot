@@ -27,6 +27,10 @@ class Instance(Greed):
     async def setup_hook(self) -> None:
         return await super().setup_connection(False)
 
+    async def start(self, token: str, reconnect: bool = True) -> None:
+        await super().login(token)
+        ensure_future(super().connect(True))
+
 async def setup_connection(bot: Greed, instance: Instance) -> bool:
     instance.db = bot.db
     instance.redis = bot.redis
