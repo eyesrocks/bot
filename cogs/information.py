@@ -1793,7 +1793,7 @@ class Information(commands.Cog):
 
 
     @commands.command()
-    async def purchase(self, ctx):
+    async def wrath(self, ctx):
         """Send an embed with purchase options and buttons."""
         
         # Create the embed
