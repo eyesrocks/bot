@@ -1149,7 +1149,72 @@ class ImagePaginationView(discord.ui.View):
 
 
 
+    @commands.command(
+        name="anime",
+        brief="Search for anime information using AniList",
+        help="Search for anime information by name",
+    )
+    async def anime(self, ctx, *, query: str):
+        """Search for anime using AniList API and send the result to Discord."""
+        
+        url = 'https://graphql.anilist.co'
+        
+        query_graphql = """
+        query ($search: String) {
+            Page(page: 1, perPage: 1) {
+                media(search: $search, type: ANIME) {
+                    title {
+                        romaji
+                        english
+                        native
+                    }
+                    description
+                    episodes
+                    coverImage {
+                        large
+                    }
+                    siteUrl
+                    type
+                }
+            }
+        }
+        """
+        
+        variables = {
+            'search': query
+        }
 
+        headers = {
+            'Content-Type': 'application/json',
+        }
+
+        try:
+            # Make the request to the AniList GraphQL API
+            response = requests.post(url, json={'query': query_graphql, 'variables': variables}, headers=headers)
+            data = response.json()
+
+            if data['data']['Page']['media']:
+                anime = data['data']['Page']['media'][0]
+
+                # Prepare the embed with anime details
+                embed = discord.Embed(
+                    title=anime['title']['romaji'] or anime['title']['english'] or anime['title']['native'],
+                    url=anime['siteUrl'],
+                    color=self.bot.color
+                )
+                embed.add_field(name="Description", value=anime['description'][:1024] or "No description available", inline=False)
+                embed.add_field(name="Episodes", value=anime['episodes'] or "Unknown", inline=True)
+                embed.add_field(name="Type", value=anime['type'], inline=True)
+                embed.set_thumbnail(url=anime['coverImage']['large'])
+
+                # Send the embed
+                await ctx.send(embed=embed)
+            else:
+                await ctx.send(f"No results found for '{query}'.")
+
+        except requests.exceptions.RequestException as e:
+            await ctx.send(f"An error occurred while searching for '{query}'. Please try again later.")
+            print(f"Error: {str(e)}")
 
 
 
