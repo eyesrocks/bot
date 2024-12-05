@@ -1,5 +1,5 @@
 from discord.ext.commands import Context, Cog, CommandError, check, group, command, Converter
-from discord import Client, Member, User, Guild
+from discord import Client, Member, User, Guild, Activity
 from datetime import datetime, timedelta, timezone
 from aiohttp import ClientSession
 from dataclasses import dataclass
@@ -84,7 +84,7 @@ class TimeFrame(Converter):
         return converted
 
 
-class VARMAP = {
+VARMAP = {
     "status": {
         "aliases": ["stat", "activity", "presence"],
         "value": 1,
