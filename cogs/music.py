@@ -300,6 +300,116 @@ class Player(pomice.Player):
                     await self.teardown()
             logger.info(f"Queue size after error: {len(self.queue._queue)}")
         return None
+    
+    async def get_tracks(
+        self,
+        query: str,
+        *,
+        ctx: Optional[commands.Context] = None,
+        search_type: Optional[pomice.SearchType] = None,
+    ) -> list[pomice.Track]:
+        """Get tracks with context saving."""
+        if ctx:
+            self.context = ctx
+        return await super().get_tracks(
+            query=query, 
+            ctx=ctx, 
+            search_type=search_type or pomice.SearchType.scsearch
+        )
+
+    async def insert(self, track: pomice.Track, filter: bool = True, bump: bool = False) -> bool:
+        """Insert track into queue with optional filtering and bumping."""
+        if filter and track.info.get("sourceName") == "youtube":
+            try:
+                async with self.bot.session.get(
+                    "https://metadata-filter.vercel.app/api/youtube",
+                    params={"track": track.title}
+                ) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        if data.get("status") == "success":
+                            track.title = data["data"].get("track", track.title)
+            except Exception as e:
+                logger.error(f"Failed to filter track metadata: {e}")
+
+        if bump:
+            self.queue._queue.insert(0, track)
+        else:
+            await self.queue.put(track)
+        return True
+
+    async def next_track(self, ignore_playing: bool = False) -> Optional[pomice.Track]:
+        """Get and play next track in queue."""
+        if not ignore_playing and (self.is_playing or self.waiting):
+            return None
+
+        self.waiting = True
+        try:
+            track = self.track if self.loop == "track" else None
+            if not track:
+                async with async_timeout.timeout(300):
+                    track = await self.queue.get()
+                    if self.loop == "queue":
+                        await self.queue.put(track)
+
+            self.track = track
+            await self.play(track)
+
+            if self.bound_channel:
+                await self._update_now_playing_message(track)
+
+            return track
+
+        except asyncio.TimeoutError:
+            await self.teardown()
+            return None
+        finally:
+            self.waiting = False
+
+    async def _update_now_playing_message(self, track: pomice.Track):
+        """Update the now playing message."""
+        try:
+            if self.message:
+                await self.message.delete()
+            
+            embed = discord.Embed(
+                description=f"> **Now playing** [**{track.title}**]({track.uri})"
+            )
+            if track.track_type == pomice.TrackType.YOUTUBE:
+                embed.set_image(url=track.thumbnail)
+            else:
+                embed.set_thumbnail(url=track.thumbnail)
+                
+            self.message = await self.bound_channel.send(embed=embed)
+        except Exception as e:
+            logger.error(f"Failed to update now playing message: {e}")
+            self.bound_channel = None
+
+    async def skip(self):
+        """Skip current track."""
+        if self.is_paused:
+            await self.set_pause(False)
+        if self.loop == "track":
+            await self.seek(self.current.length)
+        else:
+            await self.stop()
+
+    async def set_loop(self, state: Union[str, bool]):
+        """Set loop state."""
+        self.loop = state
+
+    async def teardown(self):
+        """Clean up player resources."""
+        self.queue._queue.clear()
+        await self.reset_filters()
+        with suppress(KeyError):
+            if self.guild.id in self._node._players:
+                await self.destroy()
+
+
+    def __repr__(self) -> str:
+        return f"<Player guild={self.guild.id} connected={self.is_connected} playing={self.is_playing}>"
+
 
 class MusicError(commands.CommandError):
     def __init__(self, message: str, **kwargs):
