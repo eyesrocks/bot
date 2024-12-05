@@ -8,6 +8,7 @@ from config import CONFIG_DICT
 import humanfriendly
 from asyncio import ensure_future
 import humanize
+from loguru import logger
 from tool.greed import Greed
 
 class Instance(Greed):
@@ -15,13 +16,17 @@ class Instance(Greed):
         super().__init__(config, *args, **kwargs)
 
     async def on_guild_join(self, guild: Guild):
-        if not await self.db.fetchrow("""SELECT * FROM instances WHERE guild_id = $1 AND bot_id = $2""", guild.id, self.user.id):
-            return await guild.leave()
+        data = await self.db.fetchrow("""SELECT * FROM instances WHERE bot_id = $1""", self.user.id):
+        if data:
+            if data.guild_id == guild.id:
+                return
+
+        logger.info(f"leaving guild {guild.name} due to it not being whitelisted inside of {data}")
+        return await guild.leave()
 
     async def on_ready(self):
         for guild in self.guilds:
-            if not await self.db.fetchrow("""SELECT * FROM instances WHERE guild_id = $1 AND bot_id = $2""", guild.id, self.user.id):
-                await guild.leave()
+            await self.on_guild_join(guild)
         return await super().on_ready()
 
     async def setup_hook(self) -> None:
