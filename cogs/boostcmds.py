@@ -92,9 +92,6 @@ class Booster(commands.Cog):
 
 
 
-
-            await ctx.send(f"Error fetching Twitter profile: {e}")
-
             
 async def setup(bot):
     """Setup function to load the cog."""
