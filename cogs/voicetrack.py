@@ -8,8 +8,8 @@ class VoiceTrack(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    async def create_table(self):
-        """Create the voicetime_overall table if it doesn't exist"""
+    async def ensure_table(self):
+        """Ensure the table has the correct schema."""
         await self.bot.db.execute("""
             CREATE TABLE IF NOT EXISTS voicetime_overall (
                 user_id BIGINT NOT NULL,
@@ -17,6 +17,16 @@ class VoiceTrack(commands.Cog):
                 total_minutes DECIMAL DEFAULT 0.0,
                 PRIMARY KEY (user_id, channel_id)
             );
+        """)
+        # Adding channel_id column if it doesn't exist
+        await self.bot.db.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'voicetime_overall' AND column_name = 'channel_id') THEN
+                    ALTER TABLE voicetime_overall ADD COLUMN channel_id BIGINT;
+                END IF;
+            END;
+            $$;
         """)
 
     async def update_voicetime(self, user_id, channel_id, minutes):
