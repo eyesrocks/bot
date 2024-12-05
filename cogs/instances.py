@@ -1,11 +1,12 @@
 from discord.ext.commands import Context, Cog, CommandError, check, group, command, Converter
 from discord import Client, Member, User, Guild, Activity, Status
+from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from aiohttp import ClientSession
 from dataclasses import dataclass
 from typing import Optional, Any, Union
 from config import CONFIG_DICT
-import humanfriendly
+import humanfriendly, os
 from asyncio import ensure_future
 from pydantic import BaseModel
 import humanize
@@ -34,7 +35,9 @@ class Instance(Greed):
         if data := await self.db.fetchrow("""SELECT status_type, status_text FROM instances WHERE bot_id = $1""", self.user.id):
             kwargs = {"status": Status.idle} if data.status_type == 1 else {}
             await self.change_presence(activity = Activity(name=data.status_text, type=data.status_type, url="https://twitch.tv/clock"), **kwargs)
-        return await super().setup_connection(False)
+        await super().setup_connection(False)
+        if os.path.exists(f"/root/greed/cogs/custom/{self.user.id}.py"):
+            await self.load_extension(f"cogs.custom.{self.user.id}")
 
     async def start(self, token: str, reconnect: bool = True) -> None:
         await super().login(token)
