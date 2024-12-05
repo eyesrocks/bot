@@ -51,6 +51,7 @@ from rival_tools import ratelimit, lock  # type: ignore
 from tool.rival import RivalAPI, get_statistics as get_stats, Statistics  # type: ignore
 from tool.paginate import Paginate  # type: ignore
 from sys import stdout
+from .emotes import EMOJIS
 from contextlib import suppress
 discord.Interaction.success = GreedInteraction.success
 discord.Interaction.fail = GreedInteraction.fail
@@ -827,7 +828,7 @@ class Greed(Bot):
         return {
             "embed": discord.Embed(
                 color=0xFFA500,
-                description=f"<:warns:1302330367323148399> {message}",
+                description=f"{EMOJIS["icons_warning"]} {message}",
             )
         }
 
@@ -1084,7 +1085,7 @@ class Greed(Bot):
         return await ctx.send(
             content=f"`{code}`",
             embed=discord.Embed(
-                description=f"<:icons_warning:1306875715421077546> {ctx.author.mention}: Error occurred while performing command **{ctx.command.qualified_name}**. Use the given error code to report it to the developers in the [support server]({self.support_server})",
+                description=f"{EMOJIS["icons_warning"]} {ctx.author.mention}: Error occurred while performing command **{ctx.command.qualified_name}**. Use the given error code to report it to the developers in the [support server]({self.support_server})",
                 color=0xFFA500,
             ),
         )

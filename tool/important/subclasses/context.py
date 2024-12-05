@@ -13,7 +13,7 @@ import discord
 from discord.ext import commands
 from discord.ext.commands import CommandError, UserInputError
 from discord.utils import cached_property
-
+from tool.emotes import EMOJIS
 TUPLE = ()
 SET = set()
 
@@ -600,7 +600,7 @@ class Context(commands.Context):
                 color = 0x2a8000
         else:
             color = 0x2a8000
-            emoji = "<:UB_Check_Icon:1306875712782864445>"
+            emoji = EMOJIS["UB_Check_Icon"]
         embed = discord.Embed(
             color=color, description=f"{emoji} {self.author.mention}: {text}"
         )
@@ -737,7 +737,7 @@ class Context(commands.Context):
                 color = 0xa00000
         else:
             color = 0xa00000
-            emoji = "<:UB_X_Icon:1306875714426900531>"
+            emoji = EMOJIS["UB_X_Icon"]
         embed = discord.Embed(
             color=color, description=f"{emoji} {self.author.mention}: {text}"
         )
@@ -772,11 +772,11 @@ class Context(commands.Context):
                 color = 0xffd036
         else:
             color = 0xffd036
-            emoji = "<:icons_warning:1306875715421077546>"
+            emoji = EMOJIS["icons_warning"]
             if e := kwargs.get("emoji"):
                 emoji += e
             else:
-                emoji = "<:icons_warning:1306875715421077546>"
+                emoji = EMOJIS["icons_warning"]
         embed = discord.Embed(
             color=color,
             description=f"{emoji or ''} {self.author.mention}: {text}",
@@ -862,28 +862,28 @@ class Context(commands.Context):
         if len(embeds) > 1:
             paginator.add_button(
                 "prev",
-                emoji="<:previous:1110882835167985724>",
+                emoji=EMOJIS["pages_previous"],
                 style=discord.ButtonStyle.blurple,
             )
             paginator.add_button(
                 "next",
-                emoji="<:next:1110882794416132197>",
+                emoji=EMOJIS["next"],
                 style=discord.ButtonStyle.blurple,
             )
             paginator.add_button(
                 "goto",
-                emoji="<:filter:1110883391802454066>",
+                emoji=EMOJIS["filter"],
                 style=discord.ButtonStyle.grey,
             )
             paginator.add_button(
                 "delete",
-                emoji="<:stop:1110883418708901928>",
+                emoji=EMOJIS["stop"],
                 style=discord.ButtonStyle.red,
             )
         elif len(embeds) == 1:
             paginator.add_button(
                 "delete",
-                emoji="<:stop:1110883418708901928>",
+                emoji=EMOJIS["stop"],
                 style=discord.ButtonStyle.red,
             )
         else:

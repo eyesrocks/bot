@@ -8,7 +8,7 @@ from discord.ext import commands, menus
 from typing import Any, Union
 from tool.important import Context  # type: ignore
 from tool.greed import Greed  # type: ignore
-
+from tool.emotes import EMOJIS
 
 class plural:
     def __init__(self, value: int, bold: bool = False, code: bool = False):
@@ -182,7 +182,7 @@ class LastFMLikes(discord.ui.View, menus.MenuPages):
             return interaction.user == self.ctx.author
 
     @discord.ui.button(
-        emoji="<:pages_previous:1302401792994312203>", style=discord.ButtonStyle.grey
+        emoji=EMOJIS["pages_previous"], style=discord.ButtonStyle.grey
     )
     async def before_page(self, interaction, button):  # type: ignore
         if self.current_page == self._source.get_max_pages() - 1:

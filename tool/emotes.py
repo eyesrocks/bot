@@ -50,4 +50,6 @@ EMOJIS = {
     "DiceRoll": "",
     "dblunt": "",
     "devilnigga": "",
+    "arolighter": "",
+    "Nitro_badge": "",
 }
