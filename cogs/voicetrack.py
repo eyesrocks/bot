@@ -1,15 +1,18 @@
 import discord
 from discord.ext import commands
-from PIL import Image, ImageDraw, ImageFont
+from datetime import datetime
 import matplotlib.pyplot as plt
+from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
 
 class VoiceTrack(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.user_voice_states = {}  # To track user voice channel join times
+        bot.loop.create_task(self.create_table())
 
     async def create_table(self):
-        """Create the voicetime_overall table if it doesn't exist"""
+        """Create the database table for tracking voice time."""
         await self.bot.db.execute("""
             CREATE TABLE IF NOT EXISTS voicetime_overall (
                 user_id BIGINT NOT NULL,
@@ -20,63 +23,97 @@ class VoiceTrack(commands.Cog):
         """)
 
     async def update_voicetime(self, user_id, channel_id, minutes):
-        """Update the voice time for a specific user and channel."""
+        """Update the voice time for a specific voice channel."""
         query = """
             INSERT INTO voicetime_overall (user_id, channel_id, total_minutes)
             VALUES ($1, $2, $3)
-            ON CONFLICT(user_id, channel_id) 
-            DO UPDATE SET total_minutes = total_minutes + $3;
+            ON CONFLICT (user_id, channel_id) DO UPDATE
+            SET total_minutes = voicetime_overall.total_minutes + $3;
         """
         await self.bot.db.execute(query, user_id, channel_id, minutes)
 
-    def calculate_time_spent(self, before, after):
-        """Calculate time spent in the voice channel."""
-        if before.channel is None or after.channel is None:
-            return 0.0
-
-        # Calculate the time spent in the channel, in minutes
-        time_spent = (after.self_deaf - before.self_deaf) / 60.0
-        return time_spent
-
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
-        """Listener to track voice state updates and store voice time"""
-        # Only track if the member joins or leaves a channel
-        if before.channel != after.channel:
-            time_spent = self.calculate_time_spent(before, after)
+        """Tracks users joining and leaving voice channels."""
+        # Ignore bot users
+        if member.bot:
+            return
 
-            if after.channel:  # If the user joined a channel
-                await self.update_voicetime(member.id, after.channel.id, time_spent)
-            if before.channel:  # If the user left a channel
-                await self.update_voicetime(member.id, before.channel.id, time_spent)
+        user_id = member.id
+        now = datetime.utcnow()
+
+        # User joins a voice channel
+        if before.channel is None and after.channel is not None:
+            self.user_voice_states[user_id] = {
+                "channel_id": after.channel.id,
+                "join_time": now
+            }
+            print(f"{member.name} joined {after.channel.name} at {now}.")
+
+        # User leaves a voice channel
+        elif before.channel is not None and after.channel is None:
+            if user_id in self.user_voice_states:
+                data = self.user_voice_states.pop(user_id)
+                join_time = data["join_time"]
+                channel_id = data["channel_id"]
+
+                # Calculate time spent in the channel
+                time_spent = (now - join_time).total_seconds() / 60  # Convert to minutes
+                print(f"{member.name} left {before.channel.name} after {time_spent:.2f} minutes.")
+
+                # Update the database
+                await self.update_voicetime(user_id, channel_id, time_spent)
+
+        # User switches voice channels
+        elif before.channel is not None and after.channel is not None and before.channel.id != after.channel.id:
+            if user_id in self.user_voice_states:
+                data = self.user_voice_states.pop(user_id)
+                join_time = data["join_time"]
+                channel_id = data["channel_id"]
+
+                # Calculate time spent in the old channel
+                time_spent = (now - join_time).total_seconds() / 60  # Convert to minutes
+                print(f"{member.name} switched from {before.channel.name} to {after.channel.name} after {time_spent:.2f} minutes.")
+
+                # Update the database for the old channel
+                await self.update_voicetime(user_id, channel_id, time_spent)
+
+            # Log the new channel
+            self.user_voice_states[user_id] = {
+                "channel_id": after.channel.id,
+                "join_time": now
+            }
 
     @commands.command()
     async def voicetrack(self, ctx, member: discord.Member = None):
         """Generates a visual representation of voice time."""
         member = member or ctx.author
 
-        # Fetch voice time data
-        data = await self.bot.db.fetchrow("SELECT * FROM voicetime_overall WHERE user_id = $1", (member.id,))
-
+        # Fetch voice time data for the member from the database
+        data = await self.bot.db.fetchrow("SELECT * FROM voicetime_overall WHERE user_id = $1", member.id)
+        
         if not data:
-            await ctx.send(f"No data found for {member.mention}.")
+            await ctx.send(f"No voice time data found for {member.mention}.")
             return
 
-        # Extract data for the chart
-        vcs = data[1:]  # Skip user_id and channel_id
-        vc_names = [f"VC {i+1}" for i in range(len(vcs))]
+        # Extract VC time data
+        vcs = [data['vc1'], data['vc2'], data['vc3'], data['vc4'], data['vc5']]
+        vc_names = ['VC 1', 'VC 2', 'VC 3', 'VC 4', 'VC 5']
         total_minutes = sum(vcs)
 
+        # If no voice time data is available
         if total_minutes == 0:
-            await ctx.send(f"No voice activity recorded for {member.mention}.")
+            await ctx.send(f"No voice time recorded for {member.mention}.")
             return
 
-        # Generate grayscale pie chart
+        # Create grayscale pie chart for the voice time distribution
         plt.figure(figsize=(8, 8))
-        colors = [f"#{i:02x}{i:02x}{i:02x}" for i in range(50, 250, 50)]
+        colors = [f"#{i:02x}{i:02x}{i:02x}" for i in range(50, 250, 50)]  # Grayscale colors
+
+        # Generate the pie chart
         plt.pie(vcs, labels=vc_names, autopct="%.1f%%", startangle=140, colors=colors)
         plt.title(f"{member.name}'s Voice Time Distribution")
-        
+
         # Save pie chart to a buffer
         pie_buffer = BytesIO()
         plt.savefig(pie_buffer, format="PNG")
@@ -106,6 +143,7 @@ class VoiceTrack(commands.Cog):
 
         # Send the image
         await ctx.send(file=discord.File(final_buffer, "voicetrack.png"))
+
 
 # Setup function to add the cog to the bot
 async def setup(bot):
