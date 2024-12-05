@@ -108,7 +108,7 @@ def do_caption(para: list, image_bytes: bytes, message_data: dict):
     return output_bytes
 
 GOOGLE_API_KEY = "AIzaSyCgPL4hAT14sdyylXxY_R-hXJN4XMo7zZo"
-SEARCH_ENGINE_ID = "8691350b6083348ae",
+SEARCH_ENGINE_ID = "8691350b6083348ae"
 
 class TicTacToeButton(discord.ui.Button):
     def __init__(self, x: int, y: int, player1: discord.Member, player2: discord.Member):
