@@ -232,14 +232,11 @@ class Player(pomice.Player):
     @property
     def bound_channel(self) -> Optional[discord.TextChannel]:
         if not self._bound_channel:
-            # Find a channel with permission to send messages
             if self.channel and self.channel.category:
-                # Check within the category first
                 self._bound_channel = next(
                     (channel for channel in self.channel.category.text_channels 
                      if channel.permissions_for(self.guild.me).send_messages), None)
             if not self._bound_channel:
-                # Fallback to the entire guild's text channels
                 self._bound_channel = next(
                     (channel for channel in self.guild.text_channels 
                      if channel.permissions_for(self.guild.me).send_messages), None)
@@ -360,12 +357,28 @@ class Music(commands.Cog):
                     await ctx.voice_client.disconnect()
                     return None
                 raise commands.CommandError("I'm not **connected** to a voice channel")
-            await user_voice.channel.connect(cls=Player, self_deaf=True)
-            player = self.bot.node.get_player(ctx.guild.id)
-            player.bound_channel = ctx.channel
+            
+            try:
+                await user_voice.channel.connect(cls=Player, self_deaf=True)
+                player = self.bot.node.get_player(ctx.guild.id)
+                if not player:
+                    raise commands.CommandError("Failed to initialize the player after connecting")
+                logger.info(f"Connected to voice channel: {user_voice.channel.name}")
+            except Exception as e:
+                logger.error(f"Failed to connect to voice channel: {e}")
+                raise commands.CommandError("Could not connect to the voice channel")
+        try:
+            if not player.bound_channel:
+                player.bound_channel = ctx.channel
+                logger.info(f"Bound channel set to: {ctx.channel.name}")
+        except AttributeError as e:
+            logger.error(f"Failed to set bound channel: {e}")
+            raise commands.CommandError("Failed to bind the text channel for the player")
+        if not bot_voice:
             await ctx.voice_client.set_volume(65)
 
         return player
+
 
 
     @tasks.loop(minutes=5)
