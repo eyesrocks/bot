@@ -24,6 +24,7 @@ from discord import Interaction, app_commands, Color  # type: ignore
 from discord.app_commands import Choice
 from typing import Union, Optional, List, Annotated  # type: ignore
 from tool.greed import Greed  # type: ignore
+from tool.emotes import EMOJIS  # type: ignore
 
 # from tool.shazam import Recognizer  # type: ignore
 #from weather import WeatherClient  # type: ignore
@@ -837,21 +838,21 @@ class Information(commands.Cog):
         emojis = {
             "lim": "<:woah:1303263321583128650>",
             "staff2": "<:staff_badge_2:1304259736983834694>",
-            "nitro": "<:Nitro_badge:1302229179361656876>",
-            "hypesquad_brilliance": "<:hmubravery:1303861295833153596>",
-            "hypesquad_bravery": "<:HypeSquad_Balance:1303862084844519485>",
-            "hypesquad_balance": "<:Icon_Hypesquad_Brilliance:1303862083288301629>",
-            "bug_hunter": "<:vile_bhunter:991776532227969085>",
-            "bug_hunter_level_2": "<:vile_bhunterplus:991776477278388386>",
-            "discord_certified_moderator": "<:vile_cmoderator:1022943277340692521>",
-            "early_supporter": "<:EarlySupport:1302341217027362907>",
-            "verified_bot_developer": "<:vile_dev:1042082778629537832>",
-            "partner": "<:vile_partner:1022944710895075389>",
-            "staff": "<:vile_dstaff:1022944972858720327>",
+            "nitro": EMOJIS["Nitro_badge"],
+            "hypesquad_brilliance": EMOJIS["Icon_Hypesquad_Brilliance"],
+            "hypesquad_bravery": EMOJIS["Icon_Hypesquad_Bravery"],
+            "hypesquad_balance": EMOJIS["Icon_Hypesquad_Balance"],
+            "bug_hunter": EMOJIS["bug_hunter"],
+            "bug_hunter_level_2": EMOJIS["bug_hunter_level_2"],
+            "discord_certified_moderator": EMOJIS["certified_moderator"],
+            "early_supporter": EMOJIS["EarlySupport"],
+            "verified_bot_developer": EMOJIS["discord_developer"],
+            "partner": EMOJIS["Partner_server_owner"],
+            "staff": EMOJIS["Verified_badge_1_staff"],
             "verified_bot": "<:694579695567503381:1302748499607289928>",
             "server_boost": "<:nitro24:1310672012330532936>",
-            "active_developer": "<:ActiveDeveloper:1307532835434790974>",
-            "pomelo": "<:pomelo:1122143950719954964>",
+            "active_developer": EMOJIS["ActiveDeveloper"],
+            "pomelo": EMOJIS["pomelo"],
             "web_idle": "<:status_idle:1302238592172822569>",
             "web_dnd": "<:status_dnd:1302238595515551784>",
             "web_online": "<:status_online:1302238596580773980>",

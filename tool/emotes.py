@@ -52,4 +52,8 @@ EMOJIS = {
     "devilnigga": "",
     "arolighter": "",
     "Nitro_badge": "",
+    ":Partner_server_owner:": "",
+    "ActiveDeveloper": "",
+    "6_bot": "",
+    "pomelo": "",
 }
