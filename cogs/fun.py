@@ -8,7 +8,7 @@ import asyncio
 from datetime import datetime, timedelta
 from typing import Optional
 from PIL import Image, ImageDraw, ImageFont
-from googleapiclient.discovery import buil
+from googleapiclient.discovery import build
 from io import BytesIO
 from typing import List
 import base64
