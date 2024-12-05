@@ -14,6 +14,8 @@ from typing import List
 import base64
 import textwrap
 import random
+import requests
+
 import aiohttp
 from color_processing import ColorInfo
 
