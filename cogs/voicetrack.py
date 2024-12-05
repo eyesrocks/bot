@@ -1,6 +1,9 @@
 import discord
 from discord.ext import commands
 from datetime import datetime
+import matplotlib.pyplot as plt
+from PIL import Image, ImageDraw, ImageFont
+from io import BytesIO
 
 class VoiceTrack(commands.Cog):
     def __init__(self, bot):
@@ -80,6 +83,60 @@ class VoiceTrack(commands.Cog):
                 "channel_id": after.channel.id,
                 "join_time": now
             }
+
+    @commands.command()
+    async def voicetrack(self, ctx, member: discord.Member = None):
+        """Generates a visual representation of voice time."""
+        member = member or ctx.author
+
+        # Fetch voice time data for the member from the database
+        data = await self.bot.db.fetch("SELECT * FROM voicetime_overall WHERE user_id = $1", (member.id,))
+        
+        if not data:
+            await ctx.send(f"No voice time data found for {member.mention}.")
+            return
+
+        # Prepare data for the chart
+        channel_ids = [row["channel_id"] for row in data]
+        total_time = [row["total_minutes"] for row in data]
+
+        # If no voice time data is available
+        if not total_time:
+            await ctx.send(f"No voice time data recorded for {member.mention}.")
+            return
+        
+        # Create pie chart for the voice time distribution
+        plt.figure(figsize=(8, 8))
+        colors = [f"#{i:02x}{i:02x}{i:02x}" for i in range(50, 250, 50)]  # Grayscale colors
+
+        # Generate the pie chart
+        plt.pie(total_time, labels=channel_ids, autopct="%.1f%%", startangle=140, colors=colors)
+        plt.title(f"{member.name}'s Voice Time Distribution")
+
+        # Save pie chart to a buffer
+        pie_buffer = BytesIO()
+        plt.savefig(pie_buffer, format="PNG")
+        pie_buffer.seek(0)
+        plt.close()
+
+        # Load profile picture
+        avatar_url = member.avatar.url
+        avatar_data = BytesIO(await avatar_url.read())
+        avatar_img = Image.open(avatar_data).convert("RGBA")
+
+        # Load the pie chart and paste the avatar in the center
+        pie_img = Image.open(pie_buffer).convert("RGBA")
+        pie_size = pie_img.size
+        avatar_img = avatar_img.resize((pie_size[0] // 3, pie_size[1] // 3))
+        pie_img.paste(avatar_img, ((pie_size[0] - avatar_img.size[0]) // 2, (pie_size[1] - avatar_img.size[1]) // 2), avatar_img)
+
+        # Save final image to a buffer
+        final_buffer = BytesIO()
+        pie_img.save(final_buffer, format="PNG")
+        final_buffer.seek(0)
+
+        # Send the image
+        await ctx.send(file=discord.File(final_buffer, "voicetrack.png"))
 
 # Setup function to add the cog to the bot
 async def setup(bot):
