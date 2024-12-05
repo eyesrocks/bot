@@ -713,6 +713,8 @@ class Greed(Bot):
             f'cogs.{str(c).split("/")[-1].split(".")[0]}'
             for c in Path("cogs/").glob("*.py")
         ]
+        if self.user.name != "greed":
+            cogs = [c for c in cogs if not c == "cogs.instances"]
         await asyncio.gather(*[self.__load(c) for c in cogs])
         self.loaded = True
 
@@ -782,15 +784,19 @@ class Greed(Bot):
         self.dask = await start_dask(self, "127.0.0.1:8787")
 
     async def setup_hook(self) -> None:
+        return await self.setup_connection()
+
+    async def setup_connection(self, connect: Optional[bool] = True) -> None:
         asyncio.ensure_future(self.setup_dask())
-        self.redis = Red(host="localhost", port=6379, db=0, decode_responses=True)
-        await self.redis.from_url("redis://localhost:6379")
+        if connect:
+            self.redis = Red(host="localhost", port=6379, db=0, decode_responses=True)
+            await self.redis.from_url("redis://localhost:6379")
+            self.db: Database = Database()
+            await self.db.connect()
+            self.loop.create_task(self.cache.setup_cache())
         self.session = ClientSession()
-        self.db: Database = Database()
-        await self.db.connect()
         self._connection.db = self.db
         self._connection.botstate = self
-        self.loop.create_task(self.cache.setup_cache())
         self.levels = Level(0.5, self)
     #    await self.levels.setup(self)
         self.add_view(VmButtons(self))
