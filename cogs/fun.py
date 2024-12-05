@@ -466,7 +466,7 @@ class Fun(commands.Cog):
                 datetime.now(),
             )
             embed = discord.Embed(
-                description=f"{EMOJIS["arolighter"]} {ctx.author.mention} sparked their first blunt!",
+                description=f"{EMOJIS['arolighter']} {ctx.author.mention} sparked their first blunt!",
                 color=self.bot.color,
             )
             await ctx.send(embed=embed)
@@ -486,7 +486,7 @@ class Fun(commands.Cog):
                     "UPDATE blunt_hits SET taps = taps + 1 WHERE user_id = $1", user_id
                 )
                 embed = discord.Embed(
-                    description=f"{EMOJIS["d_smoke"]}  {ctx.author.mention} took a hit from the blunt!",
+                    description=f"{EMOJIS['d_smoke']}  {ctx.author.mention} took a hit from the blunt!",
                     color=self.bot.color,
                 )
                 await ctx.send(embed=embed)
@@ -608,7 +608,7 @@ class Fun(commands.Cog):
 
         # Vape hit sequence
         embed = discord.Embed(
-            description=f"{EMOJIS["vape"]} {ctx.author.mention} is about to take a hit of the vape...",
+            description=f"{EMOJIS['vape']} {ctx.author.mention} is about to take a hit of the vape...",
             color=self.bot.color,
         )
         message = await ctx.send(embed=embed)
@@ -622,7 +622,7 @@ class Fun(commands.Cog):
             ctx.guild.id,
         )
         embed.description = (
-            f"{EMOJIS["vape"]} {ctx.author.mention} took a hit of the vape! "
+            f"{EMOJIS['vape']} {ctx.author.mention} took a hit of the vape! "
             f"The server now has **{guild_hits}** hits."
         )
         await message.edit(embed=embed)
@@ -643,7 +643,7 @@ class Fun(commands.Cog):
             )
             return await ctx.send(
                 embed=discord.Embed(
-                    description=f"{EMOJIS["vape"]} You have claimed the vape, **{ctx.author.mention}**",
+                    description=f"{EMOJIS['vape']} You have claimed the vape, **{ctx.author.mention}**",
                     color=self.bot.color,
                 )
             )
@@ -653,7 +653,7 @@ class Fun(commands.Cog):
         if current_holder == ctx.author:
             return await ctx.send(
                 embed=discord.Embed(
-                    description=f"{EMOJIS["vape"]} You already have the vape, you fiend!",
+                    description=f"{EMOJIS['vape']} You already have the vape, you fiend!",
                     color=self.bot.color,
                 )
             )
@@ -664,9 +664,9 @@ class Fun(commands.Cog):
             ctx.guild.id,
         )
         description = (
-            f"{EMOJIS["vape"]} You have successfully stolen the vape from {current_holder.mention}."
+            f"{EMOJIS['vape']} You have successfully stolen the vape from {current_holder.mention}."
             if current_holder
-            else f"{EMOJIS["vape"]} You have claimed the vape, **{ctx.author.mention}**"
+            else f"{EMOJIS['vape']} You have claimed the vape, **{ctx.author.mention}**"
         )
         await ctx.send(
             embed=discord.Embed(description=description, color=self.bot.color)
@@ -963,8 +963,8 @@ class Fun(commands.Cog):
         )
         embed.set_footer(text=f"Poll created by {ctx.author}")
         message = await ctx.send(embed=embed)
-        await message.add_reaction(f"{EMOJIS["UB_Check_Icon"]}")
-        await message.add_reaction(f"{EMOJIS["UB_X_Icon"]}")
+        await message.add_reaction(f"{EMOJIS['UB_Check_Icon']}")
+        await message.add_reaction(f"{EMOJIS['UB_X_Icon']}")
 
     @commands.command(
         name="randomhex",
