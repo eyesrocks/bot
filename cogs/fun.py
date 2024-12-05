@@ -1064,5 +1064,11 @@ class Fun(commands.Cog):
         await ctx.send(f"{opponent.mention}, you have been challenged to a game of Tic Tac Toe!", view=view)
 
 
+
+
+
+
+
+
 async def setup(bot):
     await bot.add_cog(Fun(bot))
