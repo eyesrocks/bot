@@ -7,9 +7,10 @@ from io import BytesIO
 class VoiceTrack(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        
+        self.bot.loop.create_task(self.ensure_unique_constraint())
+
     async def create_table(self):
-        # Ensure the table exists with the necessary columns and a composite primary key on user_id and channel_id
+        """Create the table if it doesn't exist."""
         await self.bot.db.execute("""
             CREATE TABLE IF NOT EXISTS voicetime_overall (
                 user_id BIGINT NOT NULL, 
@@ -23,30 +24,39 @@ class VoiceTrack(commands.Cog):
             );
         """)
 
+    async def ensure_unique_constraint(self):
+        """Ensure there is a unique constraint on user_id and channel_id."""
+        await self.bot.db.execute("""
+            ALTER TABLE voicetime_overall
+            ADD CONSTRAINT IF NOT EXISTS unique_user_channel UNIQUE (user_id, channel_id);
+        """)
+
     async def update_voicetime(self, user_id, channel_id, minutes):
         """Update the voice time for a specific VC."""
         query = """
         INSERT INTO voicetime_overall (user_id, channel_id, vc1)
         VALUES ($1, $2, $3)
-        ON CONFLICT(user_id, channel_id)
+        ON CONFLICT (user_id, channel_id)
         DO UPDATE SET vc1 = voicetime_overall.vc1 + $3;
         """
         await self.bot.db.execute(query, user_id, channel_id, minutes)
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
-        """Detects when a user joins or leaves a voice channel."""
-        # If the user has joined a voice channel
-        if after.channel is not None and before.channel != after.channel:
-            # Calculate the time spent in the previous channel
-            if before.channel is not None:
-                time_spent = (after.self_mute - before.self_mute)  # Placeholder for time calculation
+        """Track when a user joins or leaves a voice channel."""
+        if before.channel != after.channel:  # Only track if there's a change
+            if before.channel is not None:  # Left a voice channel
+                time_spent = self.calculate_time_spent(before)
                 await self.update_voicetime(member.id, before.channel.id, time_spent)
+            if after.channel is not None:  # Joined a voice channel
+                time_spent = self.calculate_time_spent(after)
+                await self.update_voicetime(member.id, after.channel.id, time_spent)
 
-        # If the user has left a voice channel
-        if after.channel is None:
-            time_spent = (after.self_mute - before.self_mute)  # Placeholder for time calculation
-            await self.update_voicetime(member.id, before.channel.id, time_spent)
+    def calculate_time_spent(self, channel):
+        """Calculate the time spent in a voice channel (example)."""
+        # This is just an example. You can use a more accurate method to calculate time spent.
+        # For simplicity, we are returning a static value in minutes here.
+        return 1.0  # Example time spent, should be dynamically calculated in a real case
 
     @commands.command()
     async def voicetrack(self, ctx, member: discord.Member = None):
@@ -54,18 +64,14 @@ class VoiceTrack(commands.Cog):
         member = member or ctx.author
 
         # Fetch voice time data
-        data = await self.bot.db.fetchrow("""
-            SELECT user_id, channel_id, vc1, vc2, vc3, vc4, vc5
-            FROM voicetime_overall
-            WHERE user_id = $1
-        """, member.id)
+        data = await self.bot.db.fetchrow("SELECT * FROM voicetime_overall WHERE user_id = $1", (member.id,))
 
         if not data:
             await ctx.send(f"No data found for {member.mention}.")
             return
 
         # Extract data for the chart
-        vcs = [data["vc1"], data["vc2"], data["vc3"], data["vc4"], data["vc5"]]
+        vcs = data[2:]  # Skip user_id and channel_id
         vc_names = [f"VC {i+1}" for i in range(len(vcs))]
         total_minutes = sum(vcs)
 
