@@ -93,21 +93,21 @@ class Instances(Cog):
         async def check(row):
             user_data = await self.bot.db.fetchrow("""SELECT expiration FROM instance_whitelist WHERE user_id = $1""", row.user_id)
             if not user_data:
-                continue
+                return
             if user_data.get("expiration"):
                 if row.expiration < datetime.now(timezone.utc):
                     if row.user_id not in self.bot.instances:
                         for source in self.bot.ipc.sources:
                             if source != self.bot.connection.local_name:
                                 if await self.bot.connection.request("get_instance", source = source, user_id = row.user_id) != False:
-                                    continue
+                                    return
                         await self.start_instance(row.token, row.user_id)
             else:
                 if row.user_id not in self.bot.instances:
                     for source in self.bot.ipc.sources:
                         if source != self.bot.connection.local_name:
                             if await self.bot.connection.request("get_instance", source = source, user_id = row.user_id) != False:
-                                continue
+                                return
                     await self.start_instance(row.token, row.user_id)
 
         for row in await self.bot.db.fetch("""SELECT * FROM instances"""):
