@@ -158,6 +158,7 @@ class Instances(Cog):
     def __init__(self, bot: Client):
         self.bot = bot
         self.bot.instances = {}
+        self.check_instance.start()
 
     async def change_instance_presence(self, source: str, user_id: int, status_type: int, status_text: str):
         if user_id not in self.bot.instances:
@@ -172,7 +173,9 @@ class Instances(Cog):
         for user_id in self.bot.instances.keys():
             if user_data := await self.bot.db.fetchrow("""SELECT user_id, expiration FROM instance_whitelist WHERE user_id = $1""", user_id):
                 if user_data.expiration:
-         
+                    if user_data.expiration > datetime.now(timezone.utc):
+                        await self.bot.instances[user_id].close()
+                        self.bot.instances.pop(user_id)
 
     async def cog_load(self):
         try:
@@ -208,6 +211,7 @@ class Instances(Cog):
                 pass
 
     async def cog_unload(self):
+       self.check_instance.stop()
        for s in self.bot.instances.values():
            try:
                await s.close()
