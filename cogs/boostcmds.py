@@ -1,6 +1,6 @@
 import discord
 from discord.ext import commands
-
+import
 def check():
     async def predicate(ctx):
         guild = ctx.bot.get_guild(1301617147964821524)
