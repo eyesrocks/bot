@@ -7,10 +7,7 @@ from io import BytesIO
 class VoiceTrack(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.create_table()
 
-    def create_table(self):
-        """Creates the voicetime_overall table if it doesn't exist."""
         self.bot.db.execute("""
             CREATE TABLE IF NOT EXISTS voicetime_overall (
                 user_id BIGINT NOT NULL,
