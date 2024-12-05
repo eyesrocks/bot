@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pytz import timezone
 from rival_tools import thread
 from loguru import logger
+from tool.emotes import EMOJIS
 
 log = logger
 MAX_GAMBLE = 100_000_000_000_000_000  # Simplified max gamble amount
@@ -348,31 +349,31 @@ class Economy(commands.Cog):
                 "price": 1000000,
                 "description": "prevents other users from stealing from your wallet for 8 hours",
                 "duration": 28800,
-                "emoji": "<:IMG_8017:1302398044221997168>",
+                "emoji": EMOJIS["devilnigga"],
             },
             "white powder": {
                 "price": 500000,
                 "description": "allows you to win double from a coinflip for 1 minute",
                 "duration": 60,
-                "emoji": "<:pwder:1302247828734869554>",
+                "emoji": EMOJIS["pwder"],
             },
             "oxy": {
                 "price": 400000,
                 "description": "allows you 2x more bucks when you win a gamble for 30 seconds",
                 "duration": 30,
-                "emoji": "<:oxy:1302248923745751090>",
+                "emoji": EMOJIS["oxy"],
             },
             "meth": {
                 "description": "roll 2x more for 4 minutes",
                 "price": 350000,
                 "duration": 240,
-                "emoji": "<:mth:1302247813622665347>",
+                "emoji": EMOJIS["mth"],
             },
             "shrooms": {
                 "description": "increases your chances of winning gamble commands by 10% for 10 minutes",
                 "price": 100000,
                 "duration": 600,
-                "emoji": "<:shrrom:1302247841678364704>",
+                "emoji": EMOJIS["shrrom"],
             },
         }
         self.symbols = ["♠", "♥", "♦", "♣"]

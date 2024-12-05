@@ -49,4 +49,5 @@ EMOJIS = {
     "mth": "",
     "DiceRoll": "",
     "dblunt": "",
+    "devilnigga": "",
 }
