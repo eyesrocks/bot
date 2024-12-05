@@ -1064,7 +1064,7 @@ class Fun(commands.Cog):
         await ctx.send(f"{opponent.mention}, you have been challenged to a game of Tic Tac Toe!", view=view)
 
 
-
+z
 
 
 
