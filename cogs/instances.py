@@ -78,7 +78,7 @@ async def get_int(argument: str):
 
 class TimeFrame(Converter):
     async def convert(self, ctx: Context, argument: str):
-        if argument in ("indefinite", "infinite", "forever"):
+        if argument in ("indefinite", "infinite", "forever", "lifetime"):
             return None
         try:
             converted = humanfriendly.parse_timespan(argument)

@@ -56,4 +56,5 @@ EMOJIS = {
     "ActiveDeveloper": "",
     "6_bot": "",
     "pomelo": "",
+    "bot_owner": "",
 }
