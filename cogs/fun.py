@@ -16,6 +16,7 @@ import textwrap
 import random
 import aiohttp
 from color_processing import ColorInfo
+from tool.emotes import EMOJIS
 
 from tool.worker import offloaded
 # from greed.tool import aliases
