@@ -116,6 +116,12 @@ class Instances(Cog):
             except Exception:
                 pass
 
+    async def cog_unload(self):
+       for s in self.bot.instances.values():
+           try:
+               await s.close()
+           except Exception:
+               pass
     async def cog_check(self, ctx: Context):
         if ctx.author.id in self.bot.owner_ids:
             return True
