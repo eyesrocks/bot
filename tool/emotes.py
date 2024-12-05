@@ -57,4 +57,5 @@ EMOJIS = {
     "6_bot": "",
     "pomelo": "",
     "bot_owner": "",
+    "d_smoke": "",
 }
