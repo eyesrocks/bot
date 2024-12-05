@@ -79,9 +79,37 @@ class TimeFrame(Converter):
                 f"{await get_int(argument)} minutes"
             )
         return converted
-    
 
 
+class VARMAP = {
+    "status": {
+        "aliases": ["stat", "activity", "presence"],
+        "value": 1,
+    },
+    "support": {
+        "aliases": ["server", "invite"],
+        "value": 2,
+    },
+}
+
+class VariableResponse(BaseModel):
+    variable: int
+    name: str
+
+class Variable(Converter):
+    async def convert(self, ctx: Context, argument: str):
+        arg = argument.lower()
+        r = None
+        for key, value in VARMAP.items():
+            if arg == key.lower():
+                r = key
+                break
+            if arg in value["aliases"]:
+                r = key
+                break
+        if not r:
+            raise CommandError("that is not a valid variable")
+        return VariableResponse(variable = VARMAP[r]["value"], name = r)
 class Instances(Cog):
     def __init__(self, bot: Client):
         self.bot = bot
@@ -157,6 +185,10 @@ class Instances(Cog):
     async def instance(self, ctx: Context):
         return await ctx.send_help(ctx.command)
     
+    @name(name = "edit", brief = "edit a variable regarding your instance of greed", example = ",instance edit status streaming:whats up")
+    async def instance_edit(self, ctx: Context, variable: Variable, *, value: Value):
+        return 
+
     @instance.command(name = "create", brief = "create your instance of greed", example = ",instance create Mz.dasdssa 373747373")
     async def instance_create(self, ctx: Context, token: TokenConverter, guild_id: int):
         await self.bot.db.execute("""INSERT INTO instances (user_id, token, bot_id, guild_id) VALUES($1, $2, $3, $4) ON CONFLICT(user_id) DO UPDATE SET token = excluded.token, bot_id = excluded.bot_id, guild_id = excluded.guild_id""", ctx.author.id, token.token, int(token.data["id"]), guild_id)
@@ -188,7 +220,7 @@ class Instances(Cog):
             return
         if timeframe:
             delta = timedelta(seconds = timeframe)
-            expiration = datetime.now() + delta
+            exp88iration = datetime.now() + delta
         else:
             expiration = None
         await self.bot.db.execute("""INSERT INTO instance_whitelist (user_id, expiration) VALUES($1, $2) ON CONFLICT(user_id) DO UPDATE SET expiration = excluded.expiration""", user.id, expiration)
