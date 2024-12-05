@@ -16,7 +16,7 @@ class Instance(Greed):
         super().__init__(config, *args, **kwargs)
 
     async def on_guild_join(self, guild: Guild):
-        data = await self.db.fetchrow("""SELECT * FROM instances WHERE bot_id = $1""", self.user.id):
+        data = await self.db.fetchrow("""SELECT * FROM instances WHERE bot_id = $1""", self.user.id)
         if data:
             if data.guild_id == guild.id:
                 return
