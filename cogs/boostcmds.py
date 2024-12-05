@@ -91,6 +91,33 @@ class Booster(commands.Cog):
             await ctx.fail(f"An error occurred: {str(e)}")
 
 
+
+    @commands.command()
+    async def twitter(self, ctx, username: str):
+        """Fetches profile information of a Twitter user."""
+        try:
+            # Fetch the user information from Twitter
+            user = api.get_user(screen_name=username)
+            
+            # Prepare the profile information to display
+            profile_info = (
+                f"**{user.name} (@{user.screen_name})**\n"
+                f"Bio: {user.description}\n"
+                f"Followers: {user.followers_count}\n"
+                f"Following: {user.friends_count}\n"
+                f"Tweets: {user.statuses_count}\n"
+                f"Joined Twitter: {user.created_at.strftime('%B %d, %Y')}\n"
+                f"Location: {user.location if user.location else 'Not specified'}\n"
+                f"Profile Picture: {user.profile_image_url_https}\n"
+                f"URL: https://twitter.com/{user.screen_name}"
+            )
+            
+            # Send the profile info as a message
+            await ctx.send(profile_info)
+        
+        except tweepy.TweepError as e:
+            await ctx.send(f"Error fetching Twitter profile: {e}")
+
             
 async def setup(bot):
     """Setup function to load the cog."""
