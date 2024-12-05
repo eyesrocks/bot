@@ -55,6 +55,11 @@ class Owner(commands.Cog):
             return 0
 
 
+    @commands.command(name = "saveemoji")
+    @commands.is_owner()
+    async def saveemoji(self, ctx: Context, *emojis: discord.PartialEmoji):
+        for emoji in emojis:
+            await emoji.save(f"assets/{emoji.name}.{'gif' if emoji.animated else 'png'}")
 
 
     @commands.group(name="donator", invoke_without_command=True)
