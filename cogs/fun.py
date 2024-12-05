@@ -14,8 +14,6 @@ import textwrap
 import random
 import aiohttp
 from color_processing import ColorInfo
-GOOGLE_API_KEY = "AIzaSyCgPL4hAT14sdyylXxY_R-hXJN4XMo7zZo"
-SEARCH_ENGINE_ID = "8691350b6083348ae"
 
 from tool.worker import offloaded
 # from greed.tool import aliases
