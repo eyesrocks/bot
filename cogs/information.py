@@ -840,7 +840,7 @@ class Information(commands.Cog):
             "nitro": EMOJIS["Nitro_badge"],
             "hypesquad_brilliance": EMOJIS["Icon_Hypesquad_Brilliance"],
             "hypesquad_bravery": EMOJIS["hmubravery"],
-            "hypesquad_balance": EMOJIS["Icon_Hypesquad_Balance"],
+            "hypesquad_balance": EMOJIS["HypeSquad_Balance"],
             "bug_hunter": EMOJIS["bug_hunter"],
             "bug_hunter_level_2": EMOJIS["bug_hunter_level_2"],
             "discord_certified_moderator": EMOJIS["certified_moderator"],
