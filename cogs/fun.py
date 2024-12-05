@@ -440,7 +440,7 @@ class Fun(commands.Cog):
                     datetime.now(),
                 )
                 embed = discord.Embed(
-                    description=f"{EMOJIS["arolighter"]} {ctx.author.mention} sparked the blunt!",
+                    description=f"{EMOJIS['arolighter']} {ctx.author.mention} sparked the blunt!",
                     color=self.bot.color,
                 )
                 await ctx.send(embed=embed)
