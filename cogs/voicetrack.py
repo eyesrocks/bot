@@ -3,79 +3,70 @@ from discord.ext import commands
 from PIL import Image, ImageDraw, ImageFont
 import matplotlib.pyplot as plt
 from io import BytesIO
-import asyncio
 
 class VoiceTrack(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        # Ensure the table is properly initialized with required columns
-        asyncio.create_task(self.ensure_table())
         
-    async def ensure_table(self):
-        """Ensure the table has the correct schema."""
-        # Add column if it doesn't exist
-        query = """
-        DO $$
-        BEGIN
-            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'voicetime_overall' AND column_name = 'channel_id') THEN
-                ALTER TABLE voicetime_overall ADD COLUMN channel_id BIGINT;
-            END IF;
-        END;
-        $$;
-        """
-        await self.bot.db.execute(query)
-
     async def create_table(self):
-        """Create the table if it doesn't exist."""
+        # Ensure the table exists with the necessary columns
         await self.bot.db.execute("""
             CREATE TABLE IF NOT EXISTS voicetime_overall (
-                user_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL, 
+                channel_id BIGINT NOT NULL, 
                 vc1 DECIMAL DEFAULT 0.0,
                 vc2 DECIMAL DEFAULT 0.0,
                 vc3 DECIMAL DEFAULT 0.0,
                 vc4 DECIMAL DEFAULT 0.0,
                 vc5 DECIMAL DEFAULT 0.0,
-                channel_id BIGINT,  -- ensure this column exists
-                PRIMARY KEY (user_id)
+                PRIMARY KEY (user_id, channel_id)
             );
         """)
 
     async def update_voicetime(self, user_id, channel_id, minutes):
         """Update the voice time for a specific VC."""
+        # We are assuming vc1 is the current VC. You can extend this logic for other VCs
         query = """
         INSERT INTO voicetime_overall (user_id, channel_id, vc1)
         VALUES ($1, $2, $3)
-        ON CONFLICT(user_id, channel_id) 
-        DO UPDATE SET vc1 = vc1 + $3;
+        ON CONFLICT(user_id, channel_id)
+        DO UPDATE SET vc1 = voicetime_overall.vc1 + $3;
         """
         await self.bot.db.execute(query, user_id, channel_id, minutes)
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
-        """Track voice channel join/leave."""
-        if before.channel != after.channel:  # The user changed their VC or left.
-            user_id = member.id
-            time_spent = 1  # You will need to calculate this properly or have it passed in
-            channel_id = after.channel.id if after.channel else None
+        """Detects when a user joins or leaves a voice channel."""
+        # If the user has joined a voice channel
+        if after.channel is not None and before.channel != after.channel:
+            # Calculate the time spent in the previous channel
+            if before.channel is not None:
+                time_spent = (after.self_mute - before.self_mute)  # Placeholder for time calculation
+                await self.update_voicetime(member.id, before.channel.id, time_spent)
 
-            # Update the voice time for the user and channel
-            if channel_id:
-                await self.update_voicetime(user_id, channel_id, time_spent)
-                
+        # If the user has left a voice channel
+        if after.channel is None:
+            time_spent = (after.self_mute - before.self_mute)  # Placeholder for time calculation
+            await self.update_voicetime(member.id, before.channel.id, time_spent)
+
     @commands.command()
     async def voicetrack(self, ctx, member: discord.Member = None):
         """Generates a visual representation of voice time."""
         member = member or ctx.author
 
         # Fetch voice time data
-        data = await self.bot.db.fetchrow("SELECT * FROM voicetime_overall WHERE user_id = $1", (member.id,))
+        data = await self.bot.db.fetchrow("""
+            SELECT user_id, channel_id, vc1, vc2, vc3, vc4, vc5
+            FROM voicetime_overall
+            WHERE user_id = $1
+        """, member.id)
 
         if not data:
             await ctx.send(f"No data found for {member.mention}.")
             return
 
         # Extract data for the chart
-        vcs = data[1:-1]  # Skip user_id and channel_id
+        vcs = [data["vc1"], data["vc2"], data["vc3"], data["vc4"], data["vc5"]]
         vc_names = [f"VC {i+1}" for i in range(len(vcs))]
         total_minutes = sum(vcs)
 
