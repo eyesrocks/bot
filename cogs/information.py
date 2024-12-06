@@ -668,45 +668,75 @@ class Information(commands.Cog):
         name="botinfo",
         aliases=["bi", "system", "sys"],
         brief="View the bots information on its growth",
-        example=",botinfo",
+        example=",botinfo", 
     )
     async def botinfo(self, ctx: Context):
-        get_lines()  # type: ignore
+        get_lines()
         stat = await self.bot.get_statistics()
+        uptime = stat.uptime.replace("Uptime: ", "")
+        
         embed = discord.Embed(
             color=self.bot.color,
-            title="**invite**",
-            url=f"https://discord.com/oauth2/authorize?client_id={self.bot.user.id}",
+            description=f"A multipurpose Discord bot with moderation, utility, and fun features."
         )
+        
+        embed.add_field(
+            name="<:stats:1302206607098249280> General Stats",
+            value=f"""```prolog
+Servers    : {await self.bot.guild_count():,}
+Users      : {await self.bot.user_count():,}
+Channels   : {await self.bot.channel_count():,}
+Commands   : {self.command_count:,}```""",
+            inline=False
+        )
+
+        # System metrics
         usage = psutil.disk_usage("/")
-        #
-        percent_used = usage.percent
-        free_space = int(usage.free / (1024 ** 3))  # Convert bytes to GB
+        free_space = int(usage.free / (1024 ** 3))
+        embed.add_field(
+            name="<:gear:1302206607098249280> System",
+            value=f"""```prolog
+Memory     : {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB
+CPU Usage  : {psutil.Process().cpu_percent()}%
+Disk Space : {usage.percent}% ({free_space}GB free)
+Latency    : {round(self.bot.latency * 1000)}ms```""",
+            inline=False
+        )
 
         embed.add_field(
-            name="**__Client__**",
-            value=f""">>> **Latency:** {round(self.bot.latency * 1000, 2)} \n**CPU:** {
-                self.bot.process.cpu_percent()}% \n**DISK:** `{percent_used}%({free_space}GB free)`\n**Guilds:** {await self.bot.guild_count()}""",
+            name="<:code:1302206607098249280> Development",
+            value=f"""```prolog
+Files      : {stat.files:,}
+Classes    : {stat.classes:,}
+Lines      : {stat.lines:,}```""",
+            inline=False
         )
+
         embed.add_field(
-            name="__**Statistics**__",
-            value=f""">>> **Users:** {await self.bot.user_count():,}
-**Channels:** {await self.bot.channel_count():,}
-**Roles:** {await self.bot.role_count():,}""",
-            inline=False,
+            name="<:online:1302206607098249280> Uptime",
+            value=f"```{uptime}```",
+            inline=False
         )
-        embed.add_field(
-            name="__**Code**__",
-            value=f""">>> **Lines**: {stat.lines}
-**Classes**: {stat.classes}
-**Files**: {stat.files}""",
-            inline=False,
+        embed.set_author(
+            name=f"{self.bot.user.name} Statistics",
+            icon_url=self.bot.user.avatar
         )
-        embed.description = f"<a:online2:1302206607098249280> {stat.uptime}"
-        embed.set_author(name=self.bot.user.name, icon_url=self.bot.user.avatar)
-        embed.set_footer(text="greed")
-        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1303161693043560458/1303257315918614538/Trail_Staff.png?ex=672b1875&is=6729c6f5&hm=ae8719575f309f3d36eb90b32c2b50fb966bcece0d3b4c9002777f270ac78ec4&")
-        await ctx.send(embed=embed)
+        
+        embed.set_thumbnail(url=self.bot.user.avatar)
+        
+        view = discord.ui.View()
+        view.add_item(discord.ui.Button(
+            style=discord.ButtonStyle.link,
+            label="Invite",
+            url=f"https://discord.com/oauth2/authorize?client_id={self.bot.user.id}&permissions=8&scope=bot"
+        ))
+        view.add_item(discord.ui.Button(
+            style=discord.ButtonStyle.link,
+            label="Support Server", 
+            url="https://discord.gg/pomice"
+        ))
+
+        await ctx.send(embed=embed, view=view)
 
     @commands.command(
         name="members",
