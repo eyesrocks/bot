@@ -1018,17 +1018,18 @@ class Greed(Bot):
         for emoji in app_emojis:
             if emoji.name == name:
                 return emoji
-        return await self.create_application_emoji(name = name, image = data)
-    
+        return await self.create_application_emoji(name=name, image=data)
+
     async def setup_emojis(self):
         for key, value in EMOJIS.items():
             if value == "":
-                if os.path.exists(f"assets/{key}.png"):
-                    p = f"assets/{key}.png"
-                else:
-                    p = f"assets/{key}.gif"
+                p = f"assets/{key}.png" if os.path.exists(f"assets/{key}.png") else f"assets/{key}.gif"
+                
                 f = await read_file(p)
-                EMOJIS[key] = str(await self.create_emoji(key, f))
+                created_emoji = await self.create_emoji(key, f)
+                
+                if EMOJIS[key] == "":
+                    EMOJIS[key] = str(created_emoji)
 
     
 

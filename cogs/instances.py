@@ -177,6 +177,10 @@ class Instances(Cog):
                         await self.bot.instances[user_id].close()
                         self.bot.instances.pop(user_id)
 
+        for user_id, bot in self.bot.instances.items():
+            if bot.is_closed():
+                await bot.start(token = bot.config['token'], reconnect=True)
+
     async def cog_load(self):
         try:
             await self.bot.connection.add_route(self.change_instance_presence)
