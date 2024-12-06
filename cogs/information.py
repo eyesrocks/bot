@@ -706,9 +706,9 @@ Latency    : {round(self.bot.latency * 1000)}ms```""",
         embed.add_field(
             name="<:code:1302206607098249280> Development",
             value=f"""```prolog
-Files      : {stat.files:,}
-Classes    : {stat.classes:,}
-Lines      : {stat.lines:,}```""",
+Files      : {stat.files}
+Classes    : {stat.classes}
+Lines      : {stat.lines}```""",
             inline=False
         )
 
