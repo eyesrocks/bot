@@ -690,7 +690,6 @@ Commands   : {len(set(self.bot.walk_commands())):,}```""",
             inline=False
         )
 
-        # System metrics
         usage = psutil.disk_usage("/")
         free_space = int(usage.free / (1024 ** 3))
         embed.add_field(
@@ -713,7 +712,7 @@ Lines      : {stat.lines}```""",
         )
 
         embed.add_field(
-            name="<:online:1302206607098249280> Uptime",
+            name=f"{EMOJIS["online2"]} Uptime",
             value=f"{uptime}",
             inline=False
         )
