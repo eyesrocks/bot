@@ -1601,67 +1601,49 @@ class Moderation(Cog):
     @commands.has_permissions(administrator=True)
     @lock(key="setme:{ctx.guild.id}")
     async def setup(self, ctx: Context):
-        # with suppress(NotFound):
-        # if irole := discord.utils.get(ctx.guild.roles, name="imute"):
-        #     imute_role = irole
-        # else:
-        #     imute_role = await ctx.guild.create_role(name="imute")
         await self.setup_mute_roles(ctx)
+
         category = discord.utils.get(ctx.guild.categories, name=f"{self.bot.user.name}-mod")
         if not category:
             category = await ctx.guild.create_category_channel(
                 name=f"{self.bot.user.name}-mod",
                 overwrites={
-                    ctx.guild.default_role: discord.PermissionOverwrite(
-                        view_channel=False
-                    )
+                    ctx.guild.default_role: discord.PermissionOverwrite(view_channel=False)
                 },
             )
-        # await imute_role.edit(permissions=discord.Permissions(embed_links = False, attach_files = False))
-        if jrole := discord.utils.get(ctx.guild.roles, name="jailed"):
-            jail_role = jrole
-        else:
+
+        jail_role = discord.utils.get(ctx.guild.roles, name="jailed")
+        if not jail_role:
             jail_role = await ctx.guild.create_role(name="jailed")
-        # if rrole := discord.utils.get(ctx.guild.roles, name="rmute"):
-        #     rmute_role = rrole
-        # else:
-        #     rmute_role = await ctx.guild.create_role(name="rmute")
-        if logs_channel := discord.utils.get(ctx.guild.channels, name="logs"):
-            logs = logs_channel
-        else:
+
+
+        logs = discord.utils.get(ctx.guild.channels, name="logs")
+        if not logs:
             logs = await ctx.guild.create_text_channel(
                 name="logs",
                 overwrites={
-                    ctx.guild.default_role: discord.PermissionOverwrite(
-                        view_channel=False
-                    )
+                    ctx.guild.default_role: discord.PermissionOverwrite(view_channel=False)
                 },
             )
-        await logs.edit(category=category)
+        if isinstance(logs, discord.TextChannel):
+            await logs.edit(category=category)
+
         jail_channel = None
         for channel in ctx.guild.text_channels:
             if "jail" in channel.name.lower():
-                if jail_channel is None:
-                    await channel.set_permissions(
-                        jail_role, view_channel=True, send_messages=True
-                    )
-                    await channel.set_permissions(
-                        ctx.guild.default_role,
-                        view_channel=False,
-                        send_messages=False,
-                    )
-                    jail_channel = channel
+                jail_channel = channel
+                await jail_channel.set_permissions(
+                    jail_role, view_channel=True, send_messages=True
+                )
+                await jail_channel.set_permissions(
+                    ctx.guild.default_role, view_channel=False, send_messages=False
+                )
             else:
                 await channel.set_permissions(
                     jail_role, view_channel=False, send_messages=False
                 )
-            # await channel.set_permissions(rmute_role, add_reactions=False)
-            # await channel.set_permissions(
-            #     imute_role, embed_links=False, attach_files=False
-            # )
-            # await channel.set_permissions(
-            #     imute_role, embed_links=False, attach_files=False
-            # )
+
+
         if jail_channel is None:
             jail_channel = await ctx.guild.create_text_channel(name="jail")
             await jail_channel.set_permissions(
@@ -1670,15 +1652,22 @@ class Moderation(Cog):
             await jail_channel.set_permissions(
                 ctx.guild.default_role, view_channel=False, send_messages=False
             )
-        await jail_channel.edit(category=category)
+
+        if isinstance(jail_channel, discord.TextChannel):
+            await jail_channel.edit(category=category)
+
         await self.bot.db.execute(
-            """INSERT INTO moderation_channel (guild_id, category_id, channel_id) VALUES($1, $2, $3) ON CONFLICT(guild_id) DO UPDATE SET channel_id = excluded.channel_id, category_id = excluded.category_id""",
+            """INSERT INTO moderation_channel (guild_id, category_id, channel_id)
+            VALUES($1, $2, $3)
+            ON CONFLICT(guild_id)
+            DO UPDATE SET channel_id = excluded.channel_id, category_id = excluded.category_id""",
             ctx.guild.id,
             category.id,
             logs.id,
         )
+
         return await ctx.success(
-            "**Jail channel**, the **jailed role**, and **mod logs** has been **created** for this guild"
+            "**Jail channel**, the **jailed role**, and **mod logs** have been **created** for this guild"
         )
 
     @setup.command(name="reset", brief="Reset the jail setup", example=",setup reset")
