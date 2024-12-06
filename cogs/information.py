@@ -693,7 +693,7 @@ Commands   : {len(set(self.bot.walk_commands())):,}```""",
         usage = psutil.disk_usage("/")
         free_space = int(usage.free / (1024 ** 3))
         embed.add_field(
-            name="<:gear:1302206607098249280> System",
+            name=f"{EMOJIS['settings_icon']} System",
             value=f"""```prolog
 Memory     : {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB
 CPU Usage  : {psutil.Process().cpu_percent()}%
