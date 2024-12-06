@@ -712,7 +712,7 @@ Lines      : {stat.lines}```""",
         )
 
         embed.add_field(
-            name=f"{EMOJIS["online2"]} Uptime",
+            name=f"{EMOJIS['online2']} Uptime",
             value=f"{uptime}",
             inline=False
         )
