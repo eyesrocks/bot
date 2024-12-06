@@ -681,7 +681,7 @@ class Information(commands.Cog):
         )
         
         embed.add_field(
-            name="<:stats:1302206607098249280> General Stats",
+            name=f"{EMOJIS['stats_icon_white']} General Stats",
             value=f"""```prolog
 Servers    : {await self.bot.guild_count():,}
 Users      : {await self.bot.user_count():,}
@@ -703,7 +703,7 @@ Latency    : {round(self.bot.latency * 1000)}ms```""",
         )
 
         embed.add_field(
-            name="<:code:1302206607098249280> Development",
+            name=f"{EMOJIS['Code']} Development",
             value=f"""```prolog
 Files      : {stat.files}
 Classes    : {stat.classes}
@@ -712,7 +712,7 @@ Lines      : {stat.lines}```""",
         )
 
         embed.add_field(
-            name=f"{EMOJIS['online2']} Uptime",
+            name=f"{EMOJIS['online_blank']} Uptime",
             value=f"{uptime}",
             inline=False
         )

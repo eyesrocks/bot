@@ -61,4 +61,7 @@ EMOJIS = {
     "filter": "",
     "stop": "",
     "badgediscordstaff": "",
+    "Code": "",
+    "stats_icon_white": "",
+    "online_blank": "",
 }
