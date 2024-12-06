@@ -714,7 +714,7 @@ Lines      : {stat.lines}```""",
 
         embed.add_field(
             name="<:online:1302206607098249280> Uptime",
-            value=f"```{uptime}```",
+            value=f"{uptime}",
             inline=False
         )
         embed.set_author(
