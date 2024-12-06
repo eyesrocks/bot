@@ -686,7 +686,7 @@ class Information(commands.Cog):
 Servers    : {await self.bot.guild_count():,}
 Users      : {await self.bot.user_count():,}
 Channels   : {await self.bot.channel_count():,}
-Commands   : {self.command_count:,}```""",
+Commands   : {self.bot.command_count:,}```""",
             inline=False
         )
 
