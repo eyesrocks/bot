@@ -1495,22 +1495,57 @@ class Events(commands.Cog):
                                 )
                                 with suppress(discord.errors.NotFound):
                                     await before.channel.delete()
-
     @commands.Cog.listener("on_member_join")
-    @ratelimit("pingonjoin", 2, 3, False)
+    @ratelimit("pingonjoin:{guild.id}", 2, 3, False) 
     async def pingonjoin_listener(self, member: discord.Member):
-        if not (record := await self.bot.db.fetchrow("SELECT * FROM pingonjoin WHERE guild_id = $1", member.guild.id)):
-            return
-        channel = member.guild.get_channel(record["channel_id"])
-        if not channel:
-            return
-        delay = record["threshold"]
-        message = record["message"]
-        if not message:
-            message = f"{member.mention}"
-        if delay:
-            msg = await self.bot.send_embed(channel, message, user=member)
-        await msg.delete(delay=1) 
+        """Handles pinging new members when they join"""
+        try:
+            # Get ping on join config for this guild
+            record = await self.bot.db.fetchrow(
+                "SELECT channel_id, threshold, message FROM pingonjoin WHERE guild_id = $1",
+                member.guild.id
+            )
+            if not record:
+                return
+
+            channel = member.guild.get_channel(record["channel_id"])
+            if not channel or not isinstance(channel, discord.TextChannel):
+                return
+            
+            delay = record["threshold"] or 1
+            message = record["message"] or "{user.mention}"
+            
+=            try:
+                temp_msg = await self.bot.send_embed(
+                    channel, 
+                    message,
+                    user=member
+                )
+                await temp_msg.delete(delay=1)
+            except discord.Forbidden:
+                return
+            members = [member]
+            try:
+                while True:
+                    new_member = await self.bot.wait_for(
+                        "member_join",
+                        timeout=delay,
+                        check=lambda m: m.guild.id == member.guild.id
+                    )
+                    members.append(new_member)
+            except asyncio.TimeoutError:
+                pass
+            if len(members) > 0:
+                mentions = ", ".join(m.mention for m in members[:20])
+                final_message = message.replace("{mentions}", mentions)
+                
+                try:
+                    await channel.send(final_message)
+                except discord.Forbidden:
+                    pass
+
+        except Exception as e:
+            logger.error(f"Error in pingonjoin_listener: {str(e)}")
 
 
 async def setup(bot):
