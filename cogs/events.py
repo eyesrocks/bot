@@ -1515,7 +1515,7 @@ class Events(commands.Cog):
             delay = record["threshold"] or 1
             message = record["message"] or "{user.mention}"
             
-=            try:
+            try:
                 temp_msg = await self.bot.send_embed(
                     channel, 
                     message,
