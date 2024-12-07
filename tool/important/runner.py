@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Callable, Coroutine, Optional
 from discord.ext import commands
 from watchfiles import Change, awatch  # type: ignore
-
+import json
 
 class RebootRunner:
     """Manages cog reloading and file change watching for a Discord bot."""
@@ -87,13 +87,42 @@ class RebootRunner:
                     cog_path: str = self.get_dotted_path(file_path)
 
                     if change_type == Change.deleted:
+                        await asyncio.sleep(1)
                         await self._unload_cog(cog_path)
                     elif change_type == Change.added:
+                        await asyncio.sleep(1)
                         await self._load_cog(cog_path)
                     elif change_type == Change.modified:
+                        await asyncio.sleep(1)
                         await self._reload_cog(cog_path)
                 except Exception as e:
                     self.logger.error(f"Error processing change {change_type} for {file_path}: {e}")
+
+    async def _get_current_process_name(self) -> str:
+        """Retrieves the PM2 process name."""
+        try:
+            process = await asyncio.create_subprocess_shell(
+                "pm2 jlist",  # Fetch JSON list of all PM2 processes
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await process.communicate()
+
+            if stderr:
+                self.logger.warning(f"Error fetching PM2 processes: {stderr.decode()}")
+                return ""
+
+            processes = json.loads(stdout.decode())
+            # Filter based on known process names
+            for proc in processes:
+                if proc["name"] in ["cluster", "cluster2", "cluster3"]:
+                    return proc["name"]
+
+            return "unknown"
+        except Exception as e:
+            self.logger.error(f"Error retrieving process name: {e}")
+            return ""
+
 
     async def _preload_cogs(self) -> None:
         """Loads all cogs on startup."""
@@ -121,23 +150,34 @@ class RebootRunner:
             self.logger.warning(f"Cog not loaded: {cog_path}")
 
     async def _reload_cog(self, cog_path: str) -> None:
-        """Reloads a cog."""
-        if self.auto_commit:
-            await self._auto_commit_changes()
+        """Reloads a cog with conditional actions based on the PM2 process."""
         try:
-            await self.client.reload_extension(cog_path)
-            self.logger.info(f"Reloaded cog: {cog_path}")
-        except commands.ExtensionNotLoaded:
-            self.logger.info(f"Cog not loaded, loading instead: {cog_path}")
-            await self._load_cog(cog_path)
-        except commands.ExtensionFailed as e:
-            self.logger.error(f"Failed to reload cog {cog_path}: {e}")
+            process_name = await self._get_current_process_name()
+
+            if process_name == "cluster":
+                self.logger.info(f"Process '{process_name}' detected, pushing to Git.")
+                if self.auto_commit:
+                    await self._auto_commit_changes()
+            elif process_name in ["cluster2", "cluster3"]:
+                self.logger.info(f"Process '{process_name}' detected, reloading cog.")
+                try:
+                    await self.client.reload_extension(cog_path)
+                    self.logger.info(f"Reloaded cog: {cog_path}")
+                except commands.ExtensionNotLoaded:
+                    self.logger.info(f"Cog not loaded, loading instead: {cog_path}")
+                    await self._load_cog(cog_path)
+                except commands.ExtensionFailed as e:
+                    self.logger.error(f"Failed to reload cog {cog_path}: {e}")
+            else:
+                self.logger.warning(f"Unknown process: {process_name}")
+        except Exception as e:
+            self.logger.error(f"Failed to handle reload for {cog_path}: {e}")
 
     async def _auto_commit_changes(self) -> None:
         """Automatically commits changes using git."""
         try:
             process = await asyncio.create_subprocess_shell(
-                "git add . && git commit -m 'Auto commit' && git push --force",
+                "git add . && git commit -m 'Auto commit' && git push",
                 stderr=asyncio.subprocess.PIPE,
             )
             _, stderr = await process.communicate()
