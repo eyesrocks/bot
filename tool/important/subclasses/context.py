@@ -2,20 +2,75 @@ import asyncio
 import contextlib
 from logging import getLogger
 import traceback
-logger = getLogger(__name__)
 import os
 import unicodedata
 import json
 from datetime import datetime
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, Sequence, Union
 import aiohttp
 import discord
+from discord import Embed, File, Attachment, AllowedMentions, TextChannel, Message, Member, MessageFlags
+from discord.http import handle_message_parameters
+from discord.ui import View
 from discord.ext import commands
 from discord.ext.commands import CommandError, UserInputError
-from discord.utils import cached_property
+from discord.utils import cached_property, MISSING
 from tool.emotes import EMOJIS
+from _types import get_error
+from cashews import cache
+from loguru import logger, logger as log
+cache.setup("mem://")
 TUPLE = ()
 SET = set()
+GLOBAL = {}
+
+@cache(ttl="25m", key="{webhook_id}", prefix="reskin:webhook")
+async def reskin_webhook(bot: discord.Client, webhook_id: int):
+    try:
+        return await bot.fetch_webhook(webhook_id)
+    except Exception:
+        return None
+
+async def reskin(bot: discord.Client, channel: discord.TextChannel, *, author: Optional[Member] = None, name: Optional[str] = None):
+    if channel.guild:
+        configuration = await bot.db.fetchval(
+            """SELECT reskin FROM reskin_config WHERE guild_id = $1""", 
+            channel.guild.id
+        ) or None
+        
+        if not configuration:
+            return {}
+            
+        if configuration.get("status"):
+            if webhook_id := configuration["webhooks"].get(str(channel.id)):
+                table = "reskin"
+                if author:
+                    reskin = await bot.db.fetchrow(
+                        "SELECT username, avatar_url FROM reskin WHERE user_id = $1",
+                        author.id,
+                    )
+                elif name:
+                    reskin = await bot.db.fetchrow(
+                        """SELECT username, avatar_url FROM reskin WHERE username = $1 AND user_id = ANY($2::BIGINT[])""",
+                        name, 
+                        [m.id for m in channel.guild.members]
+                    )
+                else:
+                    return {}
+
+                if reskin and (reskin.get("username") or reskin.get("avatar_url")):
+                    webhook = await reskin_webhook(bot, webhook_id)
+                    if not webhook:
+                        del configuration["webhooks"][str(channel.id)]
+                        await bot.db.update_config(channel.guild.id, table, configuration)
+                    else:
+                        return {
+                            "username": reskin.get("username") or bot.user.name,
+                            "avatar_url": reskin.get("avatar_url") or bot.user.display_avatar.url,
+                            "webhook": webhook,
+                        }
+
+        return {}
 
 class Confirm(discord.ui.View):
     def __init__(self, ctx: commands.Context, *, timeout: Optional[int] = 60):
@@ -586,6 +641,13 @@ class Context(commands.Context):
             for name, config in self.command.parameters.items()
         }
 
+    async def reskin(self) -> Optional[dict]:
+        data = await reskin(self.bot, self.channel, author=self.author)
+        if len(data) > 0:
+            return data
+        else:
+            return None
+
     async def success(self, text, **kwargs):
         emoji = ""
         if config := await self.bot.db.fetchrow(
@@ -797,22 +859,41 @@ class Context(commands.Context):
 
     # misc
 
-    async def send(
-        self,
-        content: Any = None,
-        embed: Optional[discord.Embed] = None,
-        *,
-        delete_after: Optional[float] = None,
-        **kwargs
-    ) -> discord.Message:
-        try:
-            msg = await super().send(content=content, embed=embed, **kwargs)
-            if delete_after is not None:
-                await msg.delete(delay=delete_after)
-            return msg
-        except discord.HTTPException as e:
-            logger.error(f"Failed to send message: {e}")
-            raise
+    async def send(self, *args, **kwargs):
+        reskin = await self.reskin()
+        if reskin:
+            webhook = reskin["webhook"]
+            kwargs["username"] = reskin["username"]
+            kwargs["avatar_url"] = reskin["avatar_url"]
+            kwargs["wait"] = True
+
+            delete_after = kwargs.pop("delete_after", None)
+            kwargs.pop("stickers", None)
+            kwargs.pop("reference", None)
+            kwargs.pop("followup", None)
+            try:
+                 self.response = await webhook.send(*args, **kwargs)
+            except discord.NotFound:
+                reskin = await self.bot.pool.fetch_config(self.guild.id, "reskin") or {}
+                del reskin["webhooks"][str(self.channel.id)]
+                
+                await asyncio.gather(
+                    self.bot.db.update_config(self.guild.id, "reskin", reskin),
+                    cache.delete_many(
+                        f"reskin:channel:{self.channel.id}",
+                        f"reskin:webhook:{self.channel.id}",
+                        f"reskin:guild:channel:{self.guild.id}:{self.channel.id}"
+                    )
+                )
+            except discord.HTTPException as error:
+                raise error
+            else:
+                if delete_after:
+                    await self.response.delete(delay=delete_after)
+
+                return self.response
+        self.response = await super().send(*args, **kwargs)
+        return self.response
 
 
     #     async def send_help(self, command=None):
@@ -918,3 +999,166 @@ class Context(commands.Context):
 
 
 #
+
+
+class MSG:
+
+    
+    async def edit(
+        self: discord.Message,
+        *,
+        content: Optional[str] = MISSING,
+        embed: Optional[Embed] = MISSING,
+        embeds: Sequence[Embed] = MISSING,
+        attachments: Sequence[Union[Attachment, File]] = MISSING,
+        suppress: bool = False,
+        delete_after: Optional[float] = None,
+        allowed_mentions: Optional[AllowedMentions] = MISSING,
+        view: Optional[View] = MISSING,
+    ) -> Message:
+        """|coro|
+
+        Edits the message.
+
+        The content must be able to be transformed into a string via ``str(content)``.
+
+        .. versionchanged:: 1.3
+            The ``suppress`` keyword-only parameter was added.
+
+        .. versionchanged:: 2.0
+            Edits are no longer in-place, the newly edited message is returned instead.
+
+        .. versionchanged:: 2.0
+            This function will now raise :exc:`TypeError` instead of
+            ``InvalidArgument``.
+
+        Parameters
+        -----------
+        content: Optional[:class:`str`]
+            The new content to replace the message with.
+            Could be ``None`` to remove the content.
+        embed: Optional[:class:`Embed`]
+            The new embed to replace the original with.
+            Could be ``None`` to remove the embed.
+        embeds: List[:class:`Embed`]
+            The new embeds to replace the original with. Must be a maximum of 10.
+            To remove all embeds ``[]`` should be passed.
+
+            .. versionadded:: 2.0
+        attachments: List[Union[:class:`Attachment`, :class:`File`]]
+            A list of attachments to keep in the message as well as new files to upload. If ``[]`` is passed
+            then all attachments are removed.
+
+            .. note::
+
+                New files will always appear after current attachments.
+
+            .. versionadded:: 2.0
+        suppress: :class:`bool`
+            Whether to suppress embeds for the message. This removes
+            all the embeds if set to ``True``. If set to ``False``
+            this brings the embeds back if they were suppressed.
+            Using this parameter requires :attr:`~.Permissions.manage_messages`.
+        delete_after: Optional[:class:`float`]
+            If provided, the number of seconds to wait in the background
+            before deleting the message we just edited. If the deletion fails,
+            then it is silently ignored.
+        allowed_mentions: Optional[:class:`~discord.AllowedMentions`]
+            Controls the mentions being processed in this message. If this is
+            passed, then the object is merged with :attr:`~discord.Client.allowed_mentions`.
+            The merging behaviour only overrides attributes that have been explicitly passed
+            to the object, otherwise it uses the attributes set in :attr:`~discord.Client.allowed_mentions`.
+            If no object is passed at all then the defaults given by :attr:`~discord.Client.allowed_mentions`
+            are used instead.
+
+            .. versionadded:: 1.4
+        view: Optional[:class:`~discord.ui.View`]
+            The updated view to update this message with. If ``None`` is passed then
+            the view is removed.
+
+        Raises
+        -------
+        HTTPException
+            Editing the message failed.
+        Forbidden
+            Tried to suppress a message without permissions or
+            edited a message's content or embed that isn't yours.
+        TypeError
+            You specified both ``embed`` and ``embeds``
+
+        Returns
+        --------
+        :class:`Message`
+            The newly edited message.
+        """
+        try:
+            rs = await reskin(self._state._get_client(), self.channel, name=self.author.name)
+            if rs:
+                if "webhook" in rs:
+                    webhook = rs["webhook"]
+                    try:
+                        msg = await webhook.edit_message(self.id, content=content, embeds=embeds, embed=embed, attachments=attachments, view=view)
+                        if delete_after:
+                            await msg.delete(delay=delete_after)
+                        return msg
+                    except Exception as e:
+                        logger.info(f"exception line 1100: {get_error(e)}")
+                        pass
+            else:
+                if not self.author.name == self._state._get_client().user.name:
+                    logger.info(f"{rs}")
+
+        except Exception as e:
+            logger.info(f"exception line 1103: {get_error(e)}")
+            pass
+        if content is not MISSING:
+            previous_allowed_mentions = self._state.allowed_mentions
+        else:
+            previous_allowed_mentions = None
+
+        if suppress is not MISSING:
+            flags = MessageFlags._from_value(self.flags.value)
+            flags.suppress_embeds = suppress
+        else:
+            flags = MISSING
+
+        if view is not MISSING:
+            self._state.prevent_view_updates_for(self.id)
+
+        with handle_message_parameters(
+            content=content,
+            flags=flags,
+            embed=embed,
+            embeds=embeds,
+            attachments=attachments,
+            view=view,
+            allowed_mentions=allowed_mentions,
+            previous_allowed_mentions=previous_allowed_mentions,
+        ) as params:
+            try:
+                data = await self._state.http.edit_message(self.channel.id, self.id, params=params)
+                message = Message(state=self._state, channel=self.channel, data=data)
+            except Exception:
+                try:
+                    rs = await reskin(self._state._get_client(), self.channel, name=self.author.name)
+                    webhook = rs["webhook"]
+                    try:
+                        msg = await webhook.edit_message(self.id, content=content, embeds=embeds, embed=embed, attachments=attachments, view=view)
+                        if delete_after:
+                            await msg.delete(delay=delete_after)
+                        return msg
+                    except Exception as e:
+                        log.info(f"exception line 1100: {get_error(e)}")
+                        pass
+
+                except Exception as e:
+                    log.info(f"exception line 1103: {get_error(e)}")
+                    pass
+
+        if view and not view.is_finished():
+            self._state.store_view(view, self.id)
+
+        if delete_after is not None:
+            await self.delete(delay=delete_after)
+
+        return message

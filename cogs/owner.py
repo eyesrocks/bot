@@ -1,10 +1,24 @@
 import discord
+from discord import (
+    CustomActivity,
+    Embed,
+    Guild,
+    Invite,
+    Member,
+    Message,
+    Permissions,
+    Status,
+    Thread,
+    User,
+    Message,
+    MessageType
+)
 import datetime
 import os
 import sys
 import random
 import asyncio
-from discord.ext import commands
+from discord.ext import commands, tasks
 from tool.important import Context  # type: ignore
 from jishaku.codeblocks import codeblock_converter
 from discord import User, Member, Guild
@@ -15,6 +29,7 @@ from asyncio import TimeoutError
 from discord import Webhook
 import aiohttp
 
+
 class Owner(commands.Cog):
     def __init__(self, bot: Greed):
         self.bot = bot
@@ -23,6 +38,107 @@ class Owner(commands.Cog):
         self.cooldown_time = 3
         self.static_message = "<@&1302845236242022440>"
         self.webhook_url = "https://discord.com/api/webhooks/1312262024750825484/fzvkQJDh5PbZshuDuoGz_VNpxwDlN5GS9O-xc0XPgI6u6__6EhDevYTXopAeBOG4-g7Z"
+        self.check_subs.start()
+        self.check_boosts.start()
+
+
+    async def cog_load(self):
+        await self.bot.db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS donators (
+                user_id BIGINT PRIMARY KEY,
+                ts TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        await self.bot.db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS boosters (
+                user_id BIGINT PRIMARY KEY,
+                ts TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+
+    def cog_unload(self):
+        self.check_subs.cancel()
+        self.check_boosts.cancel()
+
+    @tasks.loop(seconds=60)
+    async def check_boosts(self):
+        """Check and sync boosters roles with boosters database."""
+        try:
+            if not (guild := self.bot.get_guild(self.guild_id)):
+                return
+
+            basic = guild.get_role(1301664266868363356)
+            if not (basic): 
+                return
+
+            await self.bot.db.executemany(
+                """
+                INSERT INTO boosters (user_id, ts)
+                VALUES ($1, CURRENT_TIMESTAMP) 
+                ON CONFLICT (user_id) DO NOTHING
+                """,
+                [(owner,) for owner in self.bot.owner_ids]
+            )
+
+            role_members = set(m.id for m in basic.members)
+            await self.bot.db.executemany(
+                """
+                INSERT INTO boosters (user_id, ts)
+                VALUES ($1, CURRENT_TIMESTAMP)
+                ON CONFLICT (user_id) DO NOTHING
+                """,
+                [(member_id,) for member_id in role_members]
+            )
+
+            logger.info(f"Synced {len(role_members)} subscribers to boosters database")
+
+        except Exception as e:
+            logger.error(f"Error in subscription check: {e}", exc_info=True)
+
+
+
+    @tasks.loop(seconds=60)
+    async def check_subs(self):
+        """Check and sync subscription roles with donator database."""
+        try:
+            if not (guild := self.bot.get_guild(self.guild_id)):
+                return
+
+            basic = guild.get_role(1302817218110820352)
+            prime = guild.get_role(1310104324197580850)
+            if not (basic and prime): 
+                logger.warning("Could not find subscription roles")
+                return
+
+            await self.bot.db.executemany(
+                """
+                INSERT INTO donators (user_id, ts)
+                VALUES ($1, CURRENT_TIMESTAMP) 
+                ON CONFLICT (user_id) DO NOTHING
+                """,
+                [(owner,) for owner in self.bot.owner_ids]
+            )
+
+            role_members = set(m.id for m in basic.members + prime.members)
+            await self.bot.db.executemany(
+                """
+                INSERT INTO donators (user_id, ts)
+                VALUES ($1, CURRENT_TIMESTAMP)
+                ON CONFLICT (user_id) DO NOTHING
+                """,
+                [(member_id,) for member_id in role_members]
+            )
+
+            logger.info(f"Synced {len(role_members)} subscribers to donator database")
+
+        except Exception as e:
+            logger.error(f"Error in subscription check: {e}", exc_info=True)
+
 
     @commands.Cog.listener("on_member_join")
     async def global_ban_event(self, member: Member):
@@ -71,15 +187,49 @@ class Owner(commands.Cog):
             await self.bot.db.execute(
                 """DELETE FROM donators WHERE user_id = $1""", member.id
             )
-            m = f"removed **donator** from {member.mention}"
+            m = f"removed **donator permissions** from {member.mention}"
         else:
             await self.bot.db.execute(
                 """INSERT INTO donators (user_id, ts) VALUES($1, $2)""",
                 member.id,
                 datetime.datetime.now(),
             )
-            m = f"**Donator permissions** has been applied to {member.mention}"
+            m = f"**donator permissions** has been applied to {member.mention}"
         return await ctx.success(m)
+
+
+    @commands.group(name="premium", invoke_without_command=True)
+    @commands.is_owner()
+    async def premium(self, ctx: Context, *, member: Union[Member, User]):
+        """
+        Toggle premium permissions for a user. If the user already has premium, their permissions will be removed. Otherwise, premium will be applied.
+        """
+        # Ensure the table exists before any operation
+        await self.bot.db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS premium_users (
+                user_id BIGINT PRIMARY KEY,
+                ts TIMESTAMP
+            )
+            """
+        )
+
+        # Check if the user is already in the premium_users table
+        if await self.bot.db.fetchrow("SELECT * FROM premium_users WHERE user_id = $1", member.id):
+            # Remove premium permissions if they exist
+            await self.bot.db.execute("DELETE FROM premium_users WHERE user_id = $1", member.id)
+            message = f"Removed **premium permissions** from {member.mention}"
+        else:
+            # Add premium permissions if they don't exist
+            await self.bot.db.execute(
+                "INSERT INTO premium_users (user_id, ts) VALUES ($1, $2)",
+                member.id,
+                datetime.datetime.now()
+            )
+            message = f"**Premium permissions** have been applied to {member.mention}"
+
+        await ctx.send(message)
+
 
     @donator.command(name="check")
     @commands.is_owner()
@@ -429,8 +579,13 @@ class Owner(commands.Cog):
     @commands.command(hidden=True)
     @commands.is_owner()
     async def leaveserver(self, ctx, guild: discord.Guild):
-        await guild.leave()
-        await ctx.success(f"Left **{guild.name}** (`{guild.id}`)")
+        try:
+            await guild.leave()
+            await ctx.success(f"Left **{guild.name}** (`{guild.id}`)")
+        except discord.Forbidden:
+            return await guild.leave()
+        except Exception as e:
+            logger.error(e)
 
     @commands.command(aliases=["link"], hidden=True)
     @commands.is_owner()
@@ -670,14 +825,6 @@ class Owner(commands.Cog):
         else:
             return await ctx.fail("Nobody is **blacklisted**")
 
-    @commands.hybrid_command(name="changepfp", aliases=["setpfp"], hidden=True)
-    @commands.is_owner()
-    async def changepfp(self, ctx, url):
-        """Change the bot's pfp"""
-
-        session = await self.bot.session.get(url)
-        await self.bot.user.edit(avatar=await session.read())
-        await ctx.success(f"Changed the bot's pfp to **[image]({url})**")
 
 
 
@@ -782,28 +929,33 @@ class Owner(commands.Cog):
         member_count = guild.member_count
         
         # Create invite link
-        invite = None
-        invites = await guild.invites()
-        if invites:
-            invite = invites[0].url  # Take the first invite link
-        else:
-            invite = "No invites available."
+        invite = "No permissions to fetch invites"
+        try:
+            if guild.me.guild_permissions.manage_guild:
+                invites = await guild.invites()
+                if invites:
+                    invite = invites[0].url
+        except discord.Forbidden:
+            pass
 
         # Create embed
         embed = discord.Embed(
             title=f"Joined a new server: {guild.name}",
-            color=discord.Color.blue(),
+            color=self.bot.color,
         )
         embed.add_field(name="owner", value=str(owner), inline=True)
-        embed.add_field(name="users", value=member_count, inline=True)
+        embed.add_field(name="member count", value=f"{guild.member_count} members")
+        embed.set_thumbnail(url=self.bot.user.display_avatar)
         embed.add_field(name="invite", value=invite, inline=True)
+        embed.set_footer(
+                    text=f"greed joined a server | we are at {await self.bot.guild_count():,} servers"
+                )
 
         # Send the embed to the designated channel
         if channel:
             await channel.send(embed=embed)
 
-
-
+    
 
     @commands.command(
         name="updates",

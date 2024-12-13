@@ -1,12 +1,11 @@
+import os
 from discord import Message
 from discord.ext import commands
 from discord.ext.commands import Context, BadArgument
 from discord import Embed, TextChannel
-import random
 import discord
 import asyncio
 from datetime import datetime, timedelta
-from typing import Optional
 from PIL import Image, ImageDraw, ImageFont
 from googleapiclient.discovery import build
 from io import BytesIO
@@ -17,7 +16,9 @@ import random
 import aiohttp
 from color_processing import ColorInfo
 from tool.emotes import EMOJIS
-
+from typing import List, Dict, Set, Optional
+from random import choice
+from dataclasses import dataclass, field
 from tool.worker import offloaded
 # from greed.tool import aliases
 
@@ -114,6 +115,9 @@ GOOGLE_API_KEY = "AIzaSyCgPL4hAT14sdyylXxY_R-hXJN4XMo7zZo"
 SEARCH_ENGINE_ID = "8691350b6083348ae"
 
 class TicTacToeButton(discord.ui.Button):
+    """
+    Represents a button on the Tic Tac Toe board.
+    """
     def __init__(self, x: int, y: int, player1: discord.Member, player2: discord.Member):
         super().__init__(style=discord.ButtonStyle.secondary, label='\u200b', row=y)
         self.x = x
@@ -121,41 +125,54 @@ class TicTacToeButton(discord.ui.Button):
         self.player1 = player1
         self.player2 = player2
 
-
     async def callback(self, interaction: discord.Interaction):
+        """
+        Handles the button click event.
+        """
         assert self.view is not None
         view: 'TicTacToe' = self.view
         state = view.board[self.y][self.x]
+
         if state in (view.X, view.O):
             return
 
-        if view.current_player == view.X:
-            if interaction.user.id != self.player1.id:
-                return await interaction.response.send_message("It's not your turn", ephemeral=True)
-            self.style = discord.ButtonStyle.danger
-            self.label = 'X'
-            view.current_player = view.O
-        else:
-            if interaction.user.id != self.player2.id:
-                return await interaction.response.send_message("It's not your turn", ephemeral=True)
-            self.style = discord.ButtonStyle.success
-            self.label = 'O'
-            view.current_player = view.X
-        
+        # Check if it's the correct player's turn
+        if (view.current_player == view.X and interaction.user.id != self.player1.id) or \
+           (view.current_player == view.O and interaction.user.id != self.player2.id):
+            return await interaction.response.send_message(
+                "It's not your turn.", ephemeral=True
+            )
+
+        self.style = discord.ButtonStyle.danger if view.current_player == view.X else discord.ButtonStyle.success
+        self.label = 'X' if view.current_player == view.X else 'O'
         self.disabled = True
-        view.board[self.y][self.x] = view.current_player * -1
-        content = f"It's **{self.player2.mention if view.current_player == view.O else self.player1.mention}**'s turn"
-        
+        view.board[self.y][self.x] = view.current_player
+
+        # Switch the turn
+        view.current_player *= -1
+
+        # Check for a winner
         winner = view.check_board_winner()
         if winner is not None:
-            content = "It's a tie!" if winner == view.Tie else f"**{self.player1.mention if winner == view.X else self.player2.mention}** won!"
+            content = (
+                "It's a tie!" if winner == view.Tie else
+                f"**{self.player1.mention if winner == view.X else self.player2.mention}** won!"
+            )
+            # Disable all buttons and stop the view
             for child in view.children:
                 child.disabled = True
             view.stop()
+        else:
+            content = f"It's **{self.player1.mention if view.current_player == view.X else self.player2.mention}**'s turn."
 
+        # Update the message
         await interaction.response.edit_message(content=content, view=view)
 
+
 class TicTacToe(discord.ui.View):
+    """
+    Represents the Tic Tac Toe game board and logic.
+    """
     children: List[TicTacToeButton]
     X = -1
     O = 1
@@ -172,86 +189,195 @@ class TicTacToe(discord.ui.View):
             for x in range(3):
                 self.add_item(TicTacToeButton(x, y, player1, player2))
 
-    def check_board_winner(self):
-
+    def check_board_winner(self) -> Optional[int]:
+        """
+        Checks the board for a winner or tie.
+        Returns:
+            - X (-1) if player 1 wins
+            - O (1) if player 2 wins
+            - Tie (0) if the game is a draw
+            - None if the game is still ongoing
+        """
         board = self.board
-        lines = board + [list(x) for x in zip(*board)] + [[board[i][i] for i in range(3)], [board[i][2-i] for i in range(3)]]
-        for line in lines:
-            if all(x == self.O for x in line):
-                return self.O
-            if all(x == self.X for x in line):
-                return self.X
 
+        lines = (
+            board +  # Rows
+            [list(col) for col in zip(*board)] +  # Columns
+            [[board[i][i] for i in range(3)], [board[i][2 - i] for i in range(3)]]  # Diagonals
+        )
+
+        for line in lines:
+            if all(cell == self.X for cell in line):
+                return self.X
+            if all(cell == self.O for cell in line):
+                return self.O
 
         if all(cell != 0 for row in board for cell in row):
             return self.Tie
+
         return None
 
     async def on_timeout(self):
+        """
+        Handles the timeout event when the game times out.
+        """
         for item in self.children:
             item.disabled = True
         if hasattr(self, "message"):
             await self.message.edit(view=self)
     
-    
+
+class GuildData:
+    """
+    Holds per-guild data for the BlackTea game.
+    """
+    def __init__(self):
+        self.players: List[int] = []
+        self.lives: Dict[str, int] = {}
+        self.guessed_words: Set[str] = set()
+
 
 class BlackTea:
+    """
+    Manages the core mechanics of the BlackTea game.
+    """
+    LIFE_LIMIT = 3
+    WORDS_URL = "https://www.mit.edu/~ecprice/wordlist.100000"
+
     def __init__(self, bot):
         self.bot = bot
         self.color = 0xA5D287
         self.emoji = "<a:boba_tea_green_gif:1302250923858591767>"
-        self.MatchStart = []
-        self.lifes = {}
-        self.players = {}
+        self.match_started: Set[int] = set()
+        self.guild_data: Dict[int, GuildData] = {}
+        self.lock = asyncio.Lock()
 
-    def get_string(self):
-        words = self.get_words()
-        word = random.choice([l for l in words if len(l) > 3])  # noqa: E741
-        return word[:3]
+    async def fetch_word_list(self) -> List[str]:
+        """
+        Fetches a word list from the predefined URL.
+        """
+        async with aiohttp.ClientSession() as session:
+            try:
+                async with session.get(self.WORDS_URL) as response:
+                    response.raise_for_status()
+                    return [
+                        line.strip() for line in (await response.text()).splitlines() if len(line.strip()) > 3
+                    ]
+            except Exception as e:
+                raise RuntimeError("Failed to fetch words") from e
 
-    async def send_embed(self, channel: TextChannel, content: str):
-        return await channel.send(embed=Embed(color=self.color, description=content))
+    @staticmethod
+    def pick_random_prefix(words: List[str]) -> str:
+        """
+        Picks a random 3-letter prefix from the list of valid words.
+        """
+        valid_words = [word for word in words if len(word) > 3]
+        if not valid_words:
+            raise ValueError("No suitable words found.")
+        return random.choice(valid_words)[:3]
 
-    def match_started(self, guild_id: int):
-        if guild_id in self.MatchStart:
-            raise BadArgument("A Black Tea match is **already** in progress")
+    async def decrement_life(self, member_id: str, channel: TextChannel, reason: str):
+        """
+        Reduces a player's life and handles elimination if lives reach zero.
+        """
+        guild_id = channel.guild.id
+        guild_data = self.guild_data.get(guild_id)
+
+        if not guild_data or member_id not in guild_data.lives:
+            raise ValueError("Player data not initialized.")
+
+        guild_data.lives[member_id] += 1
+        remaining_lives = self.LIFE_LIMIT - guild_data.lives[member_id]
+
+        if remaining_lives <= 0:
+            guild_data.players.remove(int(member_id))
+            del guild_data.lives[member_id]
+            await self.send_embed(channel, f"☠️ <@{member_id}> is eliminated!")
         else:
-            self.MatchStart.append(guild_id)
-
-    async def lost_a_life(self, member: int, reason: str, channel: TextChannel):
-        lifes = self.lifes[f"{channel.guild.id}"].get(f"{member}")
-        self.lifes[f"{channel.guild.id}"][f"{member}"] = lifes + 1
-
-        if reason == "timeout":
             await self.send_embed(
                 channel,
-                f"⏰ <@{member}> time is up! **{3-int(self.lifes[f'{channel.guild.id}'][f'{member}'])}** lifes left..",
+                f"💥 <@{member_id}> lost a life ({reason}). {remaining_lives} lives left.",
             )
 
-        elif reason == "wrong":
-            await self.send_embed(
-                channel,
-                f"💥 <@{member}> wrong answer! **{3-int(self.lifes[f'{channel.guild.id}'][f'{member}'])}** lifes left..",
+    async def send_embed(self, channel: TextChannel, content: str) -> Message:
+        """
+        Sends an embedded message to the specified channel.
+        """
+        embed = Embed(color=self.color, description=content)
+        return await channel.send(embed=embed)
+
+    async def handle_guess(
+        self,
+        user: int,
+        channel: TextChannel,
+        prefix: str,
+        words: List[str],
+        session: GuildData,
+    ):
+        """
+        Handles a player's guessing turn with countdown reactions and timeout handling.
+        """
+        member = channel.guild.get_member(user)
+        member_id = str(user)
+
+        TOTAL_TIMEOUT = 10  # Total time for the player to guess
+        INITIAL_TIMEOUT = 7  # Initial wait before countdown starts
+        COUNTDOWN_REACTIONS = ["3️⃣", "2️⃣", "1️⃣"]
+
+        # Announce the string the player needs to guess
+        prompt_message = await self.send_embed(
+            channel,
+            f"🎯 {member.mention}, your word must contain: **{prefix}**. "
+            "You have 10 seconds to respond!"
+        )
+
+        try:
+            # Wait for the player's message during the initial timeout
+            message: Message = await self.bot.wait_for(
+                "message",
+                check=lambda m: (
+                    m.channel.id == channel.id
+                    and m.author.id == user
+                    and m.content.lower() in words
+                    and prefix.lower() in m.content.lower()
+                    and m.content.lower() not in session.guessed_words
+                ),
+                timeout=INITIAL_TIMEOUT,
             )
 
-        if self.lifes[f"{channel.guild.id}"][f"{member}"] == 3:
-            await self.send_embed(channel, f"☠️ <@{member}> you're eliminated")
-            del self.lifes[f"{channel.guild.id}"][f"{member}"]
-            self.players[f"{channel.guild.id}"].remove(member)
+            # Process a correct guess if received during the initial period
+            session.guessed_words.add(message.content.lower())
+            await self.send_embed(channel, f"✅ Correct answer, {member.mention}!")
+            return True
 
-    def get_words(self):
-        data = open("./data/words.txt", encoding="utf-8")
-        return [d for d in data.read().splitlines()]
+        except asyncio.TimeoutError:
+            # Start the countdown by reacting to the original prompt
+            for reaction in COUNTDOWN_REACTIONS:
+                await prompt_message.add_reaction(reaction)
+                await asyncio.sleep(1)
 
-    def clear_all(self):
-        self.MatchStart = []
-        self.lifes = {}
-        self.players = {}
+            # Deduct a life if no valid guess was made
+            await self.decrement_life(member_id, channel, "timeout")
+            return False
 
-    def remove_stuff(self, guild_id: int):
-        del self.players[f"{guild_id}"]
-        del self.lifes[f"{guild_id}"]
-        self.MatchStart.remove(guild_id)
+    async def start_match(self, guild_id: int):
+        """
+        Starts a new match, ensuring no existing match is in progress.
+        """
+        async with self.lock:
+            if guild_id in self.match_started:
+                raise ValueError("A BlackTea match is already in progress.")
+            self.match_started.add(guild_id)
+            if guild_id not in self.guild_data:
+                self.guild_data[guild_id] = GuildData()
+
+    def reset_guild_data(self, guild_id: int):
+        """
+        Resets guild-specific game data.
+        """
+        self.guild_data.pop(guild_id, None)
+        self.match_started.discard(guild_id)
+
 
 
 class Fun(commands.Cog):
@@ -313,111 +439,84 @@ class Fun(commands.Cog):
             return await ctx.fail("couldn't uwuify that message")
 
     @commands.group(name="blacktea", invoke_without_command=True)
-    async def blacktea(self, ctx: Context):
+    async def blacktea(self, ctx: commands.Context):
         """
-        play blacktea with the server members
+        Starts a BlackTea game with server members.
         """
+        guild_id = ctx.guild.id
 
-        self.blacktea.match_started(ctx.guild.id)
-        coffee_emoji = "☕️"
-        other_emoji = "<a:boba_tea_green_gif:1302250923858591767>"
+        try:
+            await self.blacktea.start_match(guild_id)
+        except ValueError as e:
+            return await ctx.send(str(e))
 
-        # Create a list with 10 coffee emojis
-        emojis = [coffee_emoji] * 10
-
-        # Initialize index to track which emoji to change next
-        index_to_change = 9
-
-        # Wait for 1 second before printing and changing again
         embed = Embed(
             color=self.blacktea.color,
             title="BlackTea Matchmaking",
+            description=(
+                "React to join the game!\n"
+                "Each player will take turns guessing words containing specific letters.\n"
+                "Run out of time or make incorrect guesses, and you lose lives. "
+                "The last player standing wins!"
+            ),
         )
-        mes = await ctx.send(embed=embed, content="".join(emojis))
-        await mes.add_reaction(self.blacktea.emoji)
-        for i in range(11):
-            # Print the current list of emojis
-            new_content = "".join(emojis)
-
-            # Change the emoji at the current index
-            emojis[index_to_change] = other_emoji
-
-            # Move to the next index (circular fashion)
-            index_to_change = (index_to_change - 1) % len(emojis)
-            await mes.edit(content=new_content)
-            await asyncio.sleep(1)
+        message = await ctx.send(embed=embed)
 
         try:
-            newmes = await ctx.channel.fetch_message(mes.id)
+            await message.add_reaction("☕")
+        except Exception as e:
+            self.blacktea.reset_guild_data(guild_id)
+            return await ctx.send(f"Failed to add reaction: {e}")
+
+        await asyncio.sleep(10)
+
+        try:
+            fetched_message = await ctx.channel.fetch_message(message.id)
+            if not fetched_message.reactions:
+                self.blacktea.reset_guild_data(guild_id)
+                return await ctx.send("No reactions were added to the BlackTea message.")
         except Exception:
-            try:
-                self.blacktea.MatchStart.remove(ctx.guild.id)
-            except Exception:
-                pass
-            self.blacktea.MatchStart.remove(ctx.guild.id)
-            return await ctx.send("The blacktea message was deleted")
+            self.blacktea.reset_guild_data(guild_id)
+            return await ctx.send("The BlackTea message was deleted.")
 
         users = [
-            u.id async for u in newmes.reactions[0].users() if u.id != self.bot.user.id and not u.bot
+            u.id async for u in fetched_message.reactions[0].users()
+            if u.id != self.bot.user.id and not u.bot
         ]
 
         if len(users) < 2:
-            try:
-                self.blacktea.MatchStart.remove(ctx.guild.id)
-            except Exception:
-                pass
-            return await ctx.send("not enough players to start the blacktea match...")
+            self.blacktea.reset_guild_data(guild_id)
+            return await ctx.send("Not enough players to start.")
 
-        words = self.blacktea.get_words()
-        self.blacktea.players.update({f"{ctx.guild.id}": users})
-        self.blacktea.lifes.update(
-            {f"{ctx.guild.id}": {f"{user}": 0 for user in users}}
-        )
+        words = await self.blacktea.fetch_word_list()
+        guild_data = self.blacktea.guild_data[guild_id]
+        guild_data.players = users
+        guild_data.lives = {str(user): 0 for user in users}
 
-        while len(self.blacktea.players[f"{ctx.guild.id}"]) > 1:
-            for user in users:
-                rand = self.blacktea.get_string()
-                await self.blacktea.send_embed(
-                    ctx.channel,
-                    f"{self.blacktea.emoji} <@{user}>: Say a word containing **{rand}** in **10 seconds**",
+        while len(guild_data.players) > 1:
+            for user in list(guild_data.players):
+                prefix = self.blacktea.pick_random_prefix(words)
+                correct = await self.blacktea.handle_guess(
+                    user=user,
+                    channel=ctx.channel,
+                    prefix=prefix,
+                    words=words,
+                    session=guild_data,
                 )
-                try:
-                    while True:
-                        message = await self.bot.wait_for(
-                            "message",
-                            check=lambda m: m.channel.id == ctx.channel.id
-                            and m.author.id == user,
-                            timeout=10,
-                        )
-                        if (
-                            rand in message.content.lower()
-                            and message.content.lower() in words
-                        ):
-                            await self.blacktea.send_embed(
-                                ctx.channel,
-                                f"<@{user}> Correct answer!",
-                            )
-                            break
-                except asyncio.TimeoutError:
-                    await self.blacktea.lost_a_life(user, "timeout", ctx.channel)
+                if not correct and user not in guild_data.players:
                     break
 
-        await self.blacktea.send_embed(
-            ctx.channel,
-            f"👑 <@{self.blacktea.players[f'{ctx.guild.id}'][0]}> Won the game!!",
-        )
-        self.blacktea.players[str(ctx.guild.id)][0]
-
-        self.blacktea.remove_stuff(ctx.guild.id)
-
+        winner = guild_data.players[0]
+        await self.blacktea.send_embed(ctx.channel, f"👑 <@{winner}> won the game!")
+        self.blacktea.reset_guild_data(guild_id)
 
     @blacktea.command(name="end")
     async def blacktea_end(self, ctx):
-        try:
-            self.blacktea.remove_stuff(ctx.guild.id)
-            await ctx.success("Blacktea match ended")
-        except Exception:
-            await ctx.fail("No blacktea match is in progress")
+        """
+        Ends an ongoing BlackTea match.
+        """
+        self.blacktea.reset_guild_data(ctx.guild.id)
+        await ctx.send("BlackTea match ended.")
 
     @commands.command()
     async def spark(self, ctx):
@@ -721,15 +820,7 @@ class Fun(commands.Cog):
         return await self.get_caption(ctx, message)
 
 
-    @commands.command()
-    @commands.cooldown(1, 3, commands.BucketType.user)
-    async def fuck(self, ctx, member: discord.Member = None):
-        if member == None:
-            member = ctx.author
-            return await ctx.reply(f"mention someone to fuck them loser")
 
-
-        await ctx.reply(f"**{ctx.author.name}** fucks **{member.name}** freaky mf...")
 
 
 
@@ -852,6 +943,7 @@ class Fun(commands.Cog):
         await ctx.reply(embed=embed, mention_author=False)
 
 
+
     @commands.hybrid_command(help="ask the :8ball: anything", aliases=["8ball"], description="fun", usage="<member>")
     @commands.cooldown(1, 3, commands.BucketType.user)
     async def eightball(self, ctx, *, question):
@@ -972,8 +1064,9 @@ class Fun(commands.Cog):
         aliases=["rhex"],
     )
     async def randomhex(self, ctx):
-        color = discord.Color(random.randint(0, 0xFFFFFF))
-        return await ColorInfo().convert(ctx, color)  # noqa: F821
+        color = random.randint(0, 0xFFFFFF)
+        hex_color = f"#{color:06x}"
+        return await ColorInfo().convert(ctx, hex_color)
     
     @commands.command(
         name="rps",
@@ -1060,56 +1153,92 @@ class Fun(commands.Cog):
     )
     async def tictactoe(self, ctx, opponent: discord.Member):
         if opponent.bot:
-            return await ctx.send("You can't play against a bot!")
+            return await ctx.fail("You can't play against a bot!")
         
         if opponent == ctx.author:
-            return await ctx.send("You can't play against yourself!")
+            return await ctx.fail("You can't play against yourself!")
         
         view = TicTacToe(ctx.author, opponent)
-        await ctx.send(f"{opponent.mention}, you have been challenged to a game of Tic Tac Toe!", view=view)
+        await ctx.success(f"{opponent.mention}, you have been challenged to a game of Tic Tac Toe! {ctx.author.mention} goes first.", view=view)
 
 
     @commands.command(name="image")
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def image(self, ctx, *, query: str):
-        """Search for images using Google's Custom Search JSON API with button-based navigation."""
-        try:
-            # Build the Google Custom Search service
-            service = build("customsearch", "v1", developerKey=GOOGLE_API_KEY)
+          """Search for images using Google's Custom Search JSON API with button-based navigation."""
 
-            # Perform the search (fetch up to 10 results)
-            result = service.cse().list(
-                q=query,              # Query string
-                cx=SEARCH_ENGINE_ID,  # Custom Search Engine ID
-                searchType="image",   # Search type: Image
-                safe="active",        # SafeSearch filter
-                num=10                # Number of results to fetch (max 10 per API call)
-            ).execute()
+          # Check if the user is a donator
+          try:
+               is_donator = await self.bot.db.fetchrow(
+                    """SELECT * FROM boosters WHERE user_id = $1""", ctx.author.id
+               )
+          except Exception as e:
+               return await ctx.fail(f"An error occurred while checking donator status: {e}")
 
-            # Extract the results
-            items = result.get("items", [])
-            if not items:
-                await ctx.send("No images found for your query.")
-                return
+          # If not a donator, limit access to the image search
+          if not is_donator:
+               return await ctx.fail(
+                    "You are not boosting [/pomice](https://discord.gg/pomice). Boost this server to use this command."
+               )
 
-            # Create a list of embeds for pagination
-            embeds = []
-            for index, item in enumerate(items):
-                image_url = item.get("link")
-                embed = discord.Embed(
-                    description=f":mag_right: Search results for: **{query}**\nPage {index + 1}/{len(items)}",
-                    color=self.bot.color
-                )
-                embed.set_image(url=image_url)
-                embed.set_footer(text="/pomice")
-                embeds.append(embed)
+          try:
+               # Build the Google Custom Search service
+               service = build("customsearch", "v1", developerKey=GOOGLE_API_KEY)
 
-            # Send the first embed with buttons
-            view = ImagePaginationView(ctx.author, embeds)
-            await ctx.send(embed=embeds[0], view=view)
+               # Initialize variables
+               embeds = []
+               items_collected = 0
+               start_index = 1
 
-        except Exception as e:
-            await ctx.send(f"An error occurred: {e}")
+               # Fetch results in batches (max 10 results per API call)
+               while items_collected < 100:
+                    result = service.cse().list(
+                         q=query,              # Query string
+                         cx=SEARCH_ENGINE_ID,  # Custom Search Engine ID
+                         searchType="image",   # Search type: Image
+                         safe="active",        # SafeSearch filter
+                         num=10,               # Number of results to fetch (max 10 per API call)
+                         start=start_index     # Start index for results
+                    ).execute()
+
+                    # Extract the results
+                    items = result.get("items", [])
+                    if not items:
+                         break  # Stop if no more results
+
+                    # Add the results to the embeds list
+                    for index, item in enumerate(items, start=items_collected + 1):
+                         image_url = item.get("link")
+                         embed = discord.Embed(
+                              description=f"<:Google:1315861928538800189> **Search results for: {query}**\nPage {index}/{items_collected + len(items)}",
+                              color=self.bot.color
+                         )
+                         embed.set_image(url=image_url)
+                         embed.set_footer(text="Images provided by Greed")
+                         embeds.append(embed)
+
+                    # Update variables for the next batch
+                    items_collected += len(items)
+                    start_index += 10
+
+                    # Stop if fewer than 10 results are returned (indicating no more results available)
+                    if len(items) < 10:
+                         break
+
+               # If no embeds were created, notify the user
+               if not embeds:
+                    return await ctx.fail("No images found for your query.")
+
+               # Adjust page count to match total results
+               for idx, embed in enumerate(embeds):
+                    embed.description = f"<:Google:1315861928538800189> **Search results for: {query}**\nPage {idx + 1}/{len(embeds)}"
+
+               # Send the first embed with buttons
+               view = ImagePaginationView(ctx.author, embeds)
+               await ctx.send(embed=embeds[0], view=view)
+
+          except Exception as e:
+               await ctx.send(f"An error occurred: {e}")
 
 
 class ImagePaginationView(discord.ui.View):
@@ -1147,9 +1276,6 @@ class ImagePaginationView(discord.ui.View):
         """Enable or disable buttons based on the current page."""
         self.previous_button.disabled = self.current_page == 0
         self.next_button.disabled = self.current_page == len(self.embeds) - 1
-
-
-
 
 
 

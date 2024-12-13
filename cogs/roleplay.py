@@ -2,6 +2,9 @@ from discord import Embed, Member, ButtonStyle, Interaction
 from discord.ext.commands import Cog, command, Context
 from discord.ui import Button, View, button
 import aiohttp
+from discord import File, Embed
+import os
+from random import choice
 from tool.greed import Greed
 
 class MarryView(View):
@@ -287,6 +290,97 @@ class Roleplay(Cog):
     async def slap(self, ctx: Context, member: Member) -> None:
         """slap another user."""
         await self.send(ctx, ctx.author, member, "slap", "slaps")
+
+
+    @command()
+    async def fuck(self, ctx, *, member: Member) -> None:
+        """NSFW command to send a random NSFW gif from a local folder."""
+
+        # Check if the user is a donator
+        result = await self.bot.db.fetchrow(
+            """SELECT * FROM boosters WHERE user_id = $1""", ctx.author.id
+        )
+
+        if not result:
+            await ctx.fail("You are not boosting [pomice](https://discord.gg/pomice) boost the server to use this command")
+            return
+
+        # Check if the command is invoked in an NSFW channel
+        if not ctx.channel.is_nsfw():
+            return await ctx.fail("This command can only be used in **NSFW** channels.")
+
+        # Check if the user is trying to interact with themselves
+        if ctx.author == member:
+            await ctx.fail("You can't interact with yourself! 😳")
+            return
+
+        # Path to the folder containing NSFW GIFs
+        folder_path = "/root/greed/data/hentai"  # Replace with your folder's path
+
+        try:
+            # Get all GIF files from the folder
+            gif_files = [f for f in os.listdir(folder_path) if f.endswith(".gif")]
+
+            if not gif_files:
+                await ctx.fail("No NSFW GIFs found in the folder.")
+                return
+
+            # Randomly select a GIF
+            selected_gif = choice(gif_files)
+            gif_path = os.path.join(folder_path, selected_gif)
+
+            # Database logic to track interactions
+            await self.bot.db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS freaky (
+                    user_id BIGINT,
+                    target_id BIGINT,
+                    times_fucked INTEGER DEFAULT 1,
+                    PRIMARY KEY (user_id, target_id)
+                )
+                """
+            )
+
+            # Insert or update interaction in the database
+            await self.bot.db.execute(
+                """
+                INSERT INTO freaky (user_id, target_id, times_fucked)
+                VALUES ($1, $2, 1)
+                ON CONFLICT(user_id, target_id)
+                DO UPDATE SET times_fucked = freaky.times_fucked + 1
+                """,
+                ctx.author.id, member.id
+            )
+
+            # Fetch the updated count of interactions
+            result = await self.bot.db.fetchrow(
+                """
+                SELECT times_fucked FROM freaky
+                WHERE user_id = $1 AND target_id = $2
+                """,
+                ctx.author.id, member.id
+            )
+
+            # If no interaction, initialize it to 1
+            times_fucked = result['times_fucked'] if result else 1
+
+            # Create an embed message
+            embed = Embed(
+                description=f"**{ctx.author.mention}** is interacting with **{member.mention}**! 🔥",
+                color=self.bot.color
+            )
+            embed.set_footer(text=f"{ctx.author} has interacted with {member} {times_fucked} times.")
+
+            # Attach the GIF to the embed
+            with open(gif_path, "rb") as gif_file:
+                file = File(gif_file, filename="nsfw.gif")
+                embed.set_image(url="attachment://nsfw.gif")
+
+            await ctx.send(embed=embed, file=file)
+
+        except Exception as e:
+            await ctx.fail(f"An error occurred: {str(e)}")
+
 
 async def setup(bot: "Greed"):
     await bot.add_cog(Roleplay(bot))

@@ -17,9 +17,10 @@ from pytz import timezone
 from rival_tools import thread
 from loguru import logger
 from tool.emotes import EMOJIS
-
+from discord import Embed, ui, Interaction
+from discord import ui, Embed, ButtonStyle
 log = logger
-MAX_GAMBLE = 100_000_000_000_000_000  # Simplified max gamble amount
+MAX_GAMBLE = 100_000_000
 BOOSTER_ROLE_ID = 1301664266868363356
 GUILD_ID = 1301617147964821524
 
@@ -328,6 +329,62 @@ def account():
 
     return check(predicate)
 
+class LeaderboardView(ui.View):
+    def __init__(self, bot, ctx, users, title, page_size=10):
+        super().__init__(timeout=None)
+        self.bot = bot
+        self.ctx = ctx
+        self.users = users
+        self.title = title
+        self.page_size = page_size
+        self.current_page = 0
+        self.total_pages = (len(users) - 2) // page_size + 4
+
+    def format_user_row(self, index, user):
+        """Format leaderboard entry row."""
+        balance = f"{int(user['balance']):,}"
+        username = self.bot.get_user(user['user_id']) or f"User {user['user_id']}"
+        return f"`{index}.` **{username}** - **{balance}**"
+
+    async def generate_embed(self):
+        """Generate the leaderboard embed for the current page."""
+        start = self.current_page * self.page_size
+        end = start + self.page_size
+        rows = [
+            self.format_user_row(i + 1, user)
+            for i, user in enumerate(self.users[start:end], start=start)
+        ]
+        embed = Embed(
+            title=self.title,
+            description="\n".join(rows),
+            color=self.bot.color,
+        )
+        embed.set_footer(text=f"Page {self.current_page + 1}/{self.total_pages}")
+        return embed
+
+    @ui.button(label="Previous", style=ButtonStyle.primary, disabled=True)
+    async def previous_page(self, interaction, button):
+        """Handle previous page button."""
+        if self.current_page > 0:
+            self.current_page -= 1
+            if self.current_page == 0:
+                button.disabled = True
+            self.children[1].disabled = False  # Enable "Next" button
+            embed = await self.generate_embed()
+            await interaction.response.edit_message(embed=embed, view=self)
+
+    @ui.button(label="Next", style=ButtonStyle.primary)
+    async def next_page(self, interaction, button):
+        """Handle next page button."""
+        if self.current_page < self.total_pages - 1:
+            self.current_page += 1
+            if self.current_page == self.total_pages - 1:
+                button.disabled = True
+            self.children[0].disabled = False  # Enable "Previous" button
+            embed = await self.generate_embed()
+            await interaction.response.edit_message(embed=embed, view=self)
+
+
 class Economy(commands.Cog):
     def __init__(self, bot: Greed):
         self.bot = bot
@@ -476,6 +533,11 @@ class Economy(commands.Cog):
 
         self.format_economy()
         self.chart = EconomyCharts(self.bot)
+        self.clear_items.start()  # Start the clear_items task when the cog is loaded
+
+    def cog_unload(self):
+        """Stop tasks when the cog is unloaded."""
+        self.clear_items.cancel()
 
     def format_economy(self):
         new_items = {}
@@ -640,28 +702,40 @@ class Economy(commands.Cog):
         else:
             return False
 
-    # @tasks.loop(minutes=1)
-    # async def clear_items(self):
-    #     data = await self.bot.db.fetch("""SELECT * FROM used_items""")
-    #     for row in data:
-    #         if row["expiration"].timestamp() <= datetime.now().timestamp():
-    #             await self.bot.db.execute(
-    #                 """DELETE FROM used_items WHERE user_id = $1 AND item = $2""", row.user_id, row.item
-    #             )
+    @tasks.loop(minutes=1)
+    async def clear_items(self):
+        """Remove expired items from the `used_items` table."""
+        try:
+            # Batch delete expired items
+            await self.bot.db.execute(
+                """DELETE FROM used_items WHERE expiration <= $1""",
+                datetime.now()
+            )
+        except Exception as e:
+            # Log errors if any occur
+            self.bot.logger.error(f"Error clearing expired items: {e}")
 
-    async def check_item(self, ctx: Context, member: Optional[DiscordMember] = None):
+    async def check_item(self, ctx: Context, member: Optional[discord.Member] = None) -> bool:
+        """Check if a member has a valid item."""
         cn = ctx.command.qualified_name
         item = None
+
         if member is None:
             member = ctx.author
-        if cn == "coinflip":
-            item = "white powder"
-        elif cn == "steal":
-            item = "purple devil"
-        elif cn == "gamble":
-            item = "oxy"
-        elif cn == "roll":
-            item = "meth"
+
+        # Map commands to items
+        command_to_item = {
+            "coinflip": "white powder",
+            "steal": "purple devil",
+            "gamble": "oxy",
+            "roll": "meth",
+        }
+        item = command_to_item.get(cn)
+
+        if not item:
+            return False
+
+        # Fetch expiration for the given item and member
         kwargs = [member.id, item]
         data = await self.bot.db.fetchrow(
             """SELECT expiration FROM used_items WHERE user_id = $1 AND item = $2""",
@@ -669,12 +743,21 @@ class Economy(commands.Cog):
         )
         if not data:
             return False
+
+        # Check expiration time
         if data["expiration"].timestamp() <= datetime.now().timestamp():
             await self.bot.db.execute(
-                """DELETE FROM used_items WHERE user_id = $1 AND item = $2""", *kwargs
+                """DELETE FROM used_items WHERE user_id = $1 AND item = $2""",
+                *kwargs
             )
             return False
+
         return True
+
+    @clear_items.before_loop
+    async def before_clear_items(self):
+        """Ensure the bot is ready before starting the loop."""
+        await self.bot.wait_until_ready()
 
     async def update_balance(
         self,
@@ -774,7 +857,7 @@ class Economy(commands.Cog):
         example=",blackjack 100",
     )
     @account()
-    @commands.cooldown(1, 20, commands.BucketType.user)
+    @commands.cooldown(1, 5, commands.BucketType.user)
     async def blackjack(self, ctx: Context, *, amount: GambleAmount):
         async with self.locks[f"bj:{ctx.author.id}"]:
             balance = await self.get_balance(ctx.author)
@@ -951,7 +1034,7 @@ class Economy(commands.Cog):
         product = discord.utils.chunk_list(product, 2)
         embeds = [
             Embed(title=f"The {self.bot.user.name} Shop", description="".join(m for m in _), color=self.bot.color)
-            .set_thumbnail(url="https://media.discordapp.net/attachments/1270698610094243880/1274962183704281150/shop.png?ex=66c42890&is=66c2d710&hm=6240fd5d83f184893d0f3d725bc20ff65ac0f54ccef6b2914b5a397dac8a406c&=&format=webp&quality=lossless")  # Replace with your emoji URL
+            .set_thumbnail(url="https://cdn.discordapp.com/attachments/1301628329111326755/1316645208443850813/5846b4fbb2d89eca2f6ca7f128b2ce9f.gif?ex=675bcce7&is=675a7b67&hm=95278949edaf412c26917b97bad1fd2252e8cf9cb1346210b0c24f7185c7430c&")  # Replace with your emoji URL
             for _ in product
         ]
         return await ctx.paginate(embeds)
@@ -1170,7 +1253,7 @@ class Economy(commands.Cog):
         example=",roll 500",
     )
     @account()
-    @commands.cooldown(1, 20, commands.BucketType.user) 
+    @commands.cooldown(1, 5, commands.BucketType.user) 
     async def roll(self, ctx: Context, amount: GambleAmount):
         if str(amount).startswith("-"):
             return await ctx.warning("You **Cannot use negatives**")
@@ -1201,52 +1284,64 @@ class Economy(commands.Cog):
         )
 
     @commands.command(
-        name="coinflip",
-        aliases=["flip", "cflip", "cf"],
-        brief="flip a coin to earn bucks",
-        example=",coinflip 100 heads",
-    )
+          name="coinflip",
+          aliases=["flip", "cflip", "cf"],
+          brief="Flip a coin to earn bucks",
+          example=",coinflip 100 heads",
+     )
     @account()
-    @commands.cooldown(1, 20, commands.BucketType.user) 
+    @commands.cooldown(1, 5, commands.BucketType.user)
     async def coinflip(self, ctx: Context, amount: GambleAmount, arg: str = None):
-        if not arg:
-            return await ctx.warning("please provide either heads or tails")
-        if arg.lower() not in ["heads", "tails"]:
-            return await ctx.warning("please provide either heads or tails")
-        if str(amount).startswith("-"):
-            return await ctx.warning("You **Cannot use negatives**")
-        balance = await self.get_balance(ctx.author)
-        if float(amount) < 0.00:
-            return await ctx.fail("lol nice try")
-        if float(amount) > float(balance):
-            return await ctx.warning(
-                f"you only have **{self.format_int(balance)}** bucks"
-            )
-        roll = self.get_random_value(1, 2)
-        self.get_random_value(1, 2)  # type: ignore
-        multiplied = await self.check_item(ctx)
-        roll_coin = self.int_to_coin(roll)
-        if roll_coin.lower() != arg.lower() and ctx.author.id != 977036206179233862:
-            action = "LOST"
-            result = "Take"
-        else:
-            if float(amount) > 10000000.0:
-                value = self.get_random_value(1, 10)
-                if value == 5:
+          if not arg:
+               return await ctx.warning("Please provide either heads or tails.")
+          if arg.lower() not in ["heads", "tails"]:
+               return await ctx.warning("Please provide either heads or tails.")
+          if str(amount).startswith("-"):
+               return await ctx.warning("You **cannot use negative amounts**.")
+          balance = await self.get_balance(ctx.author)
+          if float(amount) < 0.00:
+               return await ctx.fail("Nice try, but no negatives!")
+          if float(amount) > float(balance):
+               return await ctx.warning(
+                    f"You only have **{self.format_int(balance)}** bucks."
+               )
+
+          roll = self.get_random_value(1, 2)
+          roll_coin = self.int_to_coin(roll)
+          multiplied = await self.check_item(ctx)
+
+          if roll_coin.lower() != arg.lower() and ctx.author.id != 977036206179233862:
+               # User lost
+               action = "LOST"
+               result = "Take"
+               await self.update_balance(ctx.author, result, amount)
+               return await ctx.fail(
+                    f"You flipped **{roll_coin}** and **{action} {self.format_int(amount)} bucks.** Better luck next time!"
+               )
+          else:
+               # User won
+               if float(amount) > 10000000.0:
+                    value = self.get_random_value(1, 10)
+                    if value == 5:
+                         action = "WON"
+                         result = "Add"
+                         amount = int(float(amount) * get_win(multiplied, 3))
+                    else:
+                         action = "LOST"
+                         result = "Take"
+                         await self.update_balance(ctx.author, result, amount)
+                         return await ctx.fail(
+                              f"You flipped **{roll_coin}** and **{action} {self.format_int(amount)} bucks.** Better luck next time!"
+                         )
+               else:
                     action = "WON"
                     result = "Add"
                     amount = int(float(amount) * get_win(multiplied, 3))
-                else:
-                    action = "LOST"
-                    result = "Take"
-            else:
-                action = "WON"
-                result = "Add"
-                amount = int(float(amount) * get_win(multiplied, 3))
-        await self.update_balance(ctx.author, result, amount)
-        return await ctx.currency(
-            f"You flipped **{roll_coin}** and **{action} {self.format_int(amount)} bucks**"
-        )
+
+               await self.update_balance(ctx.author, result, amount)
+               return await ctx.currency(
+                    f"You flipped **{roll_coin}** and **{action} {self.format_int(amount)} bucks!** Congratulations!"
+               )
 
     @commands.command(
         name="transfer",
@@ -1337,7 +1432,7 @@ class Economy(commands.Cog):
         },
     )
     @account()
-    @commands.cooldown(1, 20, commands.BucketType.user) 
+    @commands.cooldown(1, 5, commands.BucketType.user) 
     async def gamble(self, ctx: Context, amount: GambleAmount):
         if str(amount).startswith("-"):
             return await ctx.warning("You **Cannot use negatives**")
@@ -1384,29 +1479,68 @@ class Economy(commands.Cog):
         example=",supergamble 5,000",
     )
     @account()
-    @commands.cooldown(1, 20, commands.BucketType.user) 
+    @commands.cooldown(1, 5, commands.BucketType.user)
     async def supergamble(self, ctx: Context, amount: GambleAmount):
         if str(amount).startswith("-"):
-            return await ctx.warning("You **Cannot use negatives**")
-        if float(amount) > float(
-            await self.bot.db.fetchval(
-                "SELECT balance FROM economy WHERE user_id = $1", ctx.author.id
-            )
-        ):
-            return await ctx.fail("you too **broke** for that **top G**")
+            return await ctx.warning("You **Cannot use negatives**.")
+        balance = await self.bot.db.fetchval(
+            "SELECT balance FROM economy WHERE user_id = $1", ctx.author.id
+        )
+        if float(amount) > float(balance):
+            return await ctx.fail("You are too **broke** for that **top G**.")
+
+        # Check if the user is a donator
+        is_donator = await self.bot.db.fetchrow(
+            "SELECT * FROM boosters WHERE user_id = $1", ctx.author.id
+        )
+
+        # Initialize or reset guaranteed win tracker daily
+        if not hasattr(self, "donator_wins"):
+            self.donator_wins = {}
+            self.last_reset = datetime.now().timestamp()
+
+        # Reset counters if it's a new day
+        current_date = datetime.now().date()
+        if current_date != datetime.fromtimestamp(self.last_reset).date():
+            self.donator_wins.clear()
+            self.last_reset = datetime.now().timestamp()
+
+        # Fetch or initialize the user's guaranteed win data
+        user_wins = self.donator_wins.get(ctx.author.id, {"wins": 0, "guaranteed": 0})
+
+        guaranteed_win = False
         roll = self.get_random_value(1, 100)
-        value = 90 if not await self.check_shrooms(ctx) else 70
-        if roll > value or ctx.author.id == 977036206179233862:
+        if is_donator and user_wins["guaranteed"] < 2:
+            guaranteed_win = True
+            user_wins["wins"] += 1
+            user_wins["guaranteed"] += 1
+        else:
+            value = 90 if not await self.check_shrooms(ctx) else 70
+            if roll > value or ctx.author.id == 978402974667800666:
+                action = "WON"
+                result = "Add"
+                amount = int(float(amount) * 4.30)
+            else:
+                action = "LOST"
+                result = "Take"
+                user_wins["wins"] = 0
+
+        if guaranteed_win:
             action = "WON"
             result = "Add"
-            amount = int(float(float(amount) * 4.00))
-        else:
-            action = "LOST"
-            result = "Take"
+            amount = int(float(amount) * 4.30)
+
+        self.donator_wins[ctx.author.id] = user_wins
+
+        # Update the balance
         await self.update_balance(ctx.author, result, amount)
         return await ctx.currency(
-            f"You **Super gambled** and rolled a **{roll}**/100, therefore you have **{action} {self.format_int(amount)}** bucks"
+            f"You **Super gambled** and {'WERE GUARANTEED TO WIN' if guaranteed_win else f'rolled a **{roll}**/100'}, "
+            f"you have **{action} {self.format_int(amount)}** bucks! "
+            f"{'(' + str(user_wins['guaranteed']) + '/2)' if guaranteed_win else ''}"
         )
+    
+
 
     @commands.command(
         name="buy",
@@ -1446,7 +1580,7 @@ class Economy(commands.Cog):
         embed.title = f"{member.display_name}'s inventory"
 
         # Set a thumbnail (use an emoji image or a custom image URL)
-        embed.set_thumbnail(url="https://i.pinimg.com/564x/dd/f8/dd/ddf8dd97083170fad011960ae84446c8.jpg")  # Replace with the URL you want
+        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1301628329111326755/1316645208443850813/5846b4fbb2d89eca2f6ca7f128b2ce9f.gif?ex=675bcce7&is=675a7b67&hm=95278949edaf412c26917b97bad1fd2252e8cf9cb1346210b0c24f7185c7430c&")  # Replace with the URL you want
 
         description_lines = []
 
@@ -1481,108 +1615,52 @@ class Economy(commands.Cog):
 
     @commands.command(
         name="leaderboard",
-        brief="show top users for either earnings or balance",
+        brief="Show top users for either earnings or balance",
         example=",leaderboard",
         aliases=["lb"],
     )
-    @account()
-    async def leaderboard(self, ctx: Context, type: Optional[str] = "balance"):
-        rows = []
-        user_in_top_10 = False
-        user_position = None
-        user_data = None
+    async def leaderboard(self, ctx, type_: str = "balance"):
+        """Command to display the leaderboard."""
+        type_ = type_.lower()
+        if type_ not in ["balance", "earnings"]:
+            return await ctx.send("Invalid type! Choose `balance` or `earnings`.")
 
-        if type.lower() == "balance":
-            users = await self.bot.db.fetch(
-                """SELECT user_id,
-                SUM(balance + bank) AS bal
-                FROM economy
-                GROUP BY user_id
-                ORDER BY bal DESC;
-            """
-            )
-            users = [
-                user
-                for user in users
-                if not str(user["bal"]).startswith("0")
-                and not str(user["bal"]).startswith("-")
-            ]
+        query = """
+            SELECT user_id, SUM(balance + bank) AS balance FROM economy
+            GROUP BY user_id
+            ORDER BY balance DESC
+        """ if type_ == "balance" else """
+            SELECT user_id, earnings AS balance FROM economy
+            ORDER BY earnings DESC
+        """
+        users = await self.bot.db.fetch(query)
 
-            for i, row in enumerate(users, start=1):
-                if i <= 10:
-                    formatted = self.chart.format_int(float(str(row['bal']).split(".")[0]), False)
-                    rows.append(
-                        f"`{i}.` [**{await self.get_or_fetch(row['user_id'])}**](https://greed.my) - **{formatted}**"
-                    )
-                    if row["user_id"] == ctx.author.id:
-                        user_in_top_10 = True
-                if row["user_id"] == ctx.author.id:
-                    user_position = i
-                    user_data = row
+        if not users:
+            return await ctx.send("No users found in the leaderboard.")
 
-            if not user_in_top_10 and user_position:
-                user_balance = self.format_int(user_data["bal"])
-                if user_balance.startswith("-"):
-                    user_balance = 0
-                rows.append(
-                    f"> `{user_position}.` {ctx.author.mention} - **{user_balance}**"
-                )
+        title = f"{type_.title()} Global Leaderboard "
+        view = LeaderboardView(self.bot, ctx, users, title)
+        embed = await view.generate_embed()
+        await ctx.send(embed=embed, view=view)
 
-            embed = Embed(title=f"{type.title()} Leaderboard (resets every week)", color=self.bot.color)
-            embed.set_thumbnail(url="")
-            embed.description = "\n".join(rows)
-            return await ctx.send(embed=embed)
-
-        else:
-            users = await self.bot.db.fetch(
-                """SELECT user_id, earnings FROM economy ORDER BY earnings DESC"""
-            )
-            users = [
-                user for user in users if not str(user["earnings"]).startswith("0")
-            ]
-
-            for i, row in enumerate(users, start=1):
-                if i <= 10:
-                    rows.append(
-                        f"`{i}` [**{await self.get_or_fetch(row['user_id'])}**](https://greed.my) - **{self.format_int(row['earnings'])}**"
-                    )
-                    if row["user_id"] == ctx.author.id:
-                        user_in_top_10 = True
-                if row["user_id"] == ctx.author.id:
-                    user_position = i
-                    user_data = row
-
-            if not user_in_top_10 and user_position:
-                rows.append(
-                    f"<a:68523animatedarrowgreen:1249174023728791582> `{user_position}` {ctx.author.mention} - **{self.format_int(user_data['earnings'])}**"
-                )
-
-            embed = Embed(title=f"{type.title()} Leaderboard (resets in 1 week)", color=self.bot.color)
-            embed.description = "\n".join(rows)
-            return await ctx.send(embed=embed)
 
     @commands.command(
         name="work",
         brief="Earn some money by working random jobs.",
         example=",work"
     )
-    @commands.cooldown(1, 30, commands.BucketType.user)  # Cooldown of 20 seconds per user
+    @commands.cooldown(1, 30, commands.BucketType.user)  # Cooldown of 30 seconds per user
     async def work(self, ctx):
+        """Command to simulate working a random job and earning money."""
+
         # Path to the jobs file (update this path as needed)
         jobs_file_path = "jobs.txt"
 
         try:
-            # Check if the user is a booster in your specific guild (GUILD_ID)
-            is_booster = False
-
-            # Fetch the guild object for the guild with GUILD_ID (your server where boosters are tracked)
-            guild = self.bot.get_guild(GUILD_ID)
-
-            if guild:
-                # Check if the user has the booster role in your guild (GUILD_ID)
-                member = guild.get_member(ctx.author.id)
-                if member:
-                    is_booster = any(role.id == BOOSTER_ROLE_ID for role in member.roles)
+            # Check if the user is a donator
+            is_donator = await self.bot.db.fetchrow(
+                """SELECT * FROM boosters WHERE user_id = $1""", ctx.author.id
+            )
 
             # Read jobs from the file
             with open(jobs_file_path, "r") as file:
@@ -1594,9 +1672,9 @@ class Economy(commands.Cog):
             # Select a random job
             job = random.choice(jobs)
 
-            # Generate a random amount between 150 and 1000
+            # Generate a random amount between 500 and 1500
             base_earnings = random.randint(500, 1500)
-            multiplier = 3 if is_booster else 1.0
+            multiplier = 3 if is_donator else 1.0  # 3x earnings if donator
             earnings = int(base_earnings * multiplier)
 
             # Check if the user exists in the economy database
@@ -1605,6 +1683,7 @@ class Economy(commands.Cog):
             )
 
             if not user_exists:
+                # Insert the user into the economy table if they don't exist
                 await self.bot.db.execute(
                     """INSERT INTO economy (user_id, balance, bank) VALUES($1, $2, $3)""",
                     ctx.author.id,
@@ -1619,24 +1698,22 @@ class Economy(commands.Cog):
                 ctx.author.id,
             )
 
-            # Send a success message based on whether the user is a booster
-            if is_booster:
+            # Send a success message based on donator status
+            if is_donator:
                 await ctx.currency(
-                    f"you worked as a **{job}** and earned **${earnings:,}**! As a booster in **[/pomice](https://discord.gg/pomice)**, you received a bonus pay for boosting!"
+                    f"you worked as a **{job}** and earned **${earnings:,}**! As a booster in [/pomice](https://discord.gg/pomice), you received bonus pay for your support!"
                 )
             else:
                 await ctx.currency(
                     f"you worked as a **{job}** and earned **${earnings:,}**!"
                 )
 
-
         except FileNotFoundError:
             await ctx.fail("The jobs file is missing. Please contact the administrator.")
         except Exception as e:
             await ctx.fail("An error occurred while processing your command.")
             raise e  # Log the exception for debugging purposes
-
-
+             
     @commands.command(
          name="hack",
          brief="Attempt to hack another user and steal their bank balance.",

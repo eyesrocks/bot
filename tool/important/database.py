@@ -6,7 +6,7 @@ from logging import getLogger
 from types import TracebackType
 from typing import Any, Optional, Protocol, Union
 from typing import Iterable, Sequence
-import ujson
+import ujson, orjson
 from asyncpg import Connection, Pool, Record as DefaultRecord, create_pool
 from discord.ext.commands import Context, check
 
@@ -56,14 +56,26 @@ class Database:
         self.cache = {}
 
     def encoder(self, *data: Any):
-        return ujson.dumps(data[1])
+        return ujson.dumps(data[1] if len(data) > 1 else data[0])
 
     def decoder(self, *data: Any):
-        return ujson.loads(data[1])
+        return ujson.loads(data[1] if len(data) > 1 else data[0])
+    
+    def encoderb(self, *data: Any):
+        return orjson.dumps(data[1] if len(data) > 1 else data[0])
+
+    def decoderb(self, *data: Any):
+        return orjson.loads(data[1] if len(data) > 1 else data[0])
 
     async def settings(self, connection: Connection) -> None:
         await connection.set_type_codec(
             "json",
+            encoder=self.encoder,
+            decoder=self.decoder,
+            schema="pg_catalog",
+        )
+        await connection.set_type_codec(
+            "jsonb",
             encoder=self.encoder,
             decoder=self.decoder,
             schema="pg_catalog",
@@ -175,9 +187,10 @@ class Database:
                 return await conn.fetchval(sql, *args)
 
     async def executemany(self, sql: str, args: Iterable[Sequence]) -> Optional[Any]:
-        if result := self.cache.get(f"{sql} {args}"):  # noqa: F841
-            self.cache.pop(f"{sql} {args}")
-        async with self._pool.acquire() as conn:
+        cache_key = f"{sql} {args}"
+        if cache_key in self.cache:
+            self.cache.pop(cache_key)
+        async with self.pool.acquire() as conn:
             async with conn.transaction():
                 return await conn.executemany(sql, args)
 
@@ -194,3 +207,19 @@ class Database:
             for t in tables
         ]
         return await asyncio.gather(*tasks)
+    
+
+    async def fetch_config(self, guild_id: int, key: str):
+        return await self.fetchval(
+            f"SELECT {key} FROM reskin_config WHERE guild_id = $1", guild_id
+        )
+
+    async def update_config(self, guild_id: int, key: str, value: str):
+        await self.execute(
+            f"INSERT INTO reskin_config (guild_id, {key}) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET {key} = $2",
+            guild_id,
+            value,
+        )
+        return await self.fetchrow(
+            f"SELECT * FROM reskin_config WHERE guild_id = $1", guild_id
+        )

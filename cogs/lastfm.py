@@ -926,43 +926,33 @@ class LastFM(commands.Cog):
             artist_name = data["recenttracks"]["track"][0]["artist"]["#text"]
 
         async with ctx.typing():
-            data = [
-                {
-                    "user_id": int(user_id),
-                    "user": user,
-                    "artist": artist,
-                    "plays": plays,
-                }
-                for user_id, user, artist, plays in await self.bot.db.fetch(
-                    "SELECT user_id, username, artists, tracks FROM lastfm.users"
+            users_data = await self.bot.db.fetch(
+                "SELECT user_id, username, artists FROM lastfm.users WHERE username IS NOT NULL"
+            )
+
+            async def process_user(user_data):
+                user_id, username, artists = user_data
+                artists = orjson.loads(artists)
+                plays = sum(
+                    artist["plays"]
+                    for artist in artists
+                    if artist["name"].lower() == artist_name.lower()
                 )
-            ]
+                if plays > 0:
+                    user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
+                    return {
+                        "user_id": user_id,
+                        "username": user.display_name if user else "Unknown",
+                        "plays": plays,
+                    }
+                return None
 
-            chunk_size = 5
-            for i in range(0, len(data), chunk_size):
-                chunk = data[i:i + chunk_size]
-                for item in chunk:
-                    item["artists"] = orjson.loads(item["artist"])
-                    item["plays"] = sum(
-                        artist["plays"]
-                        for artist in item["artists"]
-                        if artist["name"].lower() == artist_name.lower()
-                    )
-                    if item["plays"] > 0:
-                        user = self.bot.get_user(item["user_id"])
-                        if user is None:
-                            try:
-                                user = await self.bot.fetch_user(item["user_id"])
-                            except discord.HTTPException:
-                                item["username"] = "Unknown"
-                                continue
-                        item["username"] = user.display_name
-                await asyncio.sleep(0.5)
+            data = await asyncio.gather(*[process_user(user_data) for user_data in users_data])
+            data = [item for item in data if item]
 
-            data = [item for item in data if item["plays"] > 0]
-            data = sorted(data, key=lambda x: x["plays"], reverse=True)
+            data.sort(key=lambda x: x["plays"], reverse=True)
 
-            if len(data) > 0:
+            if data:
                 await self.bot.db.execute(
                     """INSERT INTO lastfm_crowns (guild_id, artist, user_id, plays) 
                     VALUES($1,$2,$3,$4) ON CONFLICT(guild_id, artist) 
@@ -974,19 +964,18 @@ class LastFM(commands.Cog):
                 )
 
             embeds = []
-            for i, p in enumerate(chunks(data, 10), start=1):
+            for i, chunk in enumerate(chunks(data, 10), start=1):
                 description = "\n".join(
-                    f"> `{i}.` **[{item['username']}](https://www.last.fm/user/{item['user']}) - {item['plays']} plays{' 👑' if i == 1 else ''}**"
-                    for i, item in enumerate(p, start=(i - 1) * 10 + 1)
+                    f"> `{i}.` **[{item['username']}](https://www.last.fm/user/{item['user_id']}) - {item['plays']} plays{' 👑' if i == 1 else ''}**"
+                    for i, item in enumerate(chunk, start=(i - 1) * 10 + 1)
                 )
                 embeds.append(
                     discord.Embed(
                         title=f"{artist_name} most plays",
                         description=description,
-                        color=0x2B2D31,
                     )
                 )
-            
+
             if not embeds:
                 return await ctx.fail("No plays found for this artist.")
                 

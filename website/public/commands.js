@@ -1,122 +1,175 @@
-function hideLoader() {
-    const loader = document.getElementById('loader');
-    loader.classList.add('loader-hidden');
-    setTimeout(() => {
-        loader.style.display = 'none';
-    }, 500);
+const categoriesContainer = document.getElementById('categoriesContainer');
+const commandsGrid = document.getElementById('commandsGrid');
+const toastContainer = document.getElementById('toastContainer');
+const leftArrow = document.querySelector('.scroll-arrow-container.left');
+const rightArrow = document.querySelector('.scroll-arrow-container.right');
+
+let activeCategory = 'All';
+let isDragging = false;
+let startX, scrollLeft;
+
+categoriesContainer.addEventListener('mousedown', (e) => {
+  isDragging = false;
+  startX = e.pageX - categoriesContainer.offsetLeft;
+  scrollLeft = categoriesContainer.scrollLeft;
+  categoriesContainer.classList.add('dragging');
+});
+
+categoriesContainer.addEventListener('mousemove', (e) => {
+  if (typeof startX !== 'number') return;
+  const x = e.pageX - categoriesContainer.offsetLeft;
+  const walk = x - startX;
+  if (Math.abs(walk) > 5) isDragging = true;
+  categoriesContainer.scrollLeft = scrollLeft - walk;
+});
+
+categoriesContainer.addEventListener('mouseup', () => {
+  startX = null;
+  categoriesContainer.classList.remove('dragging');
+});
+
+categoriesContainer.addEventListener('mouseleave', () => {
+  startX = null;
+  categoriesContainer.classList.remove('dragging');
+});
+
+categoriesContainer.addEventListener('click', (e) => {
+  if (isDragging) {
+    e.preventDefault();
+    isDragging = false;
+  }
+});
+
+function updateArrowVisibility() {
+  if (categoriesContainer.scrollLeft <= 0) {
+    leftArrow.classList.add('hidden');
+  } else {
+    leftArrow.classList.remove('hidden');
+  }
+
+  if (
+    categoriesContainer.scrollWidth - categoriesContainer.clientWidth ===
+    Math.round(categoriesContainer.scrollLeft)
+  ) {
+    rightArrow.classList.add('hidden');
+  } else {
+    rightArrow.classList.remove('hidden');
+  }
 }
 
-class CommandManager {
-    constructor() {
-        this.commands = {};
-        this.activeCategory = 'All';
-        this.setupEventListeners();
-    }
+categoriesContainer.addEventListener('scroll', updateArrowVisibility);
 
-    async initialize() {
-        try {
-            const response = await fetch("/commands.json");
-            this.commands = await response.json();
-            this.hideLoader();
-            this.renderCategories();
-            this.renderCommands();
-        } catch (error) {
-            this.handleError(error);
-        }
-    }
 
-    hideLoader() {
-        document.getElementById("loader").classList.add("hidden");
-    }
+function scrollCategories(amount) {
+  categoriesContainer.scrollBy({
+    left: amount,
+    behavior: 'smooth',
+  });
+}
 
-    handleError(error) {
-        console.error('Error loading commands:', error);
-        this.hideLoader();
-        document.getElementById("commandCards").innerHTML = 
-            '<div class="error-message">Failed to load commands. Please try again later.</div>';
-    }
+async function fetchCommands() {
+  try {
+    const response = await fetch('/commands.json');
+    const commandsData = await response.json();
+    renderCategories(commandsData);
+    renderCommands(commandsData);
+  } catch (error) {
+    console.error('Error fetching commands:', error);
+  }
+}
 
-    renderCategories() {
-        const categoriesContainer = document.getElementById("commandCategories");
-        categoriesContainer.innerHTML = '<div class="category active" data-category="All">All</div>';
-        
-        Object.keys(this.commands).forEach(category => {
-            const categoryElement = document.createElement("div");
-            categoryElement.classList.add("category");
-            categoryElement.dataset.category = category;
-            categoryElement.textContent = category;
-            categoriesContainer.appendChild(categoryElement);
-        });
-    }
+function renderCategories(commandsData) {
+  const allCategories = Object.keys(commandsData);
+  categoriesContainer.innerHTML = '';
+  const categories = ['All', ...allCategories];
+  categories.forEach((category) => {
+    const categoryElement = document.createElement('div');
+    categoryElement.className = `category${category === 'All' ? ' active' : ''}`;
+    categoryElement.textContent = `${category} ${
+      category === 'All' ? countCommands(commandsData) : commandsData[category].length
+    }`;
+    categoryElement.onclick = () => {
+      if (!isDragging) filterCategory(category, commandsData);
+    };
+    categoriesContainer.appendChild(categoryElement);
+  });
+}
 
-    renderCommands(filterText = '', category = 'All') {
-        const commandCards = document.getElementById("commandCards");
-        commandCards.innerHTML = '';
-
-        Object.entries(this.commands).forEach(([cat, commands]) => {
-            if (category === 'All' || category === cat) {
-                commands.forEach(command => {
-                    if (command.name.toLowerCase().includes(filterText.toLowerCase())) {
-                        commandCards.appendChild(this.createCommandCard(command, cat));
-                    }
-                });
-            }
-        });
-    }
-
-    createCommandCard(command, category) {
-        const card = document.createElement("div");
-        card.classList.add("command-card");
-        card.innerHTML = `
-            <div class="command-title">${command.name}</div>
-            <div class="command-description">${command.brief}</div>
-            <div class="details">
-                ${command.example ? `<span class="usage">Usage: ${command.example}</span>` : ""}
-                <span>Category: ${category}</span>
+function renderCommands(commandsData, searchText = '') {
+  commandsGrid.innerHTML = '';
+  Object.entries(commandsData).forEach(([category, commands]) => {
+    if (activeCategory === 'All' || activeCategory === category) {
+      commands
+        .filter((cmd) => cmd.name.toLowerCase().includes(searchText.toLowerCase()))
+        .forEach((command) => {
+          const commandCard = document.createElement('div');
+          commandCard.className = 'command-card';
+          commandCard.innerHTML = `
+            <div class="card-content">
+              <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <p class="card-title">${command.name}</p>
+                <button class="copy-button" title="Copy Command" onclick="copyToClipboard('${command.name}')">
+                  <i class="fas fa-copy"></i>
+                </button>
+              </div>
+              <p class="card-description">${command.brief || 'No description available.'}</p>
+              <hr class="divider">
+              <div class="card-details">
+                <div class="detail-item">
+                  <p class="detail-title">Example</p>
+                  <p class="tag">${command.example || 'N/A'}</p>
+                </div>
+                <div class="detail-item">
+                  <p class="detail-title">Aliases</p>
+                  <p class="tag">${command.aliases?.length ? command.aliases.join(', ') : 'None'}</p>
+                </div>
+                <div class="detail-item">
+                  <p class="detail-title">Permissions</p>
+                  <p class="tag">${command.permissions || 'None required'}</p>
+                </div>
+              </div>
             </div>
-        `;
-        return card;
-    }
-
-    setupEventListeners() {
-        document.querySelector(".search-bar input").addEventListener("input", (e) => {
-            this.filterCommands(e.target.value);
-        });
-
-        document.getElementById("commandCategories").addEventListener("click", (e) => {
-            if (e.target.classList.contains("category")) {
-                this.setActiveCategory(e.target.dataset.category);
-            }
+          `;
+          commandsGrid.appendChild(commandCard);
         });
     }
-
-    setActiveCategory(category) {
-        this.activeCategory = category;
-        document.querySelectorAll('.category').forEach(cat => {
-            cat.classList.toggle('active', cat.dataset.category === category);
-        });
-        this.filterCommands(document.querySelector(".search-bar input").value);
-    }
-
-    filterCommands(searchText) {
-        this.renderCommands(searchText, this.activeCategory);
-    }
-
-    scrollCategories(value) {
-        const container = document.getElementById("commandCategories");
-        container.scrollLeft += value * 100;
-    }
+  });
 }
 
-// Initialize when the DOM is loaded
-window.addEventListener("load", () => {
-    const commandManager = new CommandManager();
-    commandManager.initialize();
-    
-    // Expose scrollCategories to global scope for HTML button onclick
-    window.scrollCategories = (value) => commandManager.scrollCategories(value);
-});
+function filterCategory(category, commandsData) {
+  activeCategory = category;
+  document.querySelectorAll('.category').forEach((el) => el.classList.remove('active'));
+  Array.from(categoriesContainer.children)
+    .find((el) => el.textContent.includes(category))
+    .classList.add('active');
+  renderCommands(commandsData);
+}
 
-document.addEventListener('DOMContentLoaded', () => {
-    hideLoader();
-});
+function countCommands(data) {
+  return Object.values(data).reduce((sum, commands) => sum + commands.length, 0);
+}
+
+function copyToClipboard(text) {
+  if (!navigator.clipboard || !navigator.clipboard.writeText) {
+    console.error('Clipboard API is not supported in this browser.');
+    showToast('Failed to copy: Clipboard not supported');
+    return;
+  }
+
+  navigator.clipboard.writeText(text)
+    .then(() => showToast(`Copied "${text}" to clipboard!`))
+    .catch(err => console.error('Failed to copy:', err));
+}
+
+function showToast(message) {
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.textContent = message;
+  toastContainer.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+
+
+
+fetchCommands();
+updateArrowVisibility();

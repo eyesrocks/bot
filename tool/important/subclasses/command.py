@@ -230,13 +230,12 @@ class Image(commands.Converter):
         if argument is None:
             if not ctx.message.attachments:
                 raise commands.BadArgument("No image was provided.")
-            return await ctx.message.attachments[0].to_file()
+            return await ctx.message.attachments[0].read()  # Changed to read() instead of to_file()
         async with Session() as session:
-            async with session.request("GET", argument) as response:
-                data = await response.read()
-        if not data:
-            raise commands.BadArgument("No image was provided.")
-        return data
+            async with session.get(argument) as response:  # Changed request() to get()
+                if response.status != 200:
+                    raise commands.BadArgument("Failed to fetch image.")
+                return await response.read()
 
 class VoiceMessage(commands.Converter):
     async def convert(self, ctx: "Context", argument: str = None, fail: bool = True) -> Optional[str]:
@@ -293,10 +292,9 @@ class Attachment(commands.Converter):
             logger.info("attachment search has a reference")
             if channel := ctx.guild.get_channel(ref.channel_id):
                 if message := await channel.fetch_message(ref.message_id):
-                    try:
+                    if message.attachments:
                         return message.attachments[0].url
-                    except Exception as e:
-                        logger.info(f"attachment.search failed with {str(e)}")
+                    logger.info("attachment.search failed: message has no attachments")
         if ctx.message.attachments:
             logger.info("message attachments exist")
             return ctx.message.attachments[0].url
@@ -350,9 +348,14 @@ class Role(commands.RoleConverter):
             try:
                 role = await super().convert(ctx, argument)
             except commands.RoleNotFound:
-                _roles = {r.name: r for r in ctx.guild.roles if r.is_assignable()}
-                if match := closest_match(argument.lower(), list(_roles.keys())):
-                    role = _roles.get(match)
+                # Make role lookup more efficient by using discord.utils.get
+                role = discord.utils.get(
+                    ctx.guild.roles,
+                    name=argument
+                ) or discord.utils.find(
+                    lambda r: argument.lower() in r.name.lower(),
+                    ctx.guild.roles
+                )
                     
             if not role or role.is_default():
                 raise commands.RoleNotFound(argument)
@@ -378,6 +381,7 @@ class Command(commands.Command):
 
     async def invoke(self, ctx: commands.Context, /) -> None:
         try:
+            # Use fetchrow asynchronously
             data = await ctx.bot.db.fetchrow(
                 """
                 SELECT status, whitelist 
@@ -395,7 +399,8 @@ class Command(commands.Command):
                 if data['whitelist'] and ctx.author.id in data['whitelist']:
                     return await self.invoke_command(ctx)
                 return await ctx.reply(
-                    "This command is disabled in this server.", 
+                    "This command is disabled in this server.",
+                    mention_author=False  # Added to prevent unnecessary mentions
                 )
                 
             return await self.invoke_command(ctx)

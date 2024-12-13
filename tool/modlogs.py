@@ -97,8 +97,11 @@ class Handler:
 
     async def check_user(self, user: Union[Member, User, Object]):
         if isinstance(user, Object):
-            user = self.bot.get_user(user.id) or await self.bot.fetch_user(user.id)
-            if not user:
+            try:
+                user = self.bot.get_user(user.id) or await self.bot.fetch_user(user.id)
+                if not user:
+                    return "Unknown User"
+            except discord.NotFound:
                 return "Unknown User"
         return user.mention
 
@@ -143,7 +146,7 @@ class Handler:
         if isinstance(ctx, Context):
             ctx = self.get_kwargs(ctx)
             args = ctx.kwargs
-            author_mention = ctx.author.mention
+            author_mention = ctx.author.mention if hasattr(ctx.author, 'mention') else "Unknown User"
             if event == EventType.jail:
                 embed.title = "Member Jailed"
                 embed.description = f"**Moderator:** {author_mention}\n> **Action:** jailed\n> **User:** {args['member'].mention}\n> **When:** {ts}"
@@ -227,103 +230,7 @@ class Handler:
                 embed.description = f"**Moderator:** {author_mention}\n> **Target:** {args['member'].name}\n> **Using:** {ctx.command.qualified_name}\n> **When:** {ts}"
             elif event == EventType.image_unmute:
                 embed.title = "Image UnMute"
-                embed.title = "Fake Permissions Removed"
-                embed.description = f"**Moderator:** {ctx.author.mention}\n**Action:** permissions removed from {ctx.kwargs['role'].mention}\n**When:** {ts}"
-            elif event == EventType.strip:
-                embed.title = "Member stripped"
-                embed.description = f"**Moderator:** {ctx.author.mention}\n> **Action:** `All roles removed`\n> **User:** {ctx.kwargs['member'].mention}\n> **When:** {ts}"
-            elif event == EventType.alias_create:
-                embed.title = "Bot Settings Updated"
-                args = ctx.kwargs["data"]
-                command = args.command
-                alias = args.alias
-                embed.description = f"**Moderator:** {ctx.author.mention}\n> **Action:** Created an alias\n> **Command:** `{command}`\n> **Alias Created:** `{alias}`\n> **When:** {ts}"
-            elif event == EventType.alias_delete:
-                embed.title = "Bot Settings Updated"
-                args = ctx.kwargs
-                embed.description = f"**Moderator:** {ctx.author.mention}\n> **Action:** Deleted an alias\n> **Command:** `{args['command']}`\n> **Alias Deleted:** `{args['alias']}`\n> **When:** {ts}"
-            elif event == EventType.command_disable:
-                embed.title = "Bot Settings Updated"
-                args = ctx.kwargs
-                embed.description = f"**Moderator:** {ctx.author.mention}\n> **Action:** Disabled a command\n> **Command:** `{args['command']}`\n> **When:** {ts}"
-            elif event == EventType.command_enable:
-                embed.title = "Bot Settings Updated"
-                args = ctx.kwargs
-                embed.description = f"**Moderator:** {ctx.author.mention}\n> **Action:** Enabled a command\n> **Command:** `{args['command']}`\n> **When:** {ts}"
-            elif event == EventType.ban:
-                embed.title = "Member banned"
-                args = ctx.kwargs
-                embed.description = f"**Moderator:** {ctx.author.mention}\n> **Punishment:** `BANNED`\n> **User:** {str(args['user'])}\n> **When:** {ts}"
-            elif event == EventType.kick:
-                embed.title = "user kicked"
-                args = ctx.kwargs
-                embed.description = f"**Moderator:** {ctx.author.mention}\n> **Punishment:** `KICKED`\n> **User:** {str(args['user'])}\n> **When:** {ts}"
-            elif event == EventType.time_out:
-                embed.title = "Member Muted"
-                args = ctx.kwargs
-                embed.description = (
-                    f"**Moderator:** {ctx.author.mention}\n"
-                    f"> **User:** {str(args.get('user', 'member'))}\n"
-                    f"> **Punishment:** member timeout\n"
-                    f"> **When:** {ts}\n"
-                    f"> **Timeout Duration:** {args['time']}"
-                )
-            elif event == EventType.role_assign:
-                embed.title = "Role(s) Assigned to user"
-                args = ctx.kwargs
-                roles = args.get("role", args.get("role_input"))
-                r = ", ".join(role.mention for role in roles) if len(roles) > 1 else roles[0].mention
-                e = f"{args['member'].mention}" if args.get("member") else ""
-                embed.description = f"**Moderator:** {ctx.author.mention}\n> **Role(s):** {r}\n> **User:** {e}\n> **When:** {ts}"
-            elif event == EventType.role_create:
-                embed.title = "Role Created"
-                args = ctx.kwargs
-                embed.description = f"**Moderator:** {ctx.author.mention}\n> **Role:** {args['name']}\n> **When:** {ts}"
-            elif event == EventType.role_update:
-                embed.title = "Role Updated"
-                args = ctx.kwargs
-                role = args.get("args").roles[0] if args.get("args") else args.get("role")
-                embed.description = f"**Moderator:** {ctx.author.mention}\n> Role: **{role.name}**\n> **Using:** {ctx.command.qualified_name}\n> **When:** {ts}" if role else "**Role information is unavailable**"
-            elif event == EventType.category_channel_create:
-                embed.title = "Category Created"
-                args = ctx.kwargs
-                embed.description = f"**Moderator:** {ctx.author.mention}\n> **Category:** {args['name']}\n> **How:** Created through Greeds `,category create` command\n> **When:** {ts}"
-            elif event == EventType.category_channel_delete:
-                embed.title = "Category Deleted"
-                args = ctx.kwargs
-                embed.description = f"**Moderator:** {ctx.author.mention}\n> **Category:** {args['category'].name}\n> **How:** Deleted through Greeds `,category delete` command\n> **When:** {ts}"
-            elif event == EventType.category_channel_update:
-                embed.title = "Category Updated"
-                args = ctx.kwargs
-                embed.description = f"**Moderator:** {ctx.author.mention}\n> **Category:** {args['category'].name}\n> **Using:** {ctx.command.qualified_name}\n> **When:** {ts}"
-            elif event == EventType.channel_create:
-                embed.title = "Channel Created"
-                args = ctx.kwargs
-                embed.description = f"**Moderator:** {ctx.author.mention}\n> **Channel:** {args['name']}\n> **How:** Created through Greeds `,channel create` command\n> **When:** {ts}"
-            elif event == EventType.channel_delete:
-                embed.title = "Channel Deleted"
-                args = ctx.kwargs
-                embed.description = f"**Moderator:** {ctx.author.mention}\n> **Channel:** {args['channel'].name}\n> **How:** Deleted through Greeds `,channel delete` command\n> **When:** {ts}"
-            elif event == EventType.channel_update:
-                embed.title = "Channel Updated"
-                args = ctx.kwargs
-                embed.description = f"**Moderator:** {ctx.author.mention}\n> **Channel:** {args['channel'].name}\n> **Using:** {ctx.command.qualified_name}\n> **When:** {ts}"
-            elif event == EventType.reaction_mute:
-                embed.title = "Reaction Mute"
-                args = ctx.kwargs
-                embed.description = f"**Moderator:** {ctx.author.mention}\n> **Target:** {args['member'].name}\n> **Using:** {ctx.command.qualified_name}\n> **When:** {ts}"
-            elif event == EventType.reaction_unmute:
-                embed.title = "Reaction UnMute"
-                args = ctx.kwargs
-                embed.description = f"**Moderator:** {ctx.author.mention}\n> **Target:** {args['member'].name}\n> **Using:** {ctx.command.qualified_name}\n> **When:** {ts}"
-            elif event == EventType.image_mute:
-                embed.title = "Image Mute"
-                args = ctx.kwargs
-                embed.description = f"**Moderator:** {ctx.author.mention}\n> **Target:** {args['member'].name}\n> **Using:** {ctx.command.qualified_name}\n> **When:** {ts}"
-            elif event == EventType.image_unmute:
-                embed.title = "Image UnMute"
-                args = ctx.kwargs
-                embed.description = f"**Moderator:** {ctx.author.mention}\n> **Target:** {args['member'].name}\n> **Using:** {ctx.command.qualified_name}\n> **When:** {ts}"
+                embed.description = f"**Moderator:** {author_mention}\n**Action:** permissions removed from {ctx.kwargs['role'].mention}\n**When:** {ts}"
             if embed.title is None:
                 if ctx.author.name == "aiohttp":
                     logger.info(

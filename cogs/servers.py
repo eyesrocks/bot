@@ -50,6 +50,44 @@ from tuuid import tuuid
 from loguru import logger
 from pydantic import BaseModel
 from loguru import logger as log
+from tool.greed import cache
+
+async def configure_reskin(
+    bot: discord.Client, channel: discord.TextChannel, webhooks: dict
+):
+    if not channel.permissions_for(channel.guild.me).manage_webhooks:
+        return False
+
+    if str(channel.id) in webhooks:  # We have to use str() because dicts are stupid
+        try:
+            await bot.fetch_webhook(webhooks[str(channel.id)])
+        except:
+            del webhooks[str(channel.id)]
+            await cache.delete_many(
+                f"reskin:channel:{channel.guild.id}:{channel.id}",
+                f"reskin:webhook:{channel.id}",f"reskin:guild:channel:{channel.guild.id}:{channel.id}"
+
+            )
+        else:
+            return True
+
+    try:
+        webhook = await asyncio.wait_for(
+            channel.create_webhook(name="reskin"),
+            timeout=5,
+        )
+    except:
+        return False
+    else:
+        webhooks[str(channel.id)] = webhook.id
+        try:
+            await cache.delete(f"reskin:channel:{channel.guild.id}:{channel.id}")
+            await cache.set(f"reskin:webhook:{channel.id}", webhook, expire="1h")
+#            await cach.delete(f"reskin:guild:channel:{channel.guild.id}:{channel.id}")
+            await cache.set(f"reskin:webhook:{channel.id}", webhook, expire="1h")
+        except:
+            pass
+        return webhook
 
 
 
@@ -425,10 +463,24 @@ class Servers(Cog):
     @commands.Cog.listener("on_message")
     async def on_message(self, message: discord.Message):
         if message.mention_everyone:
-            if data := await self.bot.db.fetchrow("""SELECT channels, message FROM notifications WHERE guild_id = $1""", message.guild.id):
-                channels = json.loads(data.channels)
-                if message.channel.id in channels:
-                    return await self.bot.send_embed(destination = message.channel, code = data.message, user = message.author)
+            data = await self.bot.db.fetchrow(
+                """SELECT channels, message FROM notifications WHERE guild_id = $1""", 
+                message.guild.id
+            )
+            if data:
+                if data.channels:
+                    try:
+                        channels = json.loads(data.channels)
+                        if message.channel.id in channels:
+                            return await self.bot.send_embed(
+                                destination=message.channel,
+                                code=data.message,
+                                user=message.author
+                            )
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Failed to parse channels as JSON: {e}")
+                else:
+                    logger.error("No channels found in the database.")
 
     @commands.group(name = "levels", brief = "setup level roles and autoboard", invoke_without_command = True, aliases = ['lvls'])
     async def levels(self, ctx: Context):
@@ -3711,6 +3763,182 @@ class Servers(Cog):
                 color=self.bot.color,
                 title=f"{ctx.guild.name} Auto-Reactions",
             )
+        )
+
+    @commands.group(
+        name="reskin",
+        invoke_without_command=True,
+    )
+    @commands.has_permissions(manage_guild=True)
+    async def reskin(self, ctx: Context):
+        """Customize the bot's appearance"""
+        if ctx.invoked_subcommand is None:
+            return await ctx.send_help(ctx.command.qualified_name)
+
+    @reskin.command(
+        name="setup",
+        aliases=["webhooks", "enable"],
+    )
+    @commands.has_permissions(manage_guild=True)
+    async def reskin_setup(self, ctx: Context):
+        """Set up the reskin webhooks"""
+        table = "reskin"
+        configuration = await self.bot.db.fetch_config(ctx.guild.id, table) or {}
+        configuration["status"] = True
+        webhooks = configuration.get("webhooks", {})
+
+
+        async with ctx.typing():
+            tasks = list()
+            for channel in ctx.guild.text_channels:
+                if any(
+                    ext in channel.name.lower()
+                    for ext in ("ticket", "log", "discrim", "bleed")
+                ) or (
+                    channel.category
+                    and any(
+                        ext in channel.category.name.lower()
+                        for ext in (
+                            "tickets",
+                            "logs",
+                            "jail",
+                            "pfps",
+                            "pfp",
+                            "icons",
+                            "icon",
+                            "banners",
+                            "banner",
+                        )
+                    )
+                ):
+                    continue
+
+                tasks.append(configure_reskin(self.bot, channel, webhooks))
+
+            gathered = await asyncio.gather(*tasks)
+            created = [webhook for webhook in gathered if webhook]
+
+        configuration["webhooks"] = webhooks
+        await self.bot.db.update_config(ctx.guild.id, table, configuration)
+
+        if not created:
+            return await ctx.fail(
+                "No **webhooks** were created"
+                + (
+                    str(gathered)
+                    if ctx.author.id in self.bot.owner_ids and any(gathered)
+                    else ""
+                ),
+            )
+
+        await ctx.success(
+            f"The **reskin webhooks** have been set across all channels"
+        )
+
+    @reskin.command(
+        name="disable",
+    )
+    @commands.has_permissions(manage_guild=True)
+    async def reskin_disable(self, ctx: Context):
+        """Disable the reskin webhooks"""
+        table = "reskin"
+
+        configuration = await self.bot.db.fetch_config(ctx.guild.id, table) or {}
+        if not configuration.get("status"):
+            return await ctx.fail(
+                "Reskin webhooks are already **disabled**"
+            )
+
+        configuration["status"] = False
+        await self.bot.db.update_config(ctx.guild.id, "reskin", configuration)
+        await ctx.success("Disabled **reskin** across the server")
+
+    @reskin.command(
+        name="name",
+        usage="```Swift\nSyntax: !reskin name <name>\nExample: !reskin name blame```",
+        brief="name",
+        aliases=["username"],
+    )
+    async def reskin_name(self, ctx: Context, *, username: str):
+        """Change your personal reskin username"""
+
+        premium = await self.bot.db.fetchrow(
+            "SELECT user_id FROM premium_users WHERE user_id = $1", ctx.author.id
+        )
+        if not premium:
+            return await ctx.fail("**Premium** is required to use this command join [/pomice](https://discord.gg/pomice) to learn more")
+        table = "reskin"
+        configuration = await self.bot.db.fetch_config(ctx.guild.id, table) or {}
+        if not configuration.get("status"):
+            return await ctx.fail(
+                f"Reskin webhooks are **disabled**\n> Use `{ctx.prefix}reskin setup` to set them up",
+            )
+
+        if len(username) > 32:
+            raise CommandError("Your name can't be longer than **32 characters**")
+
+        if table == "reskin":
+            await self.bot.db.execute(
+                "INSERT INTO reskin (user_id, username) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET username = $2",
+                ctx.author.id,
+                username,
+            )
+        
+        await ctx.success(f"Changed your **reskin username** to **{username}**")
+
+    @reskin.command(
+        name="delete",
+        aliases=["remove", "del", "r", "d"],
+        description="remove your reskin configuration",
+    )
+    async def reskin_delete(self, ctx: Context):
+        await self.bot.db.execute(
+            f"""DELETE FROM reskin WHERE user_id = $1""", ctx.author.id
+        )
+        return await ctx.success(
+            f"successfully **deleted** your reskin configuration"
+        )
+
+    @reskin.command(
+        name="avatar",
+        usage="```Swift\nSyntax: !reskin avatar <image>\nExample: !reskin avatar https://greed./greed.png```",
+        brief="image",
+        aliases=["icon", "av"],
+    )
+    async def reskin_avatar(self, ctx: Context, *, image: str = None):
+        """Change your personal reskin avatar"""
+
+        premium = await self.bot.db.fetchrow(
+            "SELECT user_id FROM donators WHERE user_id = $1", ctx.author.id
+        )
+        if not premium:
+            return await ctx.fail("**Premium** is required to use this command")
+        
+        if image != None:
+            if "-guild" in image: 
+                table = "guild_reskin"
+                image = image.replace("-guild", "")
+            else: table = "reskin"
+        else: table = "reskin"
+        if image is None:
+            if len(ctx.message.attachments) == 0:
+                raise discord.ext.commands.errors.CommandError(f"No Image provided")
+            image = ctx.message.attachments[0].url
+        configuration = await self.bot.db.fetch_config(ctx.guild.id, table) or {}
+        if not configuration.get("status"):
+            return await ctx.fail(
+                f"Reskin webhooks are **disabled**\n> Use `{ctx.prefix}reskin setup` to set them up",
+            )
+        if table == "reskin":
+            await self.bot.db.execute(
+                "INSERT INTO reskin (user_id, avatar_url) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET avatar_url = $2",
+                ctx.author.id,
+                image,
+            )
+        else: await self.bot.db.execute("""INSERT INTO guild_reskin (guild_id, avatar_url) VALUES($1,$2) ON CONFLICT(guild_id) DO UPDATE SET avatar_url = excluded.avatar_url""", ctx.guild.id, image)
+
+        await ctx.success(
+            f"Changed your **reskin avatar** to [**image**]({image})"
         )
 
     @commands.group(

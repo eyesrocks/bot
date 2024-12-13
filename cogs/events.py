@@ -25,6 +25,7 @@ from contextlib import suppress
 import re  # type: ignore
 from loguru import logger
 from cashews import cache
+import time
 
 cache.setup("mem://")
 
@@ -196,18 +197,23 @@ class Events(commands.Cog):
     
     @commands.Cog.listener("on_message")
     async def imageonly(self, message: discord.Message):
-        if message.author.bot:
+        if not message.guild or message.author.bot:
             return
+
+        if not message.channel.permissions_for(message.guild.me).manage_messages:
+            return
+
         if await self.bot.db.fetchval(
             "SELECT * FROM imageonly WHERE channel_id = $1", message.channel.id
         ):
             if message.content and not message.attachments or message.embeds:
-                return await message.delete()
-            else:
-                return
+                with suppress(discord.Forbidden, discord.HTTPException):
+                    await message.delete()
 
     @commands.Cog.listener("on_audit_log_entry_create")
     async def moderation_logs(self, entry: discord.AuditLogEntry):
+        if not entry.guild.me.guild_permissions.view_audit_log:
+            return
         return await self.bot.modlogs.do_log(entry)
 
 #    @commands.Cog.listener("on_text_level_up")
@@ -311,26 +317,34 @@ class Events(commands.Cog):
                 datetime.now(),
             )
 
-    # @commands.Cog.listener("on_user_update")
+    @commands.Cog.listener("on_user_update")
     async def namehistory_event(self, before, after):
-        if before.name != after.name and before.name is not None:
-            name = before.name
-            nt = "username"
-        elif before.global_name != after.global_name and before.global_name is not None:
-            name = before.global_name
-            nt = "globalname"
-        elif before.display_name != after.display_name and before.display_name is not None:
-            name = before.display_name
-            nt = "display"
-        else:
-            return
-        await self.bot.db.execute(
-            """INSERT INTO names (user_id, type, username, ts) VALUES($1,$2,$3,$4) ON CONFLICT(user_id,username,ts) DO NOTHING""",
-            before.id,
-            nt,
-            name,
-            datetime.now(),
-        )
+        async with self.bot.redis.lock(f"namehistory:{before.id}"):
+            if before.name != after.name and before.name is not None:
+                name = before.name
+                nt = "username"
+            elif before.global_name != after.global_name and before.global_name is not None:
+                name = before.global_name
+                nt = "globalname"
+            elif before.display_name != after.display_name and before.display_name is not None:
+                name = before.display_name
+                nt = "display"
+            else:
+                return
+                
+            cache_key = f"namehistory:{before.id}:{nt}:{name}"
+            if await self.bot.redis.get(cache_key):
+                return
+                
+            await self.bot.db.execute(
+                """INSERT INTO names (user_id, type, username, ts) VALUES($1,$2,$3,$4) ON CONFLICT(user_id,username,ts) DO NOTHING""",
+                before.id,
+                nt,
+                name,
+                datetime.now(),
+            )
+            
+            await self.bot.redis.set(cache_key, "1", ex=60)
 
     @commands.Cog.listener("on_audit_log_entry_create")
     async def audit_log_cache(self, entry: discord.AuditLogEntry):
@@ -700,12 +714,21 @@ class Events(commands.Cog):
         if message.author.bot or not message.guild:
             return
 
-        permissions = message.channel.permissions_for(message.guild.me)
-        if not all([
-            permissions.send_messages,
-            permissions.moderate_members,
-            permissions.manage_messages,
-        ]):
+        try:
+            if isinstance(message.channel, discord.Thread):
+                if not message.channel.parent:
+                    return
+                permissions = message.channel.parent.permissions_for(message.guild.me)
+            else:
+                permissions = message.channel.permissions_for(message.guild.me)
+
+            if not all([
+                permissions.send_messages,
+                permissions.moderate_members,
+                permissions.manage_messages,
+            ]):
+                return
+        except discord.ClientException:
             return
 
         if message.is_system and message.type == discord.MessageType.new_member:
@@ -771,39 +794,52 @@ class Events(commands.Cog):
         if message.author.bot or not message.guild:
             return
         if message.channel.permissions_for(message.guild.me).send_messages is False:
-            return self.debug(message, "no send_messages perms")
+            return self.debug(message, "no send_messages perms") 
         if message.guild.me.guild_permissions.moderate_members is False:
             return self.debug(message, "no moderate_members perms")
         if message.guild.me.guild_permissions.manage_messages is False:
             return self.debug(message, "no manage_members perms")
-        block_command_execution = False
+
+        # Gather all permission checks at once
         context = await self.bot.get_context(message)
-        filter_events = tuple(
-            record.event
-            for record in await self.bot.db.fetch(
-                "SELECT event FROM filter_event WHERE guild_id = $1", context.guild.id
-            )
+
+        # Fix the gather call by ensuring we have coroutines
+        db_fetch = self.bot.db.fetch(
+            "SELECT event FROM filter_event WHERE guild_id = $1", 
+            context.guild.id
         )
-        if afk_data := self.bot.afks.get(message.author.id):
-            if context.valid:
-                if context.command.qualified_name.lower() == "afk":
-                    pass
-                else:
-                    await self.do_afk(message, context, afk_data)
-            else:
+        afk_fetch = asyncio.create_task(
+            asyncio.to_thread(lambda: self.bot.afks.get(message.author.id))
+        )
+
+        filter_events, afk_data = await asyncio.gather(
+            db_fetch,
+            afk_fetch,
+            return_exceptions=True
+        )
+
+        filter_events = tuple(record.event for record in filter_events) if isinstance(filter_events, list) else ()
+
+        # Handle AFK status
+        if isinstance(afk_data, dict):
+            if not context.valid or context.command.qualified_name.lower() != "afk":
                 await self.do_afk(message, context, afk_data)
 
+        # Process mentions in parallel
         if message.mentions:
+            mention_tasks = []
             for user in message.mentions:
                 if user_afk := self.bot.afks.get(user.id):
                     if not await self.bot.glory_cache.ratelimited(
                         f"rl:afk_mention_message:{message.channel.id}", 2, 5
                     ):
-                        embed = discord.Embed(
-                            description=f"{message.author.mention}: {user.mention} is AFK: **{user_afk['status']} ** - {humanize.naturaltime(datetime.now() - user_afk['date'])}",
-                            color=0xffffff,
-                        )
-                        await context.send(embed=embed)
+                        mention_tasks.append(self.handle_afk_mention(context, message, user, user_afk))
+            
+            if mention_tasks:
+                await asyncio.gather(*mention_tasks, return_exceptions=True)
+
+        block_command_execution = False
+
         if timeframe := await self.bot.db.fetchval(
             """SELECT timeframe FROM automod_timeout WHERE guild_id = $1""",
             message.guild.id,
@@ -861,7 +897,7 @@ class Events(commands.Cog):
 
                             await sleep(0.001)
 
-                    ensure_future(do_filter())
+                    asyncio.create_task(do_filter())
 
         if (
             "spoilers" in filter_events
@@ -1122,7 +1158,7 @@ class Events(commands.Cog):
                     pass
 
             with suppress(discord.errors.HTTPException):
-                await do_autoreact()
+                asyncio.create_task(do_autoreact())
 
             tasks = []
             if await self.get_event_types(message):
@@ -1163,6 +1199,26 @@ class Events(commands.Cog):
             pass
         if not block_command_execution:
             return
+
+    async def handle_afk_mention(self, ctx, message, user, user_afk):
+        embed = discord.Embed(
+            description=f"{message.author.mention}: {user.mention} is AFK: **{user_afk['status']} ** - {humanize.naturaltime(datetime.now() - user_afk['date'])}",
+            color=0xffffff,
+        )
+        await ctx.send(embed=embed)
+
+    @commands.Cog.listener("on_member_join")
+    async def on_member_join(self, member: discord.Member):
+        if not member.guild.me.guild_permissions.manage_roles:
+            return
+
+        # Run autorole and jail checks concurrently
+        await asyncio.gather(
+            self.autorole_give(member),
+            self.jail_check(member),
+            self.pingonjoin_listener(member),
+            return_exceptions=True
+        )
 
     async def check_roles(self, member: discord.Member) -> bool:
         if len(member.roles) > 0:
@@ -1206,23 +1262,31 @@ class Events(commands.Cog):
     async def booster_role_event(self, before: discord.Member, after: discord.Member):
         if after.bot:
             return
+            
+        if not after.guild.me.guild_permissions.manage_roles:
+            return
+
+        # Handle boosting role add
         if before.premium_since is None and after.premium_since is not None:
             if data := await self.bot.db.fetchrow(
                 "SELECT * FROM guild.boost WHERE guild_id = $1", before.guild.id
             ):
                 channel = before.guild.get_channel(data.channel_id)
-                # embed = await EmbedBuilder(message.author).build_embed(data.message)
-                if channel and isinstance(channel, discord.TextChannel):
-                    await self.bot.send_embed(channel, data.message, user=after)
-        if before.premium_since is None and after.premium_since is not None:
+                if isinstance(channel, discord.TextChannel):
+                    if channel.permissions_for(after.guild.me).send_messages:
+                        await self.bot.send_embed(channel, data.message, user=after)
+                        
             if data := await self.bot.db.fetch(
                 """SELECT role_id FROM premiumrole WHERE guild_id = $1""",
                 after.guild.id,
             ):
                 for role_id in data:
                     if role := after.guild.get_role(role_id):
-                        if role not in after.roles:
-                            await after.add_roles(role, reason="Booster Role")
+                        if role not in after.roles and role.position < after.guild.me.top_role.position:
+                            with suppress(discord.Forbidden):
+                                await after.add_roles(role, reason="Booster Role")
+
+        # Handle boosting role remove                
         elif before.premium_since is not None and after.premium_since is None:
             if data := await self.bot.db.fetch(
                 """SELECT role_id FROM premiumrole WHERE guild_id = $1""",
@@ -1230,8 +1294,9 @@ class Events(commands.Cog):
             ):
                 for role_id in data:
                     if role := after.guild.get_role(role_id):
-                        if role in after.roles:
-                            await after.remove_roles(role, reason="Booster Role")
+                        if role in after.roles and role.position < after.guild.me.top_role.position:
+                            with suppress(discord.Forbidden):
+                                await after.remove_roles(role, reason="Booster Role")
 
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member):  # type: ignore
@@ -1258,32 +1323,58 @@ class Events(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message_delete(self, message: discord.Message):
-        if message.author.id == self.bot.user.id or message.author.id == 123:
+        if message.author.id in (self.bot.user.id, 123):
             return
-        return await self.bot.snipes.add_entry("snipe", message)
+            
+        if not message.guild:
+            return
+            
+        if not message.channel.permissions_for(message.guild.me).view_channel:
+            return
+            
+        await self.bot.snipes.add_entry("snipe", message)
 
     @commands.Cog.listener()
     async def on_message_edit(self, before: discord.Message, after: discord.Message):
-        if before.content != after.content and before.author.id != self.bot.user.id:
-            return await self.bot.snipes.add_entry("editsnipe", before)
+        if before.content == after.content or before.author.id == self.bot.user.id:
+            return
+            
+        if not before.guild:
+            return
+            
+        if not before.channel.permissions_for(before.guild.me).view_channel:
+            return
+            
+        await self.bot.snipes.add_entry("editsnipe", before)
 
     @commands.Cog.listener()
     async def on_reaction_remove(
         self, reaction: discord.Reaction, user: Union[discord.Member, discord.User]
     ):
-        return await self.bot.snipes.add_entry("rs", (reaction, user))
+        if not reaction.message.guild:
+            return
+            
+        if not reaction.message.channel.permissions_for(reaction.message.guild.me).view_channel:
+            return
+            
+        await self.bot.snipes.add_entry("rs", (reaction, user))
 
     @commands.Cog.listener("on_member_join")
     async def autorole_give(self, member: discord.Member):
+        if not member.guild.me.guild_permissions.manage_roles:
+            return
+            
         if data := self.bot.cache.autorole.get(member.guild.id):
-            roles = [
-                member.guild.get_role(i)
-                for i in data
-                if member.guild.get_role(i) is not None
-            ]
-            if await self.bot.glory_cache.ratelimited("ar", 4, 6) is not True:
+            roles = []
+            for role_id in data:
+                if role := member.guild.get_role(role_id):
+                    if role.position < member.guild.me.top_role.position:
+                        roles.append(role)
+            
+            if roles and await self.bot.glory_cache.ratelimited("ar", 4, 6) is not True:
                 await asyncio.sleep(4)
-            await member.add_roles(*roles, atomic=False)
+                with suppress(discord.Forbidden, discord.HTTPException):
+                    await member.add_roles(*roles, reason="Auto Role")
 
     @tasks.loop(minutes=10)
     async def voicemaster_clear(self):
@@ -1296,6 +1387,7 @@ class Events(commands.Cog):
                 """SELECT guild_id, channel_id FROM voicemaster_data"""
             )
 
+            # Process channels in smaller batches
             for batch in [rows[i:i + 10] for i in range(0, len(rows), 10)]:
                 delete_tasks = []
                 
@@ -1496,56 +1588,111 @@ class Events(commands.Cog):
                                 with suppress(discord.errors.NotFound):
                                     await before.channel.delete()
     @commands.Cog.listener("on_member_join")
-    @ratelimit("pingonjoin:{guild.id}", 2, 3, False) 
+    @ratelimit("pingonjoin:{guild.id}", 2, 3, False)
     async def pingonjoin_listener(self, member: discord.Member):
-        """Handles pinging new members when they join"""
+        """Handles pinging new members when they join."""
+        self.MAX_DELAY = 10
+        self.MIN_DELAY = 2
+        self.DEFAULT_THRESHOLD = 3
+        self.MAX_MENTIONS = 20
+
+        if not member.guild.me.guild_permissions.send_messages:
+            return
+
         try:
-            # Get ping on join config for this guild
-            record = await self.bot.db.fetchrow(
-                "SELECT channel_id, threshold, message FROM pingonjoin WHERE guild_id = $1",
-                member.guild.id
-            )
+            # Cache key for pingonjoin configuration
+            key = f"pingonjoin:{member.guild.id}"
+            record = await cache.get(key)
+
+            if not record:
+                # Fetch configuration from the database
+                record = await self.bot.db.fetchrow(
+                    "SELECT channel_id, threshold, message FROM pingonjoin WHERE guild_id = $1",
+                    member.guild.id
+                )
+                if record:
+                    record = dict(record)
+                    await cache.set(key, record)
+
             if not record:
                 return
 
+            # Retrieve and validate the channel
             channel = member.guild.get_channel(record["channel_id"])
-            if not channel or not isinstance(channel, discord.TextChannel):
+            if not isinstance(channel, discord.TextChannel):
                 return
-            
-            delay = record["threshold"] or 1
-            message = record["message"] or "{user.mention}"
-            
-            try:
-                temp_msg = await self.bot.send_embed(
-                    channel, 
-                    message,
-                    user=member
-                )
-                await temp_msg.delete(delay=1)
-            except discord.Forbidden:
-                return
+
+            # Determine the delay and construct the message
+            delay = min(max(record.get("threshold", self.DEFAULT_THRESHOLD) + 1, self.MIN_DELAY), self.MAX_DELAY)
+            message_template = record.get("message", "{user.mention}")
+
+            # Collect members to ping
             members = [member]
+            start_time = time.time()
+
             try:
-                while True:
+                while (time.time() - start_time) < delay:
                     new_member = await self.bot.wait_for(
                         "member_join",
-                        timeout=delay,
+                        timeout=delay - (time.time() - start_time),
                         check=lambda m: m.guild.id == member.guild.id
                     )
                     members.append(new_member)
+                    if len(members) >= self.MAX_MENTIONS:
+                        break
             except asyncio.TimeoutError:
                 pass
-            if len(members) > 0:
-                mentions = ", ".join(m.mention for m in members[:20])
-                final_message = message.replace("{mentions}", mentions)
-                
-                try:
-                    await channel.send(final_message)
-                except discord.Forbidden:
-                    pass
+
+            # Construct and send the final message
+            mentions = ", ".join(m.mention for m in members)
+            final_message = message_template.replace("{user.mention}", mentions)
+
+            with suppress(discord.Forbidden, discord.HTTPException):
+                message = await channel.send(final_message)
+                await message.delete(delay=delay + 1)
 
         except Exception as e:
-            logger.error(f"Error in pingonjoin_listener: {str(e)}")
+            logger.error(f"Error in pingonjoin_listener for guild {member.guild.id}: {str(e)}")
+
+
+    @commands.Cog.listener("on_member_join")
+    async def jail_check(self, member: discord.Member):
+        """Check and apply jail role if member was previously jailed"""
+        try:
+            # Check if member was previously jailed
+            jailed = await self.bot.db.fetchrow(
+                "SELECT * FROM jailed WHERE guild_id = $1 AND user_id = $2",
+                member.guild.id, 
+                member.id
+            )
+
+            if not jailed:
+                return
+
+            jail_role = discord.utils.get(member.guild.roles, name="jailed")
+            if not jail_role:
+                return
+                
+            removable_roles = [
+                role for role in member.roles 
+                if role != member.guild.default_role
+                and role.position < member.guild.me.top_role.position
+            ]
+            
+            if removable_roles:
+                with suppress(discord.Forbidden, discord.HTTPException):
+                    await member.remove_roles(*removable_roles, reason="Member was previously jailed")
+                
+            with suppress(discord.Forbidden, discord.HTTPException):
+                await member.add_roles(jail_role, reason="Member was previously jailed")
+                
+        except Exception as e:
+            logger.error(f"Error in jail_check for {member}: {str(e)}")
+
+
+
+
+
 
 
 async def setup(bot):

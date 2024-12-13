@@ -14,6 +14,7 @@ from discord.ext import tasks
 from loguru import logger
 from tool.greed import Greed
 
+
 class Instance(Greed):
     def __init__(self, config: dict, *args: Any, **kwargs: Any):
         super().__init__(config, *args, **kwargs)
@@ -22,6 +23,8 @@ class Instance(Greed):
         data = await self.db.fetchrow("""SELECT * FROM instances WHERE bot_id = $1""", self.user.id)
         if data:
             if data.guild_id == guild.id:
+                return
+            if guild.id == 1301617147964821524:
                 return
 
         logger.info(f"leaving guild {guild.name} due to it not being whitelisted inside of {data}")
@@ -33,16 +36,19 @@ class Instance(Greed):
         return await super().on_ready()
 
     async def setup_hook(self) -> None:
+        await self.setup_emojis()
         if data := await self.db.fetchrow("""SELECT status_type, status_text FROM instances WHERE bot_id = $1""", self.user.id):
             kwargs = {"status": Status.idle} if data.status_type == 1 else {}
             await self.change_presence(activity = Activity(name=data.status_text, type=data.status_type, url="https://twitch.tv/clock"), **kwargs)
         await super().setup_connection(False)
+
         if os.path.exists(f"/root/greed/cogs/custom/{self.user.id}.py"):
             await self.load_extension(f"cogs.custom.{self.user.id}")
 
     async def start(self, token: str, reconnect: bool = True) -> None:
         await super().login(token)
         ensure_future(super().connect(reconnect = True))
+
 
 async def setup_connection(bot: Greed, instance: Instance) -> bool:
     instance.db = bot.db
@@ -168,51 +174,43 @@ class Instances(Cog):
         await bot.change_presence(activity=Activity(name=status_text, type=status_type, url="https://twitch.tv/clock"), **kwargs)
         return True
 
-    @tasks.loop(minutes = 10)
+    @tasks.loop(minutes=10)
     async def check_instance(self):
         for user_id in self.bot.instances.keys():
-            if user_data := await self.bot.db.fetchrow("""SELECT user_id, expiration FROM instance_whitelist WHERE user_id = $1""", user_id):
-                if user_data.expiration:
-                    if user_data.expiration > datetime.now(timezone.utc):
-                        await self.bot.instances[user_id].close()
-                        self.bot.instances.pop(user_id)
-
+            user_data = await self.bot.db.fetchrow(
+                """SELECT user_id, expiration FROM instance_whitelist WHERE user_id = $1""",
+                user_id
+            )
+            if user_data and user_data.expiration and user_data.expiration < datetime.now(timezone.utc):
+                await self.bot.instances[user_id].close()
+                self.bot.instances.pop(user_id)
+    
         for user_id, bot in self.bot.instances.items():
             if bot.is_closed():
-                await bot.start(token = bot.config['token'], reconnect=True)
+                await bot.start(token=bot.config['token'], reconnect=True)
 
     async def cog_load(self):
         try:
-            await self.bot.connection.add_route(self.change_instance_presence)
-        except Exception:
-            pass
-        if self.bot.connection.local_name != "cluster1":
-            return
-        async def check(row):
-            user_data = await self.bot.db.fetchrow("""SELECT expiration FROM instance_whitelist WHERE user_id = $1""", row.user_id)
-            if not user_data:
+            if not hasattr(self.bot, "connection") or self.bot.connection is None:
+                logger.error("Bot connection is not initialized. Deferring instance checks.")
                 return
-            if user_data.get("expiration"):
-                if row.expiration < datetime.now(timezone.utc):
-                    if row.user_id not in self.bot.instances:
-                        for source in self.bot.ipc.sources:
-                            if source != self.bot.connection.local_name:
-                                if await self.bot.connection.request("get_instance", source = source, user_id = row.user_id) != False:
-                                    return
-                        await self.start_instance(row.token, row.user_id)
-            else:
-                if row.user_id not in self.bot.instances:
-                    for source in self.bot.ipc.sources:
-                        if source != self.bot.connection.local_name:
-                            if await self.bot.connection.request("get_instance", source = source, user_id = row.user_id) != False:
-                                return
-                    await self.start_instance(row.token, row.user_id)
 
-        for row in await self.bot.db.fetch("""SELECT * FROM instances"""):
             try:
-                await check(row)
+                await self.bot.connection.add_route(self.change_instance_presence)
             except Exception:
                 pass
+
+            if self.bot.connection.local_name != "cluster1":
+                return
+
+            for row in await self.bot.db.fetch("SELECT * FROM instances"):
+                try:
+                    await self.start_instance(row.token, row.user_id)
+                except Exception as e:
+                    logger.error(f"Failed to start instance for user {row.user_id}: {e}")
+        except AttributeError as e:
+            logger.error(f"Error in cog_load: {e}")
+
 
     async def cog_unload(self):
        self.check_instance.stop()
@@ -307,7 +305,7 @@ class Instances(Cog):
             return
         if timeframe:
             delta = timedelta(seconds = timeframe)
-            exp88iration = datetime.now() + delta
+            expiration = datetime.now() + delta
         else:
             expiration = None
         await self.bot.db.execute("""INSERT INTO instance_whitelist (user_id, expiration) VALUES($1, $2) ON CONFLICT(user_id) DO UPDATE SET expiration = excluded.expiration""", user.id, expiration)
@@ -329,7 +327,5 @@ class Instances(Cog):
         return await ctx.success(f"successfully ended {user.mention}'s instance")
     
 
-
-    
 async def setup(bot: Client):
     await bot.add_cog(Instances(bot))

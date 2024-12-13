@@ -218,7 +218,7 @@ class Fun(commands.Cog):
     @vape.command(name="hit")
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def vape_hit(self, ctx):
-        await ctx.invoke(self.vape)
+        await .invoke(self.vape)
 
     @vape.command(name="steal")
     @commands.cooldown(1, 10, commands.BucketType.user)

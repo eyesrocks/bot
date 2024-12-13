@@ -6,6 +6,7 @@ from discord.utils import format_dt
 from typing import Optional, Dict, List, Union
 from contextlib import suppress
 from datetime import datetime
+from humanize import naturaltime
 
 from cashews import cache
 from asyncio import sleep
@@ -22,6 +23,8 @@ from loguru import logger
 from re import search, compile
 from io import BytesIO
 from bs4 import BeautifulSoup
+import tempfile
+import os
 import urllib.parse
 
 @dataclass
@@ -284,14 +287,16 @@ class Socials(commands.Cog):
             "youtube": compile(
              "(?:https?:\/\/)?(?:www\.|m\.)?(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})"
             ),
-            "soundcloud": compile(
-            r"(?:https?:\/\/)?(?:www\.|m\.)?soundcloud\.com\/([a-zA-Z0-9-_]+)(?:\/[a-zA-Z0-9-_]+)?"
+            "SoundCloud": (
+                r"(?:https?:\/\/)?(?:www\.)?soundcloud\.com\/(?P<username>[a-zA-Z0-9_-]+)\/(?P<slug>[a-zA-Z0-9_-]+)",
+                r"(?:https?:\/\/)?(?:www\.)?soundcloud\.app\.goo\.gl\/([a-zA-Z0-9_-]+)",
+                r"(?:https?:\/\/)?on\.soundcloud\.com\/([a-zA-Z0-9_-]+)"
             ),
             "tiktok": compile(
                r"(?:https?:\/\/)?(?:www\.|m\.)?(?:vm\.)?tiktok\.com\/(?:@[\w.-]+\/)?(?:video\/|t\/)?([a-zA-Z0-9-_]+)"
             ),
             "instagram": compile(
-                r"(?:https?:\/\/)?(?:www\.|m\.)?instagram\.com\/p\/([a-zA-Z0-9-_]+)"
+                r"(?:https?:\/\/)?(?:www\.|m\.)?instagram\.com\/(?:p|reels?)\/([a-zA-Z0-9-_]+)"
             ),
         }
         self.ytdl = YoutubeDL(
@@ -386,7 +391,6 @@ class Socials(commands.Cog):
         except Exception as e:
             return logger.error(f"Youtube request: {e}")
             
-
         embed = Embed(
             description=f"[{data.title}]({data.webpage_url})",
             url=url,
@@ -399,34 +403,161 @@ class Socials(commands.Cog):
         if likes and views:
             embed.set_footer(text=f"{likes:,} likes | {views:,} views")
 
-        await ctx.send(embed=embed, file=File(BytesIO(buffer), filename=f"{data.title}.{data.ext}"))
-
-
-    @commands.Cog.listener("on_tiktok_request")
-    async def on_tiktok_request(self, ctx: Context, url: URL) -> Message:
-        data = await self.extract_data(url)
-        if data:
-            try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(data.url) as response:
-                        if response.status != 200:
+        try:
+            async with ctx.typing():
+                for attempt in range(3):  # Add retry logic
+                    try:
+                        await ctx.send(embed=embed, file=File(BytesIO(buffer), filename=f"{data.title}.{data.ext}"))
+                        break
+                    except (IndexError, ConnectionError) as e:
+                        if attempt == 2:  # Last attempt
+                            logger.error(f"Failed to send YouTube video after 3 attempts: {e}")
+                            await ctx.error("Failed to process the YouTube video. Please try again later.")
                             return
-                        buffer: bytes = await response.read()
-            except Exception as e:
-                return logger.error(f"TikTok request: {e}")
+                        await asyncio.sleep(1)  # Wait before retrying
+        except Exception as e:
+            logger.error(f"Error in YouTube request handler: {e}")
+            await ctx.error("An error occurred while processing your request.")
 
-            embed = Embed(
-                description=f"[{data.title}]({data.Referer}) \n\n{data.description}",
-                url=url,
-            )
+    @commands.Cog.listener()
+    async def on_instagram_request(self, ctx: Context, url: URL) -> Message:
+        data = await self.extract_data(url)
+        logger.info(data)
+        if not data:
+            return
 
-            if data.uploader:
-                embed.set_author(name=data.uploader)
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(data.url) as response:
+                    if response.status != 200:
+                        return
+                    buffer: bytes = await response.read()
+        except Exception as e:
+            return logger.error(f"Instagram request: {e}")
 
-            if data.like_count and data.view_count:
-                embed.set_footer(text=f"{data.like_count:,} likes | {data.view_count:,} views")
+        embed = Embed(
+            description=f"[{data.title}]({data.webpage_url})",
+            url=url,
+        )
 
-            await ctx.send(embed=embed, file=File(BytesIO(buffer), filename=f"{data.title}.{data.ext}"))
+        if author := data.get("uploader"):
+            embed.set_author(name=author, icon_url=data.thumbnail if data.thumbnail else None)
+
+        embed.set_footer(text=f"uploaded {naturaltime(data.upload_date)}")
+
+        await ctx.send(embed=embed, file=File(BytesIO(buffer), filename=f"{data.title}.{data.ext}"))
+    @commands.Cog.listener()
+    async def on_soundcloud_request(self, ctx, username, slug):
+        
+        url = f"https://soundcloud.com/{username}/{slug}"
+        
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+            'quiet': True,
+            'logtostderr': True,
+            'extract_flat': False,
+            'no_warnings': True,
+            'outtmpl': '%(title)s.%(ext)s'
+        }
+        
+        try:
+            with YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                title = info['title']
+                final_file = f"{title}.mp3"
+                
+                embed = Embed(
+                    title=title,
+                    url=url,
+                    description=f"Duration: {info.get('duration_string', 'Unknown')}"
+                )
+                
+                if uploader := info.get('uploader'):
+                    embed.set_author(
+                        name=uploader,
+                        icon_url=ctx.author.avatar.url if ctx.author.avatar else ctx.author.default_avatar.url
+                    )
+                    
+                if thumbnail := info.get('thumbnail'):
+                    embed.set_thumbnail(url=thumbnail)
+                    
+                if views := info.get('view_count'):
+                    embed.set_footer(text=f"{views:,} plays")
+
+                await ctx.send(
+                    embed=embed,
+                    file=File(
+                        fp=final_file,
+                        filename=f"{title}.mp3",
+                        description="voice-message",
+                        spoiler=False
+                    )
+                )                
+                if os.path.exists(final_file):
+                    os.unlink(final_file)
+                    
+        except Exception as e:
+            logger.error(f"SoundCloud request failed: {e}")
+            await ctx.fail("That SoundCloud track could not be found!")
+
+    def extract_soundcloud_url_parts(self, track: str) -> tuple[str, str]:
+        """Extract username and slug from SoundCloud track URL or format string."""
+        # Check if it's already a URL
+        main_pattern, *short_patterns = self.services["SoundCloud"]
+        
+        # Try main pattern first
+        if match := search(main_pattern, track):
+            return match.group("username"), match.group("slug")
+            
+        # Try to resolve short URLs
+        for pattern in short_patterns:
+            if match := search(pattern, track):
+                # Fetch the resolved URL
+                short_url = track
+                if not track.startswith(('http://', 'https://')):
+                    short_url = f"https://{track}"
+                    
+                # Use a synchronous request here since we're in a sync method
+                import requests
+                try:
+                    response = requests.get(short_url, allow_redirects=True)
+                    if response.status_code == 200:
+                        # Try to match the resolved URL
+                        if resolved_match := search(main_pattern, response.url):
+                            return resolved_match.group("username"), resolved_match.group("slug")
+                except:
+                    pass
+        
+        # If it's not a URL, assume it's in format "artist/track-name"
+        if "/" in track:
+            username, slug = track.split("/", 1)
+            return username.strip(), slug.strip()
+            
+        raise commands.CommandError("Invalid SoundCloud track format. Use 'artist/track-name' or a valid SoundCloud URL.")
+
+    @app_commands.command(
+        name="soundcloud",
+        description="Download a track from SoundCloud.",
+    )
+    @app_commands.describe(track="The SoundCloud track (artist/track-name or URL)")
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+    @app_commands.allowed_installs(users=True, guilds=True)
+    async def soundcloud_command(self, interaction: Interaction, track: str):
+        """Download a track from SoundCloud."""
+        await interaction.response.defer()
+        
+        try:
+            username, slug = self.extract_soundcloud_url_parts(track)
+            ctx = await Context.from_interaction(interaction)
+            await self.on_soundcloud_request(ctx, username, slug)
+        except Exception as e:
+            logger.error(f"SoundCloud command failed: {e}")
+            await interaction.followup.send("Failed to process that SoundCloud track!")
 
     @app_commands.command(
         name="roblox",
@@ -441,6 +572,7 @@ class Socials(commands.Cog):
         if user:
             await self.roblox(ctx, user)
 
+            
 
     @commands.command(
         name="roblox",
@@ -451,50 +583,81 @@ class Socials(commands.Cog):
     async def roblox(self, ctx: Context, user: RobloxUserModel):
         """Get information about a Roblox user."""
         async with ctx.typing():
-            embed = Embed(
-                title=f"{user.display_name} ({user.name}) {'[BANNED]' if user.is_banned else ''}",
-                description=f"{user.description} \n\n{format_dt(user.created_at, 'R')}",
-                url=user.url,
-            )
-
-            if avatar_url := await user.avatar_url():
-                embed.set_thumbnail(url=avatar_url)
-
-            if presence := await user.presence():
-                embed.add_field(
-                    name="Presence",
-                    value=(
-                        f"Status: {presence.status}\n"
-                        f"Location: {presence.location}\n"
-                        f"Last Online: {format_dt(presence.last_online, 'R')}"
-                    ),
-                    inline=False,
-                )
-            
-            if badges := await user.badges():
-                embed.add_field(
-                    name="Badges",
-                    value="\n".join(
-                        f"[{badge.name}]({badge.url})" for badge in badges
-                    ),
-                    inline=False,
-                )
-            
-            if names := await user.names():
-                embed.add_field(
-                    name="Previous Names",
-                    value="\n".join(names),
-                    inline=False,
+            try:
+                embed = Embed(
+                    title=f"{user.display_name} ({user.name}) {'[BANNED]' if user.is_banned else ''}",
+                    description=f"{user.description} \n\n{format_dt(user.created_at, 'R')}",
+                    url=user.url,
                 )
 
-            embed.set_footer(
-                text=f"Followers: {await user.follower_count()} | Following: {await user.following_count()} | Friends: {await user.friend_count()}"
-            )
+                if avatar_url := await user.avatar_url():
+                    embed.set_thumbnail(url=avatar_url)
 
+                if presence := await user.presence():
+                    embed.add_field(
+                        name="Presence",
+                        value=(
+                            f"Status: {presence.status}\n"
+                            f"Location: {presence.location}\n"
+                            f"Last Online: {format_dt(presence.last_online, 'R')}"
+                        ),
+                        inline=False,
+                    )
+                
+                if badges := await user.badges():
+                    embed.add_field(
+                        name="Badges",
+                        value="\n".join(
+                            f"[{badge.name}]({badge.url})" for badge in badges
+                        ),
+                        inline=False,
+                    )
+                
+                if names := await user.names():
+                    embed.add_field(
+                        name="Previous Names",
+                        value="\n".join(names),
+                        inline=False,
+                    )
+
+                embed.set_footer(
+                    text=f"Followers: {await user.follower_count()} | Following: {await user.following_count()} | Friends: {await user.friend_count()}"
+                )
+            except TooManyRequests:
+                return await ctx.fail("The Roblox API rate limit has been exceeded. Please try again later.")
+            except Exception as e:
+                return logger.error(f"Roblox command: {e}")
         await ctx.send(embed=embed)
 
 
 
+    @commands.command(
+        name = "google",
+        aliases = ["g", "ddg", "search"],
+        brief = "Search the web using Google.",
+        example = ",google how to make a sandwich"
+    )
+    async def google(self, ctx: Context, *, query: str):
+        """Search the web using Google."""
+        async with ctx.typing():
+            scraper = GoogleScraper()
+            results = await scraper.search(query)
+
+            if not results:
+                return await ctx.fail("No results found for that query.")
+
+            embeds = []
+            for i in range(0, len(results), 3):
+                embed = Embed(title=f"Search Results")
+                for result in results[i:i+3]:
+                    embed.add_field(
+                        name=result.title,
+                        value=f"[{result.snippet}]({result.link})",
+                        inline=False
+                    )
+                    embed.set_footer(text=f"Page {i // 3 + 1}")
+                embeds.append(embed)
+        await ctx.paginate(embeds)
 
 async def setup(bot):
     await bot.add_cog(Socials(bot))

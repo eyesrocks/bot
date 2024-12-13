@@ -17,7 +17,7 @@ from tool.snipe import SnipeError  # type: ignore
 from tool.important.subclasses.command import RolePosition  # type: ignore
 from tool.important.subclasses.parser import EmbedError  # type: ignore
 from loguru import logger
-from discord.errors import HTTPException
+from discord.errors import HTTPException, Forbidden  # type: ignore
 from tool.processing import codeblock  # type: ignore
 from aiohttp.client_exceptions import (
     ClientConnectorError,
@@ -155,7 +155,7 @@ class Errors(Cog):
                 f"rl:cooldown_message:{ctx.author.id}", 1, self.get_rl(exception) or 5
             ):
                 return
-            return await ctx.warning(error.message)
+            return await ctx.send_help()
         elif isinstance(exception, EmbedError):
             if await self.bot.glory_cache.ratelimited(
                 f"rl:cooldown_message{ctx.author.id}", 3, 5
@@ -232,7 +232,7 @@ class Errors(Cog):
                 f"rl:error_message:{ctx.author.id}", 3, 5
             ):
                 return
-            return await ctx.warning(get_message(exception.param.name.replace("role_input", "role")))
+            return await ctx.send_help(ctx.command)
         if isinstance(exception, commands.BadArgument):
             error = exception
             tb = "".join(
@@ -430,6 +430,8 @@ class Errors(Cog):
                 return await ctx.warning("**Webhook** not found")
             elif exception.code == "10062":
                 return
+            elif exception.code == "50074":
+                return await ctx.warning("**Cannot edit a channel required by community servers!**")
             else:
                 self.log_error(ctx, exception)
                 return await self.bot.send_exception(ctx, exception)
@@ -443,6 +445,8 @@ class Errors(Cog):
     async def on_error(self, ctx: Context, exception: Exception):
         try:
             return await self.handle_exceptions(ctx, exception)
+        except Forbidden:
+            return
         except Exception as e:
             self.log_error(ctx, e)
 

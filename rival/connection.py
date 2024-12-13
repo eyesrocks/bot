@@ -37,23 +37,6 @@ Coro = TypeVar('Coro', bound=Callable[..., Coroutine[Any, Any, Any]])
 
 
 class Connection:
-    r"""Represents a rival Client.
-    This class is used to interact with the Server
-
-    Parameters
-    -----------
-    local_name: :class:`str`
-        The name which will be used to refer to this client.
-        This should be unique to all the clients.
-    host: Optional[:class:`str`]
-        The port on which the server is running. Defaults to localhost.
-    port: Optional[:class:`int`]
-        The port on which the server is running. Defaults to 13254.
-    reconnect: Optional[:class:`bool`]
-        If set to True, the client will automatically try to reconnect to the rival server
-        every 60 seconds (default). This option is set to True by default.
-    """
-
     def __init__(
             self,
             local_name: str,
@@ -78,17 +61,10 @@ class Connection:
 
     @property
     def authorized(self) -> bool:
-        """
-        :class:`bool`: Returns if the client is authorized by the server.
-        """
         return self._authorized
 
     @property
     def on_hold(self) -> bool:
-        """
-        :class:`bool`: Returns True if the client is on hold by the server.
-        A client is put on hold if a client of same local name is already connected to the server.
-        """
         return self._on_hold
 
     @property
@@ -96,7 +72,6 @@ class Connection:
         return self.__routes
 
     async def send_message(self, data: Union[Any, WsMessage]):
-        """Send a message to the server."""
         if not isinstance(data, WsMessage):
             data = data.__dict__
         logger.debug(data)
@@ -139,19 +114,6 @@ class Connection:
                 await asyncio.sleep(self.reconnect_threshold)
 
     async def start(self) -> None:
-        """|coro|
-
-        Connects the client to the server.
-
-        Raises
-        -------
-            ConnectionError
-                If the websocket is already connected.
-        
-        Returns
-        -------
-            :class:`None`
-        """
         if self.websocket is None or self.websocket.closed:
             await self.__connect()
             await self.__verify_client()
@@ -160,82 +122,33 @@ class Connection:
             raise ConnectionError("Websocket is already connected!")
 
     def route(self, name: str = None):
-        """
-        A decorator to register your route. The route name should be unique.
-
-        Raises
-        -------
-            ValueError
-                Route name already exists.
-            InvalidRouteType
-                The function passed is not a coro.
-        """
-
         def route_decorator(_route_func):
-            if (name is None and _route_func.__name__ in self.__routes) or (name is not None and name in self.__routes):
+            route_name = name or _route_func.__name__
+            if route_name in self.__routes:
                 raise ValueError("Route name is already registered!")
 
             if not asyncio.iscoroutinefunction(_route_func):
                 raise InvalidRouteType("Route function must be a coro.")
 
-            self.__routes[name or _route_func.__name__] = _route_func
+            self.__routes[route_name] = _route_func
             return _route_func
 
         if isinstance(name, FunctionType):
-            _route_func = name
-            name = name.__name__
-            return route_decorator(_route_func)
+            return route_decorator(name)
         else:
             return route_decorator
 
     async def add_route(self, callback: typing.Callable, name: str = None):
-        """|coro|
-        A function to register a route. Either a decorator or this function can be used
-        to register a route.
-
-        Parameters
-        ----------
-        callback
-        name
-
-        Returns
-        -------
-        typing.Callable
-
-        Raises
-        -------
-            KeyError
-                Route name already exists.
-            InvalidRouteType
-                The function passed is not a coro.
-
-        """
-        if (name in self.__routes) or (callback.__name__ in self.__routes):
+        route_name = name or callback.__name__
+        if route_name in self.__routes:
             raise KeyError(f"Route name is already registered!\nRoutes: {self.__routes}")
         if not asyncio.iscoroutinefunction(callback):
             raise InvalidRouteType('Route callback must be an asyncio coro.')
 
-        self.__routes[name or callback.__name__] = callback
+        self.__routes[route_name] = callback
         return callback
 
     def remove_route(self, name: str):
-        """
-        Removes a route from the registered routes.
-        
-        Parameters
-        ----------
-        name
-            The name of the route to be removed.
-
-        Returns
-        -------
-        None
-
-        Raises
-        -------
-            KeyError
-                Route name does not exist.
-        """
         if name in self.__routes:
             del self.__routes[name]
         else:
@@ -246,30 +159,12 @@ class Connection:
         del self.__sub_routes[_uuid]
 
     def __register_object_funcs(self, rival_object: rivalObject):
-        self.__sub_routes[rival_object.uuid] = {}
-        for function_name, function_object in rival_object.functions.items():
-            self.__sub_routes[rival_object.uuid][function_name] = function_object
+        self.__sub_routes[rival_object.uuid] = rival_object.functions
         asyncio.create_task(self.__purge_sub_routes(
             rival_object.object_expiry, rival_object.uuid
         ))
 
     async def ping(self, client=None, timeout: int = 60) -> bool:
-        """|coro|
-
-        Pings the client and returns back if the ping was successful.
-
-        Raises
-        -------
-            ClientNotReadyError
-                The client is currently not ready to send or accept requests.
-            UnauthorizedError
-                The client isn't authorized by the server.
-        
-        Returns
-        --------
-            :class:`bool`
-                If the ping is successful, it returns True.
-        """
         if self._on_hold or self.websocket is None or not self.websocket.open:
             raise ClientNotReadyError("The client is currently not ready to send or accept requests.")
         if not self._authorized:
@@ -328,38 +223,6 @@ class Connection:
             timeout: int = 60,
             **kwargs
     ) -> Any:
-        """|coro|
-
-        Requests the server for a response.
-        Resolves when the response is received matching the UUID.
-
-        Parameters
-        -----------
-        route: :class:`str`
-            The route to request to.
-        source: :class:`str`
-            The destination
-        timeout: :class:`int`
-            Time to wait before raising :class:`~asyncio.TimeoutError`.
-
-        Raises
-        -------
-            ClientNotReadyError
-                The client is currently not ready to send or accept requests.
-            UnauthorizedError
-                The client isn't authorized by the server.
-            ValueError:
-                Missing either route or source or both.
-            RuntimeError
-                If the UUID is not found.
-            asyncio.TimeoutError
-                If the response is not received within the timeout.
-        
-        Returns
-        --------
-            :class:`Any`
-                The data associated with the message.
-        """
         if self.websocket is not None and self.websocket.open:
             if self._on_hold:
                 raise ClientNotReadyError("The client is currently not ready to send or accept requests.")
@@ -415,31 +278,6 @@ class Connection:
             data: Any,
             destinations: list
     ):
-        """|coro|
-
-        Sends data to other connected clients. There is no tracking of the data so there 
-        won't be any error if it doesn't reach its specified destination.
-
-        The data is sent to all connected clients if the destinations list is empty.
-
-        Parameters
-        -----------
-        data: :class:`Any`
-            The data to redirect.
-        destinations: :class:`list`
-            The list of destinations.
-
-        Raises
-        -------
-            ClientNotReadyError
-                The client is currently not ready to send or accept requests.
-            UnauthorizedError
-                The client isn't authorized by the server.
-        
-        Returns
-        --------
-            :class:`None`
-        """
         if self.websocket is not None and self.websocket.open:
             if self._on_hold:
                 raise ClientNotReadyError("The client is currently not ready to send or accept requests.")
@@ -462,17 +300,9 @@ class Connection:
             raise ClientNotReadyError("The client has not been started or has disconnected")
 
     async def wait_until_ready(self):
-        """|coro|
-
-        Waits until the client is ready to send or accept requests.        
-        """
         await self.wait_for('rival_ready', None)
 
     async def wait_until_disconnected(self):
-        """|coro|
-        
-        Waits until the client is disconnected.
-        """
         await self.wait_for('rival_disconnect', None)
 
     def wait_for(
@@ -480,50 +310,15 @@ class Connection:
             event: str,
             timeout: Union[int, None] = None,
     ):
-        """|coro|
-
-        Waits for a WebSocket event to be dispatched.
-
-        The timeout parameter is passed onto asyncio.wait_for().
-        By default, it does not have timeout.
-
-        In case the event returns multiple arguments, a tuple containing those arguments is returned instead.
-        Please check the documentation for a list of events and their parameters.
-
-        This function returns the **first event that meets the requirements.**
-
-        Parameters
-        -----------
-        event: :class:`str`
-            The event to wait for.
-        timeout: Optional[:class:`int`]
-            Time to wait before raising :class:`~asyncio.TimeoutError`. Defaults to 60.
-
-        Raises
-        -------
-            asyncio.TimeoutError
-                If the event is not received within the timeout.
-        
-        Returns
-        --------
-            :class:`Any`
-                The payload for the event that meets the requirements.
-        """
         future = asyncio.get_event_loop().create_future()
 
         _event = event.lower()
-        try:
-            listeners = self.__events.listeners[_event]
-        except KeyError:
-            listeners = []
-            self.__events.listeners[_event] = listeners
-
+        listeners = self.__events.listeners.setdefault(_event, [])
         listeners.append(future)
         return asyncio.wait_for(future, timeout)
 
     async def __on_message(self):
         logger.info("Listening to messages")
-        message = None
         while True:
             try:
                 message = WsMessage(orjson.loads(await self.websocket.recv()))
@@ -534,11 +329,6 @@ class Connection:
                         break
                 else:
                     break
-#            logger.info(f"message {message.to_dict()}")
-            if message.type == PayloadType.success:
-                logger.info(f"successful message but self._authorized is currently {self._authorized}")
-            else:
-                logger.info(f"{message.type.success} {int(message.type._type)}")
 
             if message.type.success and not self._authorized:
                 logger.info("Authorized Successfully")
@@ -704,3 +494,4 @@ class Connection:
             future.set_exception(
                 ClientRuntimeError(msg.data)
             )
+        del self.listeners[_uuid]

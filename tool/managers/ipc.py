@@ -26,7 +26,8 @@ class IPC:
         self.transformers = Transformers(self.bot)
         self.shards_per_cluster = self.bot.shard_count / 3
         self.chunks = utils.chunk_list([i for i in range(self.bot.shard_count)], round(self.bot.shard_count / 3))
-        self.cluster_id = self.chunks.index([k for k, v in self.bot.shards.items()])
+        shard_ids = list(self.bot.shards.keys())
+        self.cluster_id = next((i for i, chunk in enumerate(self.chunks) if any(shard_id in chunk for shard_id in shard_ids)), 0)
         self.bot.connection = Connection(local_name = f"cluster{str(self.cluster_id + 1)}", host = "127.0.0.1", port = 13254)
         self.sources = [f"cluster{str(i)}" for i, chunk in enumerate(self.chunks, start = 1)]
         self.max_retries = 3
@@ -223,22 +224,35 @@ class IPC:
         else:
             return {}
 
-    async def send_message(self, source: str, channel_id: int, content: Optional[str] = None, embed: Optional[Union[dict, Any]] = None):
-        if not isinstance(channel_id, list):
-            channel_id = [channel_id]
-
-        channels = [self.bot.get_channel(cid) for cid in channel_id]
+    async def send_message(self, source: str, channel_id: int, content: Optional[str] = None, embed: Optional[dict] = None):
+        """Send a message to one or multiple channels.
+        
+        Args:
+            source: IPC source identifier
+            channel_id: Channel ID or list of channel IDs
+            content: Message content
+            embed: Embed dictionary
+            
+        Returns:
+            dict: Mapping of channel IDs to sent message data
+        """
+        from discord import Embed
+        
+        channel_ids = [channel_id] if isinstance(channel_id, int) else channel_id
+        embed_obj = Embed.from_dict(embed) if embed else None
         messages = {}
-        for channel in channels:
-            if channel and channel.permissions_for(channel.guild.me).send_messages:
-                embed_obj = None
-                if embed:
-                    from discord import Embed
-                    embed_obj = Embed.from_dict(embed)
-                if content and embed:
-                    messages[str(channel.id)] = await channel.send(content=content, embed=embed_obj)
-                elif content:
-                    messages[str(channel.id)] = await channel.send(content=content)
-                elif embed:
-                    messages[str(channel.id)] = await channel.send(embed=embed_obj)
-        return {k: {"id": v.id, "content": v.content, "embeds": [embed_obj.to_dict()] if embed else []} for k, v in messages.items()}
+        
+        for cid in channel_ids:
+            if channel := self.bot.get_channel(cid):
+                if channel.permissions_for(channel.guild.me).send_messages:
+                    try:
+                        msg = await channel.send(content=content, embed=embed_obj)
+                        messages[str(cid)] = {
+                            "id": msg.id,
+                            "content": msg.content,
+                            "embeds": [e.to_dict() for e in msg.embeds]
+                        }
+                    except Exception as e:
+                        logger.error(f"Failed to send message to channel {cid}: {e}")
+                        
+        return messages

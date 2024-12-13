@@ -1,24 +1,24 @@
 {
   "type": "Scheduler",
-  "id": "Scheduler-55ae8140-b422-4227-8495-1c34cef58d7e",
-  "address": "tcp://127.0.0.1:39445",
+  "id": "Scheduler-cfb7ae68-1786-49af-ac8c-985c2b1e99ca",
+  "address": "tcp://127.0.0.1:39955",
   "services": {
     "dashboard": 8787
   },
-  "started": 1733530582.599257,
+  "started": 1734078458.886864,
   "workers": {
-    "tcp://127.0.0.1:37585": {
+    "tcp://127.0.0.1:38083": {
       "type": "Worker",
       "id": 2,
       "host": "127.0.0.1",
       "resources": {},
-      "local_directory": "/tmp/dask-scratch-space/worker-87zzy98z",
+      "local_directory": "/tmp/dask-scratch-space/worker-1qmrnuwv",
       "name": 2,
       "nthreads": 1,
       "memory_limit": 45012843178,
-      "last_seen": 1733530586.8684456,
+      "last_seen": 1734078463.5808861,
       "services": {
-        "dashboard": 36941
+        "dashboard": 41551
       },
       "metrics": {
         "task_counts": {},
@@ -28,8 +28,8 @@
           "types": {}
         },
         "digests_total_since_heartbeat": {
-          "tick-duration": 0.4996950626373291,
-          "latency": 0.2950265407562256
+          "tick-duration": 0.5006942749023438,
+          "latency": 0.31633639335632324
         },
         "managed_bytes": 0,
         "spilled_bytes": {
@@ -44,89 +44,35 @@
           "outgoing_count": 0,
           "outgoing_count_total": 0
         },
-        "event_loop_interval": 0.03417940616607666,
+        "event_loop_interval": 0.03999094486236572,
         "cpu": 6.0,
-        "memory": 161107968,
-        "time": 1733530586.3169823,
+        "memory": 165044224,
+        "time": 1734078462.933363,
         "host_net_io": {
-          "read_bps": 107518.29306105906,
-          "write_bps": 107518.29306105906
+          "read_bps": 6911.189740620413,
+          "write_bps": 6911.189740620413
         },
         "host_disk_io": {
           "read_bps": 0.0,
-          "write_bps": 163448.23648237006
+          "write_bps": 0.0
         },
         "num_fds": 22
       },
       "status": "running",
-      "nanny": "tcp://127.0.0.1:34459"
+      "nanny": "tcp://127.0.0.1:34465"
     },
-    "tcp://127.0.0.1:39561": {
-      "type": "Worker",
-      "id": 0,
-      "host": "127.0.0.1",
-      "resources": {},
-      "local_directory": "/tmp/dask-scratch-space/worker-7i5lprzm",
-      "name": 0,
-      "nthreads": 1,
-      "memory_limit": 45012843178,
-      "last_seen": 1733530586.8687155,
-      "services": {
-        "dashboard": 45739
-      },
-      "metrics": {
-        "task_counts": {},
-        "bandwidth": {
-          "total": 100000000,
-          "workers": {},
-          "types": {}
-        },
-        "digests_total_since_heartbeat": {
-          "tick-duration": 0.4985344409942627,
-          "latency": 0.2943689823150635
-        },
-        "managed_bytes": 0,
-        "spilled_bytes": {
-          "memory": 0,
-          "disk": 0
-        },
-        "transfer": {
-          "incoming_bytes": 0,
-          "incoming_count": 0,
-          "incoming_count_total": 0,
-          "outgoing_bytes": 0,
-          "outgoing_count": 0,
-          "outgoing_count_total": 0
-        },
-        "event_loop_interval": 0.0342214298248291,
-        "cpu": 4.0,
-        "memory": 160882688,
-        "time": 1733530586.3161256,
-        "host_net_io": {
-          "read_bps": 107936.69181645183,
-          "write_bps": 107936.69181645183
-        },
-        "host_disk_io": {
-          "read_bps": 0.0,
-          "write_bps": 164084.2820962688
-        },
-        "num_fds": 22
-      },
-      "status": "running",
-      "nanny": "tcp://127.0.0.1:40197"
-    },
-    "tcp://127.0.0.1:44019": {
+    "tcp://127.0.0.1:40467": {
       "type": "Worker",
       "id": 1,
       "host": "127.0.0.1",
       "resources": {},
-      "local_directory": "/tmp/dask-scratch-space/worker-23e72c9d",
+      "local_directory": "/tmp/dask-scratch-space/worker-yd7i0dsx",
       "name": 1,
       "nthreads": 1,
       "memory_limit": 45012843178,
-      "last_seen": 1733530586.868169,
+      "last_seen": 1734078463.6612437,
       "services": {
-        "dashboard": 37703
+        "dashboard": 33705
       },
       "metrics": {
         "task_counts": {},
@@ -136,8 +82,8 @@
           "types": {}
         },
         "digests_total_since_heartbeat": {
-          "tick-duration": 0.5010230541229248,
-          "latency": 0.2969241142272949
+          "tick-duration": 0.49892282485961914,
+          "latency": 0.20555639266967773
         },
         "managed_bytes": 0,
         "spilled_bytes": {
@@ -152,22 +98,76 @@
           "outgoing_count": 0,
           "outgoing_count_total": 0
         },
-        "event_loop_interval": 0.03465920925140381,
-        "cpu": 8.0,
-        "memory": 161370112,
-        "time": 1733530586.3147268,
+        "event_loop_interval": 0.03641516208648682,
+        "cpu": 6.0,
+        "memory": 165236736,
+        "time": 1734078463.044678,
         "host_net_io": {
-          "read_bps": 107427.44563445196,
-          "write_bps": 107427.44563445196
+          "read_bps": 10909.046903315086,
+          "write_bps": 10909.046903315086
         },
         "host_disk_io": {
           "read_bps": 0.0,
-          "write_bps": 163310.13113075832
+          "write_bps": 16367.5663428493
         },
         "num_fds": 22
       },
       "status": "running",
-      "nanny": "tcp://127.0.0.1:34599"
+      "nanny": "tcp://127.0.0.1:34587"
+    },
+    "tcp://127.0.0.1:44363": {
+      "type": "Worker",
+      "id": 0,
+      "host": "127.0.0.1",
+      "resources": {},
+      "local_directory": "/tmp/dask-scratch-space/worker-7zdp0_m8",
+      "name": 0,
+      "nthreads": 1,
+      "memory_limit": 45012843178,
+      "last_seen": 1734078463.5811918,
+      "services": {
+        "dashboard": 38071
+      },
+      "metrics": {
+        "task_counts": {},
+        "bandwidth": {
+          "total": 100000000,
+          "workers": {},
+          "types": {}
+        },
+        "digests_total_since_heartbeat": {
+          "tick-duration": 0.4998784065246582,
+          "latency": 0.31435251235961914
+        },
+        "managed_bytes": 0,
+        "spilled_bytes": {
+          "memory": 0,
+          "disk": 0
+        },
+        "transfer": {
+          "incoming_bytes": 0,
+          "incoming_count": 0,
+          "incoming_count_total": 0,
+          "outgoing_bytes": 0,
+          "outgoing_count": 0,
+          "outgoing_count_total": 0
+        },
+        "event_loop_interval": 0.04088401317596436,
+        "cpu": 4.0,
+        "memory": 165257216,
+        "time": 1734078462.9356172,
+        "host_net_io": {
+          "read_bps": 6909.23894752258,
+          "write_bps": 6909.23894752258
+        },
+        "host_disk_io": {
+          "read_bps": 0.0,
+          "write_bps": 0.0
+        },
+        "num_fds": 22
+      },
+      "status": "running",
+      "nanny": "tcp://127.0.0.1:45889"
     }
   }
 }

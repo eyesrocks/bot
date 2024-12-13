@@ -4,6 +4,9 @@ import typing
 from datetime import datetime
 import aiohttp
 import asyncio
+import yt_dlp as youtube_dl
+import os
+from discord.ui import Modal, TextInput, Button
 import arrow
 import discord
 from discord.ext import commands, tasks
@@ -597,31 +600,53 @@ class Miscellaneous(Cog):
         return await ctx.success("**reset** your **birthday settings**")
 
     @commands.command(
-        name="selfpurge",
-        example=",selfpurge 100",
-        brief="Clear your messages from a chat",
-    )
+          name="selfpurge",
+          example=",selfpurge 100",
+          brief="Clear your messages from a chat",
+     )
     @commands.bot_has_permissions(manage_messages=True)
     async def selfpurge(self, ctx, amount: int):
-        amount = amount + 1
+          amount = amount + 1  # Adjust for the command message itself
 
-        def check(message):
-            return message.author == ctx.message.author
+          # Check if the user is a donator
+          try:
+               is_donator = await self.bot.db.fetchrow(
+                    """SELECT * FROM donators WHERE user_id = $1""", ctx.author.id
+               )
+          except Exception as e:
+               return await ctx.send(f"An error occurred while checking donator status: {e}")
 
-        await ctx.message.delete()
-        deleted_messages = await ctx.channel.purge(limit=amount, check=check)
-        if len(deleted_messages) > amount:
-            deleted_messages = deleted_messages[:amount]
-            return
+          # If not a donator, limit the maximum messages that can be purged
+          if not is_donator and amount > 0:
+               return await ctx.fail(
+                    "only boosters in [/pomice](https://discord.gg/pomice) can use selfpurge boost the server and dm an owner to claim your permissions."
+               )
+
+          def check(message):
+               return message.author == ctx.message.author
+
+          # Attempt to delete the invoking command message
+          await ctx.message.delete()
+
+          # Purge messages
+          deleted_messages = await ctx.channel.purge(limit=amount, check=check)
+
+          # Truncate deleted messages if necessary
+          if len(deleted_messages) > amount:
+               deleted_messages = deleted_messages[:amount]
+
+          await ctx.success(
+               f"Purged {len(deleted_messages)} of your messages.", delete_after=5
+          )
 
     async def check_role(self, ctx, role: discord.Role):
-        if (
-            ctx.author.top_role.position <= role.position
-            and not ctx.author.id == ctx.guild.owner_id
-        ):
-            await ctx.fail("your role isn't higher then that role")
-            return False
-        return True
+          if (
+               ctx.author.top_role.position <= role.position
+               and not ctx.author.id == ctx.guild.owner_id
+          ):
+               await ctx.fail("Your role isn't higher than that role.")
+               return False
+          return True
 
 
         
@@ -781,7 +806,6 @@ class Miscellaneous(Cog):
         
         await ctx.success("Reminder removed")
 
-    
 
 async def setup(bot: "Greed") -> None: 
     await bot.add_cog(Miscellaneous(bot))

@@ -309,7 +309,8 @@ class MyHelpCommand(commands.HelpCommand):
                     d.append(f"> {flag_name.title()}: {f}{flag_value} {m}")
             embed.add_field(name="Flags", value="".join(f"{_}\n" for _ in d), inline=True)
         aliases = ", ".join(f"{a}" for a in command.aliases) or "N/A"
-        embed.set_footer(text=f"Aliases: {aliases}・Module: {command.cog_name.replace('.py','')}")
+        cog_name = command.cog_name.replace('.py','') if command.cog_name else "No Category"
+        embed.set_footer(text=f"Aliases: {aliases}・Module: {cog_name}")
         await ctx.send(embed=embed)
 
     def get_example(self, command):

@@ -1,5 +1,3 @@
-
-
 #import log
 
 #log.make_dask_sink("rival")
@@ -41,7 +39,7 @@ from tool.managers.ipc import IPC
 from cogs.voicemaster import VmButtons
 from tool.important import Cache, Context, Database, MyHelpCommand, Red  # type: ignore
 from tool.important.subclasses.parser import Script  # type: ignore
-from tool.important.subclasses.context import NonRetardedCache  # type: ignore
+from tool.important.subclasses.context import NonRetardedCache, MSG, reskin  # type: ignore
 from tool.important.runner import RebootRunner  # type: ignore
 from tool.snipe import Snipe  # type: ignore
 from tool.views import GiveawayView, PrivacyConfirmation  # type: ignore
@@ -52,6 +50,7 @@ from tool.rival import RivalAPI, get_statistics as get_stats, Statistics  # type
 from tool.paginate import Paginate  # type: ignore
 from sys import stdout
 from .emotes import EMOJIS
+import time
 from contextlib import suppress
 discord.Interaction.success = GreedInteraction.success
 discord.Interaction.fail = GreedInteraction.fail
@@ -63,6 +62,8 @@ get_changes = Union[
     Guild,
     AuditLogEntry,
 ]
+
+Message.edit = MSG.edit
 
 @offloaded
 def read_file(filepath: str, mode: str = "rb"):
@@ -288,18 +289,20 @@ class Greed(Bot):
                 return json.dumps(wh)
 
     async def before_all_commands(self, ctx: Context):
-        if ctx.command is not None:
-            if "purge" not in ctx.command.qualified_name:
-                if ctx.guild and ctx.channel:
-                    if (
-                        ctx.channel.permissions_for(ctx.guild.me).send_messages
-                        and ctx.channel.permissions_for(ctx.guild.me).embed_links
-                        and ctx.channel.permissions_for(ctx.guild.me).attach_files
-                    ):
-                        try:
-                            await ctx.typing()
-                        except Exception:
-                            pass
+        rs = await reskin(self, ctx.channel, author=ctx.author)
+        if not len(rs) == 0:
+            if ctx.command is not None:
+                if "purge" not in ctx.command.qualified_name:
+                    if ctx.guild and ctx.channel:
+                        if (
+                            ctx.channel.permissions_for(ctx.guild.me).send_messages
+                            and ctx.channel.permissions_for(ctx.guild.me).embed_links
+                            and ctx.channel.permissions_for(ctx.guild.me).attach_files
+                        ):
+                            try:
+                                await ctx.typing()
+                            except Exception:
+                                pass
 
     async def get_image(self, ctx: Context, *args):
         if len(ctx.message.attachments) > 0:
@@ -506,6 +509,11 @@ class Greed(Bot):
         )
 
     async def command_check(self, ctx):
+        if not await self.is_owner(ctx.author):
+            is_ratelimited, retry_after = await self.check_guild_ratelimit(ctx.guild.id)
+            if is_ratelimited:
+                raise commands.CommandOnCooldown(None, retry_after, commands.BucketType.guild)
+                
         if not hasattr(self, "command_list"):
             await fill_commands(ctx)
         if await ctx.bot.is_owner(ctx.author):
@@ -1023,14 +1031,18 @@ class Greed(Bot):
     async def setup_emojis(self):
         for key, value in EMOJIS.items():
             if value == "":
-                p = f"assets/{key}.png" if os.path.exists(f"assets/{key}.png") else f"assets/{key}.gif"
-                
-                f = await read_file(p)
-                created_emoji = await self.create_emoji(key, f)
-                
-                if EMOJIS[key] == "":
-                    EMOJIS[key] = str(created_emoji)
-
+                try:
+                    for ext in ('.png', '.gif'):
+                        path = f"assets/{key}{ext}"
+                        if os.path.exists(path):
+                            file_data = await read_file(path)
+                            created_emoji = await self.create_emoji(key, file_data)
+                            EMOJIS[key] = str(created_emoji)
+                            break
+                    else:
+                        logger.error(f"Warning: No emoji file found for {key}")
+                except Exception as e:
+                    logger.error(f"Error setting up emoji {key}: {e}")
     
 
 
@@ -1054,7 +1066,7 @@ class Greed(Bot):
         if guild == self.get_guild(1305757833064611860):
             return         
             
-        if len(guild.members) < 10:
+        if len(guild.members) < 1:
             # if len(guild.members) < 75:
             #     if owner := guild.owner:
             #         try:
@@ -1133,3 +1145,30 @@ class Greed(Bot):
             return False
 
         return True
+
+    async def check_guild_ratelimit(self, guild_id: int) -> tuple[bool, float]:
+        """
+        Check if a guild is being ratelimited due to command spam.
+        Returns (is_ratelimited, retry_after)
+        """
+        # Get recent command usage in this guild
+        key = f"guild_commands:{guild_id}"
+        
+        # Get command usage in last 10 seconds
+        current = await self.redis.zcount(key, min=time.time() - 10, max="+inf")
+        
+        # If more than 50 commands in 10 seconds across all users
+        if current >= 50:
+            # Get earliest command timestamp that puts us over limit
+            scores = await self.redis.zrange(key, -50, -50, withscores=True) 
+            if scores:
+                retry_after = scores[0][1] + 10 - time.time()
+                if retry_after > 0:
+                    return True, retry_after
+        
+        # Add this command execution
+        await self.redis.zadd(key, {str(time.time()): time.time()})
+        # Expire after 10 seconds
+        await self.redis.expire(key, 10)
+        
+        return False, 0

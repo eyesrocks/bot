@@ -9,6 +9,7 @@ import discord
 import traceback
 from typing import Union
 from asyncpg import Record
+from asyncpg.exceptions import UniqueViolationError
 from discord.ext import commands
 from discord.ext.commands import Context
 from contextlib import suppress
@@ -27,6 +28,7 @@ class starboard(commands.Cog, name="Starboard"):
         self._about_to_be_deleted: set[int] = set()
 
     async def reaction_logic(self, fmt: str, payload: discord.RawReactionActionEvent):
+        """Handle starboard reaction logic."""
         guild = self.bot.get_guild(payload.guild_id)
         if not guild:
             return
@@ -35,23 +37,31 @@ class starboard(commands.Cog, name="Starboard"):
         if not channel or not isinstance(channel, discord.TextChannel):
             return
 
-        if not (method := getattr(self, f"{fmt}_message", None)):
+        method = getattr(self, f"{fmt}_message", None)
+        if not method:
             return
 
-        if (
-            not (
-                starboard := await self.bot.db.fetchrow(
-                    "SELECT channel_id, emoji, threshold FROM starboard WHERE guild_id = $1 AND emoji = $2",
-                    guild.id,
-                    str(payload.emoji),
-                )
-            )
-            or not (starboard_channel := guild.get_channel(starboard["channel_id"]))
-            or not starboard_channel.permissions_for(guild.me).send_messages
+        starboard = await self.bot.db.fetchrow(
+            """
+            SELECT channel_id, emoji, threshold
+            FROM starboard
+            WHERE guild_id = $1 AND emoji = $2
+            """,
+            guild.id,
+            str(payload.emoji),
+        )
+        if not starboard:
+            return
+
+        starboard_channel = guild.get_channel(starboard["channel_id"])
+        if not (
+            starboard_channel
+            and starboard_channel.permissions_for(guild.me).send_messages
         ):
             return
 
-        if not (member := payload.member or guild.get_member(payload.user_id)):
+        member = payload.member or guild.get_member(payload.user_id)
+        if not member:
             return
 
         try:
@@ -59,8 +69,7 @@ class starboard(commands.Cog, name="Starboard"):
                 starboard, starboard_channel, guild, channel, member, payload.message_id
             )
         except Exception as e:
-            exc = "".join(traceback.format_exception(type(e), e, e.__traceback__))
-            logger.info(f"starboard error: {exc}")
+            logger.error(f"Error in starboard reaction logic: {traceback.format_exc()}")
             return
 
     @commands.Cog.listener()
@@ -504,6 +513,52 @@ class starboard(commands.Cog, name="Starboard"):
         await self.bot.dummy_paginator(
             ctx, discord.Embed(title="Starboards", color=self.bot.color), starboards
         )
+
+    @starboard.command(
+        name="ignore",
+        example=",starboard ignore #shame",
+        brief="Ignore a channel from being added to the starboard",
+    )
+    @commands.has_permissions(manage_guild=True)
+    async def starboard_ignore(self, ctx: Context, channel: discord.TextChannel):
+        """Adds a channel to the ignored list for the starboard."""
+        try:
+            await self.bot.db.execute(
+                "INSERT INTO starboard_ignored (guild_id, channel_id) VALUES ($1, $2)",
+                ctx.guild.id,
+                channel.id,
+            )
+        except UniqueViolationError:
+            await ctx.fail(f"**{channel.mention}** is already being ignored")
+        except Exception as e:
+            logger.error(f"Error in starboard_ignore: {e}")
+            await ctx.fail("An unexpected error occurred. Please try again later.")
+        else:
+            await ctx.success(f"Ignored **{channel.mention}**")
+
+    @starboard.command(
+        name="unignore",
+        example=",starboard unignore #shame",
+        brief="Unignore a channel from being added to the starboard",
+    )
+    @commands.has_permissions(manage_guild=True)
+    async def starboard_unignore(self, ctx: Context, channel: discord.TextChannel):
+        """Removes a channel from the ignored list for the starboard."""
+        try:
+            result = await self.bot.db.execute(
+                "DELETE FROM starboard_ignored WHERE guild_id = $1 AND channel_id = $2",
+                ctx.guild.id,
+                channel.id,
+            )
+            if result == "DELETE 0":
+                return await ctx.fail(f"**{channel.mention}** is not being ignored")
+                
+        except Exception as e:
+            logger.error(f"Error in starboard_unignore: {e}")
+            await ctx.fail("An unexpected error occurred. Please try again later.")
+        else:
+            await ctx.success(f"Unignored **{channel.mention}**")
+                
 
 
 async def setup(bot):

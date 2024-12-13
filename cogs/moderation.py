@@ -7,6 +7,7 @@ import string
 import aiohttp
 import discord
 import orjson
+import asyncpg
 import humanfriendly
 from discord.ext import commands
 from discord.ext.commands import Cog, CommandError
@@ -95,7 +96,6 @@ class GuildChannel(commands.Converter):
             if channel and isinstance(channel, discord.abc.GuildChannel):
                 return channel
 
-        # Check if the argument is a channel mention
         match = re.match(r'<#(\d+)>', argument)
         if match:
             channel_id = int(match.group(1))
@@ -103,9 +103,8 @@ class GuildChannel(commands.Converter):
             if channel and isinstance(channel, discord.abc.GuildChannel):
                 return channel
 
-        # Check if the argument is a channel name
-        channels = {c.name: c.id for c in ctx.guild.channels if isinstance(c, discord.abc.GuildChannel)}
-        if match := closest_match(argument, list(channels.keys())):
+        channels = {c.name.lower(): c.id for c in ctx.guild.channels if isinstance(c, discord.abc.GuildChannel)}
+        if match := closest_match(argument.lower(), list(channels.keys())):
             return ctx.guild.get_channel(channels[match])
 
         raise commands.CommandError(f"Channel `{argument}` not found")
@@ -227,7 +226,10 @@ class Moderation(Cog):
                 color=self.bot.color,
             )
         )
-    
+
+
+
+
     async def role_all_task(
         self,
         ctx: Context,
@@ -287,7 +289,22 @@ class Moderation(Cog):
         await channel.edit(slowmode_delay=0)
         return True
 
-    
+
+
+    async def setup_database(self):
+        """Ensure the report_whitelist table exists."""
+        try:
+            # This query will create the table if it doesn't exist
+            await self.bot.db.execute(
+                """CREATE TABLE IF NOT EXISTS report_whitelist (
+                    user_id BIGINT PRIMARY KEY
+                )"""
+            )
+            print("Report whitelist table is ready.")
+        except Exception as e:
+            print(f"Error creating table: {e}")
+
+
     async def moderator_logs(self, ctx: Context, description: str):
         try:
             await self.bot.db.execute(
@@ -728,13 +745,24 @@ class Moderation(Cog):
             ):
                 if member.id != ctx.author.id:
                     return await ctx.warning(f"{member.mention} is **higher than you**")
+
+            if (
+                ctx.guild.me.top_role < role_input[0]
+                and ctx.guild.me.top_role < ctx.author.top_role
+            ):
+                return await ctx.fail(
+                    f"**{role_input[0].mention}** is **higher than me**"
+                )
+            
             if not role_input:
-                await ctx.warning("You must **mention a role**")
-                return
+                return await ctx.warning("You must **mention a role**")
+                
             removed = []
             added = []
             roles = member.roles
             for role in role_input:
+                if ctx.guild.me.guild_permissions.manage_roles is False:
+                    return await ctx.fail(f"I do not have permission to **manage** roles")
                 if role in roles:
                     roles.remove(role)
                     removed.append(f"{role.mention}")
@@ -1271,17 +1299,15 @@ class Moderation(Cog):
                     )
         try:
             await ctx.guild.ban(user, reason=f"{reason} | {ctx.author.id}")
-            await self.store_statistics(ctx, ctx.author)
+            await self.store_statistics(ctx, ctx.author, True)
             await ctx.success(f"{user.mention} has been **Banned**")
         except discord.Forbidden:
             return await ctx.warning(
                 "I don't have the **necessary permissions** to ban that member."
             )
-            raise InvalidError()
         except discord.NotFound:
             await ctx.fail(f"{user.name} is already **banned** from the server.")
-            raise InvalidError()
-
+            return await ctx.fail(f"{user.name} is already **banned** from the server.")
     async def do_unban(self, ctx, u: Union[discord.Member, discord.User, str]):
         if isinstance(u, discord.User):
             pass  # type: ignore
@@ -1506,41 +1532,64 @@ class Moderation(Cog):
             return True
 
     async def store_statistics(self, ctx: Context, member: Member, store: Optional[bool] = True):
-        command = ctx.command.qualified_name
-        if command == "ban":
-            case_type = CaseType.bans
-        elif command == "kick":
-            case_type = CaseType.kicks
-        elif command == "unban":
-            case_type = CaseType.unbans
-        elif command == "jail":
-            case_type = CaseType.jails
-        elif command == "unjail":
-            case_type = CaseType.unjails
-        elif command == "untime":
-            case_type = CaseType.unmutes
-        elif command == "mute":
-            case_type = CaseType.mutes
-        elif command == "warn":
-            case_type = CaseType.warns
-        elif command == "modstats":
-            if not store:
-                data = json.loads(await self.bot.db.fetchval("""SELECT data FROM moderation_statistics WHERE guild_id = $1 AND user_id = $2""", ctx.guild.id, member.id) or "{}")
-                return data
+            command = ctx.command.qualified_name
+            if command == "ban":
+                case_type = CaseType.bans
+            elif command == "kick":
+                case_type = CaseType.kicks
+            elif command == "unban":
+                case_type = CaseType.unbans
+            elif command == "jail":
+                case_type = CaseType.jails
+            elif command == "unjail":
+                case_type = CaseType.unjails
+            elif command == "untime":
+                case_type = CaseType.unmutes
+            elif command == "mute":
+                case_type = CaseType.mutes
+            elif command == "warn":
+                case_type = CaseType.warns
+            elif command == "modstats":
+                if not store:
+                    data = await self.bot.db.fetchval("""SELECT data FROM moderation_statistics WHERE guild_id = $1 AND user_id = $2""", ctx.guild.id, member.id)
+                    if data:
+                        try:
+                            return json.loads(data)
+                        except (json.JSONDecodeError, TypeError):
+                            return {}
+                    return {}
+                else:
+                    return
             else:
                 return
-        else:
-            return
-        data = json.loads(await self.bot.db.fetchval("""SELECT data FROM moderation_statistics WHERE guild_id = $1 AND user_id = $2""", ctx.guild.id, member.id) or "{}")
-        if not store:
-            return data
-        name = str(case_type.name)
-        if not data.get(name):
-            data[name] = 1
-        else:
-            data[name] += 1
-        await self.bot.db.execute("""INSERT INTO moderation_statistics (guild_id, user_id, data) VALUES($1, $2, $3) ON CONFLICT(guild_id, user_id) DO UPDATE SET data = excluded.data""", ctx.guild.id, member.id, json.dumps(data))
-        return True
+            
+            existing_data = await self.bot.db.fetchval("""SELECT data FROM moderation_statistics WHERE guild_id = $1 AND user_id = $2""", ctx.guild.id, member.id)
+            try:
+                data = json.loads(existing_data) if existing_data else {}
+            except (json.JSONDecodeError, TypeError):
+                data = {}
+            
+            if not store:
+                return data
+                
+            name = str(case_type.name)
+            if not data.get(name):
+                data[name] = 1
+            else:
+                data[name] += 1
+                
+            try:
+                json_data = json.dumps(data)
+            except (TypeError, ValueError):
+                json_data = "{}"
+                
+            await self.bot.db.execute(
+                """INSERT INTO moderation_statistics (guild_id, user_id, data) 
+                VALUES($1, $2, $3) ON CONFLICT(guild_id, user_id) 
+                DO UPDATE SET data = $3""",
+                ctx.guild.id, member.id, json_data
+            )
+            return True
         
 
     async def do_unjail(self, ctx: Context, member: discord.Member):
@@ -2554,6 +2603,147 @@ class Moderation(Cog):
             return await ctx.success(
                 f"Added pic perms to {member.mention} in {channel.mention}"
             )    
+
+
+
+
+    @commands.group(name="report", invoke_without_command=True)
+    async def report(self, ctx):
+        """Base command for the report system."""
+        await ctx.send("Use `report add <@user>`, `report remove <@user>`, or `report send <message>`")
+
+    @report.command(name="add")
+    @commands.is_owner()
+    async def report_add(self, ctx, user: commands.MemberConverter):
+        """Adds a mentioned user to the whitelist so they can send reports."""
+        try:
+            # Ensure the table exists before proceeding
+            await self.setup_database()
+
+            user_id = user.id  # Get the mentioned user's ID
+
+            # Check if the user is already whitelisted
+            result = await self.bot.db.fetchrow(
+                "SELECT user_id FROM report_whitelist WHERE user_id = $1", user_id
+            )
+            if result:
+                return await ctx.warning(f"User {user.mention} is already whitelisted.")
+
+            # Add the user to the whitelist
+            await self.bot.db.execute(
+                "INSERT INTO report_whitelist (user_id) VALUES ($1)", user_id
+            )
+
+            await ctx.success(f"User {user.mention} has been added to the whitelist.")
+        except Exception as e:
+            await ctx.fail(f"Error adding user: {e}")
+            print(f"Error adding user {user.id} to whitelist: {e}")
+
+    @report.command(name="remove")
+    @commands.is_owner()
+    async def report_remove(self, ctx, user: commands.MemberConverter):
+        """Removes a mentioned user from the whitelist."""
+        try:
+            # Ensure the table exists before proceeding
+            await self.setup_database()
+
+            user_id = user.id  # Get the mentioned user's ID
+
+            # Check if the user is whitelisted
+            result = await self.bot.db.fetchrow(
+                "SELECT user_id FROM report_whitelist WHERE user_id = $1", user_id
+            )
+            if not result:
+                return await ctx.fail(f"User {user.mention} is not whitelisted.")
+
+            # Remove the user from the whitelist
+            await self.bot.db.execute(
+                "DELETE FROM report_whitelist WHERE user_id = $1", user_id
+            )
+
+            await ctx.success(f"User {user.mention} has been removed from the whitelist.")
+        except Exception as e:
+            await ctx.fail(f"Error removing user: {e}")
+            print(f"Error removing user {user.id} from whitelist: {e}")
+
+    @report.command(name="send")
+    async def report_send(self, ctx, *, message: str):
+        """Allows a whitelisted user to send a report."""
+        try:
+            # Ensure the table exists before proceeding
+            await self.setup_database()
+
+            # Check if the user is whitelisted
+            result = await self.bot.db.fetchrow(
+                "SELECT user_id FROM report_whitelist WHERE user_id = $1", ctx.author.id
+            )
+            if not result:
+                return await ctx.fail("You are not whitelisted to send reports.")
+
+            # Prepare the embed for the webhook
+            embed = {
+                "embeds": [
+                    {
+                        "title": "New Report Submitted",
+                        "description": message,
+                        "color": self.bot.color,
+                        "fields": [
+                            {
+                                "name": "User",
+                                "value": f"{ctx.author.mention} (`{ctx.author.id}`)",
+                                "inline": True
+                            },
+                            {
+                                "name": "Server",
+                                "value": f"{ctx.guild.name} (`{ctx.guild.id}`)",
+                                "inline": True
+                            },
+                            {
+                                "name": "Channel",
+                                "value": f"{ctx.channel.name} (`{ctx.channel.id}`)",
+                                "inline": True
+                            },
+                        ],
+                        "footer": {
+                            "text": f"Report submitted on {ctx.message.created_at.strftime('%Y-%m-%d %H:%M:%S')}"
+                        }
+                    }
+                ]
+            }
+
+            # Try to get the server invite link (if the bot has permission)
+            try:
+                invites = await ctx.guild.invites()
+                if invites:
+                    invite_link = invites[0].url  # Get the first invite link
+                    embed["embeds"][0]["fields"].append(
+                        {
+                            "name": "Server Invite",
+                            "value": f"[Click here to join]({invite_link})",
+                            "inline": False
+                        }
+                    )
+            except discord.Forbidden:
+                # If the bot doesn't have permission to fetch invites
+                pass
+
+
+            # Webhook URL (replace with your actual webhook URL)
+            webhook_url = "https://discord.com/api/webhooks/1316476312633999441/XP8d_WYaNuoizHkVP1ThcwYTPQYd3cJiDbqnpLB7nIzh36NNNVn9I6sbi5CvHi_Ujy9T"
+            
+            # Send the webhook with the report embed
+            async with aiohttp.ClientSession() as session:
+                async with session.post(webhook_url, json=embed) as response:
+                    if response.status == 204:
+                        await ctx.success("Your report has been successfully submitted!")
+                    else:
+                        await ctx.fail("Failed to submit the report. Please try again later.")
+                        print(f"Failed to send webhook, status code: {response.status}")
+
+        except Exception as e:
+            await ctx.fail(f"Error sending report: {e}")
+            print(f"Error sending report: {e}")
+
 
 async def setup(bot: "Greed") -> None:
     await bot.add_cog(Moderation(bot))

@@ -17,20 +17,22 @@ class PlayModal(discord.ui.Modal, title="Play"):
         self.bot = bot
 
     firstfield = discord.ui.TextInput(
-        label="Play a song thru greed",
-        placeholder="example: ram ranch",
+        label="Play a song through Greed",
+        placeholder="e.g., Ram Ranch",
         min_length=1,
         max_length=500,
         style=discord.TextStyle.short,
     )
 
     async def interaction_check(self, interaction: discord.Interaction):
-        if interaction.data["components"][0]["components"][0]["value"]:
-            name = interaction.data["components"][0]["components"][0]["value"]
-            logger.info(f"Play Modal got query {name}")
+        song_name = self.firstfield.value
+        if song_name:
+            logger.info(f"Play Modal received query: {song_name}")
             from cogs.music import enqueue
 
-            return await enqueue(self.bot, interaction, name)
+            await enqueue(self.bot, interaction, song_name)
+            return True
+        return False
 
 
 class RenameModal(discord.ui.Modal, title="Rename"):

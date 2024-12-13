@@ -677,14 +677,14 @@ class Information(commands.Cog):
         
         embed = discord.Embed(
             color=self.bot.color,
-            description=f"A multipurpose Discord bot with moderation, utility, and fun features."
+            description=f"showing information for **[Greed](https://greed.wtf)**"
         )
         
         embed.add_field(
-            name=f"{EMOJIS['stats_icon_white']} General Stats",
+            name=f"{EMOJIS['stats_icon_white']} stats\n",
             value=f"""```prolog
-Servers    : {await self.bot.guild_count():,}
-Users      : {await self.bot.user_count():,}
+Servers    : {await self.bot.guild_count():,}       
+Users      : {await self.bot.user_count():,}           
 Channels   : {await self.bot.channel_count():,}
 Commands   : {len(set(self.bot.walk_commands())):,}```""",
             inline=False
@@ -693,7 +693,7 @@ Commands   : {len(set(self.bot.walk_commands())):,}```""",
         usage = psutil.disk_usage("/")
         free_space = int(usage.free / (1024 ** 3))
         embed.add_field(
-            name=f"{EMOJIS['settings_icon']} System",
+            name=f"{EMOJIS['settings_icon']} system",
             value=f"""```prolog
 Memory     : {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB
 CPU Usage  : {psutil.Process().cpu_percent()}%
@@ -702,14 +702,6 @@ Latency    : {round(self.bot.latency * 1000)}ms```""",
             inline=False
         )
 
-        embed.add_field(
-            name=f"{EMOJIS['Code']} Development",
-            value=f"""```prolog
-Files      : {stat.files}
-Classes    : {stat.classes}
-Lines      : {stat.lines}```""",
-            inline=False
-        )
 
         embed.add_field(
             name=f"{EMOJIS['online_blank']} Uptime",
@@ -717,7 +709,7 @@ Lines      : {stat.lines}```""",
             inline=False
         )
         embed.set_author(
-            name=f"{self.bot.user.name} Statistics",
+            name=f"{self.bot.user.name}",
             icon_url=self.bot.user.avatar
         )
         
@@ -1080,7 +1072,7 @@ Lines      : {stat.lines}```""",
             # Create an embed for displaying the user's avatar and banner
             embed = discord.Embed(
                 description=f"Here is the avatar and banner for [**{user.display_name}**](https://discord.com/users/{user.id})",
-                color=0x456BB2  # You can change this to your bot's color
+                color=self.bot.color  # You can change this to your bot's color
             )
             embed.set_author(name=f"{user.display_name}", icon_url=avatar_url, url=f"https://discord.com/users/{user.id}")
             embed.set_image(url=banner_url)  # Set the banner image

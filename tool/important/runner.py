@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Callable, Coroutine, Optional
 from discord.ext import commands
 from watchfiles import Change, awatch  # type: ignore
-import json
+
 
 class RebootRunner:
     """Manages cog reloading and file change watching for a Discord bot."""
@@ -18,8 +18,9 @@ class RebootRunner:
         loop: Optional[asyncio.AbstractEventLoop] = None,
         default_logger: bool = True,
         preload: bool = False,
-        auto_commit: bool = True,
+        auto_commit: bool = False,
         colors: bool = True,
+        main_cluster: str = "cluster1"
     ) -> None:
         self.client: commands.Bot = client
         self.path: Path = Path(path).resolve()  # Ensure absolute path
@@ -30,6 +31,7 @@ class RebootRunner:
         self.auto_commit: bool = auto_commit
         self.started: bool = False
         self.colors: bool = colors
+        self.main_cluster: str = main_cluster
         self._setup_logger()
 
     def _setup_logger(self) -> None:
@@ -80,56 +82,59 @@ class RebootRunner:
         async for changes in awatch(self.path):
             for change_type, file_path in changes:
                 file_path = Path(file_path)
-                if file_path.suffix != ".py":
+                if ".git" in str(file_path) or file_path.suffix != ".py":
                     continue
                 try:
+                    if await self._is_git_operation():
+                        self.logger.debug("Ignoring changes from git operation")
+                        continue
+
                     cog_name: str = self.get_cog_name(file_path)
                     cog_path: str = self.get_dotted_path(file_path)
 
                     if change_type == Change.deleted:
-                        await asyncio.sleep(1)
                         await self._unload_cog(cog_path)
                     elif change_type == Change.added:
-                        await asyncio.sleep(1)
                         await self._load_cog(cog_path)
                     elif change_type == Change.modified:
-                        await asyncio.sleep(1)
                         await self._reload_cog(cog_path)
                 except Exception as e:
-                    self.logger.error(f"Error processing change {change_type} for {file_path}: {e}")
+                    self.logger.error(
+                        f"Error processing change {change_type} for {file_path}: {e}"
+                    )
 
-    async def _get_current_process_name(self) -> str:
-        """Retrieves the PM2 process name."""
+    async def _is_git_operation(self) -> bool:
+        """Check if there's an ongoing git operation."""
         try:
-            process = await asyncio.create_subprocess_shell(
-                "pm2 jlist",  # Fetch JSON list of all PM2 processes
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await process.communicate()
-
-            if stderr:
-                self.logger.warning(f"Error fetching PM2 processes: {stderr.decode()}")
-                return ""
-
-            processes = json.loads(stdout.decode())
-            # Filter based on known process names
-            for proc in processes:
-                if proc["name"] in ["cluster", "cluster2", "cluster3"]:
-                    return proc["name"]
-
-            return "unknown"
-        except Exception as e:
-            self.logger.error(f"Error retrieving process name: {e}")
-            return ""
-
+            git_dir = self.path / ".git"
+            if git_dir.exists():
+                lock_files = [
+                    git_dir / "index.lock",
+                    git_dir / "HEAD.lock",
+                    git_dir / "refs.lock",
+                ]
+                return any(lock.exists() for lock in lock_files)
+        except Exception:
+            pass
+        return False
 
     async def _preload_cogs(self) -> None:
         """Loads all cogs on startup."""
         self.logger.info("Preloading cogs...")
-        for file in self.path.rglob("*.py"):
-            cog_path: str = self.get_dotted_path(file)
-            await self._load_cog(cog_path)
+        try:
+            files = list(self.path.rglob("*.py"))
+            self.logger.debug(f"Found {len(files)} potential cog files")
+            for file in files:
+                if file.name.startswith("_"):
+                    continue
+                try:
+                    cog_path: str = self.get_dotted_path(file)
+                    self.logger.debug(f"Attempting to load: {cog_path}")
+                    await self._load_cog(cog_path)
+                except Exception as e:
+                    self.logger.error(f"Failed to load {file}: {str(e)}")
+        except Exception as e:
+            self.logger.error(f"Error during cog preloading: {str(e)}")
 
     async def _load_cog(self, cog_path: str) -> None:
         """Loads a cog."""
@@ -150,50 +155,56 @@ class RebootRunner:
             self.logger.warning(f"Cog not loaded: {cog_path}")
 
     async def _reload_cog(self, cog_path: str) -> None:
-        """Reloads a cog with conditional actions based on the PM2 process."""
+        """Reloads a cog."""
+        if self.auto_commit:
+            await self._auto_commit_changes()
         try:
-            process_name = await self._get_current_process_name()
-
-            if process_name == "cluster":
-                self.logger.info(f"Process '{process_name}' detected, pushing to Git.")
-                if self.auto_commit:
-                    await self._auto_commit_changes()
-            elif process_name in ["cluster2", "cluster3"]:
-                self.logger.info(f"Process '{process_name}' detected, reloading cog.")
-                try:
-                    await self.client.reload_extension(cog_path)
-                    self.logger.info(f"Reloaded cog: {cog_path}")
-                except commands.ExtensionNotLoaded:
-                    self.logger.info(f"Cog not loaded, loading instead: {cog_path}")
-                    await self._load_cog(cog_path)
-                except commands.ExtensionFailed as e:
-                    self.logger.error(f"Failed to reload cog {cog_path}: {e}")
-            else:
-                self.logger.warning(f"Unknown process: {process_name}")
-        except Exception as e:
-            self.logger.error(f"Failed to handle reload for {cog_path}: {e}")
+            await self.client.reload_extension(cog_path)
+            self.logger.info(f"Reloaded cog: {cog_path}")
+        except commands.ExtensionNotLoaded:
+            self.logger.info(f"Cog not loaded, loading instead: {cog_path}")
+            await self._load_cog(cog_path)
+        except commands.ExtensionFailed as e:
+            self.logger.error(f"Failed to reload cog {cog_path}: {e}")
 
     async def _auto_commit_changes(self) -> None:
-        """Automatically commits changes using git."""
+        """Automatically commits changes using git. Only runs on the main cluster."""
         try:
+            # Only proceed if this is the main cluster
+            if not hasattr(self.client, 'connection') or self.client.connection.local_name != self.main_cluster:
+                return self.logger.debug(f"Skipping git commit on non-main cluster: {getattr(self.client.connection, 'local_name', 'unknown')}")
+
+            self.logger.info("Performing git commit on main cluster")
             process = await asyncio.create_subprocess_shell(
-                "git add . && git commit -m 'Auto commit' && git push",
+                "git add . && git commit -m 'Auto commit' && git push --force",
                 stderr=asyncio.subprocess.PIPE,
             )
             _, stderr = await process.communicate()
             if stderr:
                 self.logger.warning(f"Git error: {stderr.decode()}")
+            else:
+                self.logger.info("Successfully committed and pushed changes")
         except Exception as e:
             self.logger.error(f"Git commit failed: {e}")
 
 
-def watch(**kwargs: Any) -> Callable[[Callable[[commands.Bot], Coroutine[Any, Any, Any]]], Callable[[commands.Bot], Coroutine[Any, Any, Any]]]:
+def watch(
+    **kwargs: Any,
+) -> Callable[
+    [Callable[[commands.Bot], Coroutine[Any, Any, Any]]],
+    Callable[[commands.Bot], Coroutine[Any, Any, Any]],
+]:
     """Decorator for initializing and starting a RebootRunner."""
-    def decorator(func: Callable[[commands.Bot], Coroutine[Any, Any, Any]]) -> Callable[[commands.Bot], Coroutine[Any, Any, Any]]:
+
+    def decorator(
+        func: Callable[[commands.Bot], Coroutine[Any, Any, Any]]
+    ) -> Callable[[commands.Bot], Coroutine[Any, Any, Any]]:
         @wraps(func)
         async def wrapper(client: commands.Bot) -> Any:
             runner = RebootRunner(client, **kwargs)
             if await runner.start():
                 return await func(client)
+
         return wrapper
+
     return decorator

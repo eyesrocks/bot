@@ -11,7 +11,7 @@ from discord import (
     Embed,
     Permissions,
 )
-from asyncio import gather, Lock
+from asyncio import gather, Lock, sleep
 from datetime import timedelta
 from collections import defaultdict
 from typing import Optional, Union
@@ -133,6 +133,7 @@ class AntiNuke(Cog):
                     raise TypeError("User was the Owner")
             if await self.bot.glory_cache.ratelimited(f"punishment-{guild.id}-{user.id}", 1, 60) != 0:
                 return
+
             await guild.ban(Object(user.id), reason=reason)
         #       logger.info(f"successfully banned {user.name} with ban entry {b}")
         return
@@ -167,16 +168,23 @@ class AntiNuke(Cog):
         punishment = await self.bot.db.fetchval(
             """SELECT punishment FROM antinuke WHERE guild_id = $1""", guild.id
         )
-
         if punishment is None:
             punishment = "ban"
         if user.bot:
+            if not guild.me.guild_permissions.ban_members:
+                return
             await self.do_ban(guild, user, reason)
         elif punishment.lower() == "ban":
+            if not guild.me.guild_permissions.ban_members:
+                return
             await self.do_ban(guild, user, reason)
         elif punishment.lower() == "kick":
+            if not guild.me.guild_permissions.kick_members:
+                return
             await self.do_kick(guild, user, reason)
         else:
+            if not guild.me.guild_permissions.manage_roles:
+                return
             await self.do_strip(guild, user, reason)
         return
 
@@ -272,6 +280,17 @@ class AntiNuke(Cog):
             return True
         return False
 
+    async def attempt_cleanup(self, guild_id: int, action: callable, *args, **kwargs):
+        """Helper method to attempt cleanup actions with retries"""
+        for _ in range(5):  # Try up to 5 times
+            if await self.bot.glory_cache.ratelimited(f"cleanup-{guild_id}", 1, 10) == 0:
+                try:
+                    return await action(*args, **kwargs)
+                except Exception:
+                    pass
+            await sleep(2)  # Wait 2 seconds before next attempt
+        return None
+
     @Cog.listener("on_audit_log_entry_create")
     async def on_member_action(self, entry: AuditLogEntry):
         cleanup = None
@@ -345,9 +364,11 @@ class AntiNuke(Cog):
         if entry is None:
             return
         if await self.check_entry(after.guild, entry) is not True:
-            await after.edit(
+            await self.attempt_cleanup(
+                after.guild.id,
+                after.edit,
                 permissions=Permissions(before.permissions.value),
-                reason=self.make_reason("Cleanup"),
+                reason=self.make_reason("Cleanup")
             )
             return await self.do_punishment(
                 before.guild,
@@ -363,7 +384,11 @@ class AntiNuke(Cog):
         if entry is None:
             return
         if await self.check_entry(role.guild, entry) is not True:
-            await role.clone(reason=self.make_reason("Cleanup"))
+            await self.attempt_cleanup(
+                role.guild.id,
+                role.clone,
+                reason=self.make_reason("Cleanup")
+            )
             return await self.do_punishment(
                 role.guild, entry.user, self.make_reason("User caught deleting roles")
             )
@@ -376,7 +401,11 @@ class AntiNuke(Cog):
         if entry is None:
             return
         if await self.check_entry(role.guild, entry) is not True:
-            await role.delete(reason=self.make_reason("Cleanup"))
+            await self.attempt_cleanup(
+                role.guild.id,
+                role.delete,
+                reason=self.make_reason("Cleanup")
+            )
             return await self.do_punishment(
                 role.guild, entry.user, self.make_reason("User caught creating roles")
             )
@@ -390,7 +419,11 @@ class AntiNuke(Cog):
         if entry is None:
             return
         if await self.check_entry(guild, entry) is not True:
-            await channel.delete(reason=self.make_reason("Cleanup"))
+            await self.attempt_cleanup(
+                guild.id,
+                channel.delete,
+                reason=self.make_reason("Cleanup")
+            )
             return await self.do_punishment(
                 guild, entry.user, self.make_reason("User caught creating channels")
             )
@@ -404,7 +437,11 @@ class AntiNuke(Cog):
         if entry is None:
             return
         if await self.check_entry(guild, entry) is not True:
-            await channel.clone(reason=self.make_reason("Cleanup"))
+            await self.attempt_cleanup(
+                guild.id,
+                channel.clone,
+                reason=self.make_reason("Cleanup")
+            )
             return await self.do_punishment(
                 guild, entry.user, self.make_reason("User caught deleting channels")
             )
@@ -418,11 +455,13 @@ class AntiNuke(Cog):
         if entry is None:
             return
         if await self.check_entry(guild, entry) is not True:
-            await after.edit(
+            await self.attempt_cleanup(
+                guild.id,
+                after.edit,
                 name=before.name,
                 position=before.position,
                 overwrites=before.overwrites,
-                reason=self.make_reason("Cleanup"),
+                reason=self.make_reason("Cleanup")
             )
             return await self.do_punishment(
                 guild, entry.user, self.make_reason("User caught updating channels")
@@ -437,10 +476,11 @@ class AntiNuke(Cog):
         if entry is None:
             return
         if await self.check_entry(guild, entry) is not True:
-            try:
-                await entry.target.delete(reason=self.make_reason("Cleanup"))
-            except Exception:
-                pass
+            await self.attempt_cleanup(
+                guild.id,
+                entry.target.delete,
+                reason=self.make_reason("Cleanup")
+            )
             return await self.do_punishment(
                 guild, entry.user, self.make_reason("User caught creating webhooks")
             )
@@ -471,13 +511,15 @@ class AntiNuke(Cog):
         if await self.check_entry(after, entry) is not True:
             if before.banner:
                 await before.banner.read()
-            await after.edit(
+            await self.attempt_cleanup(
+                after.id,
+                after.edit,
                 name=before.name,
                 description=before.description,
                 icon=await before.icon.read() if before.icon else None,
                 banner=await before.banner.read() if before.banner else None,
                 splash=await before.splash.read() if before.splash else None,
-                reason=self.make_reason("Cleanup"),
+                reason=self.make_reason("Cleanup")
             )
             return await self.do_punishment(
                 after, entry.user, self.make_reason("User caught updating the guild")
