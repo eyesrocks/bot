@@ -1,6 +1,6 @@
 from discord.ext import commands, tasks
 import discord
-from typing import Optional
+from typing import Optional, Union, List
 from discord.ext.commands import Context
 from tool.important.subclasses.command import TextChannel
 from cogs.servers import EmbedConverter
@@ -21,6 +21,12 @@ class Vanity(commands.Cog):
         await self.bot.db.execute(
             """CREATE TABLE IF NOT EXISTS vanity_roles (guild_id BIGINT NOT NULL, user_id BIGINT NOT NULL, PRIMARY KEY(guild_id, user_id))"""
         )
+        await self.bot.db.execute(
+            """CREATE TABLE IF NOT EXISTS vanity_status (guild_id BIGINT PRIMARY KEY, role_id BIGINT, channel_id BIGINT, message TEXT)"""
+        )
+        await self.bot.db.execute(
+            """CREATE TABLE IF NOT EXISTS vanity (guild_id BIGINT PRIMARY KEY, channel_id BIGINT, message TEXT)"""
+        )            
         self.check_vanity.start()
         logger.info("Started the check vanity loop!")
 
@@ -69,6 +75,22 @@ class Vanity(commands.Cog):
          
          return await ctx.success("**Vanity channel** has been unset.")
 
+    @commands.Cog.listener("on_vanity_change")
+    async def notify_vanity_channels(self, vanity: str):
+        if not (rows := await self.bot.db.fetch("""SELECT channel_id, message FROM vanity WHERE guild_id = ANY($1::BIGINT[])""", [g.id for g in self.bot.guilds])):
+            return
+        for row in rows:
+            if not (channel := self.bot.get_channel(row.channel_id)):
+                continue
+            permissions = channel.permissions_for(channel.guild.me)
+            if not permissions.send_messages or not permissions.embed_links:
+                continue
+            message = (row.message or f"Vanity **{vanity}** has been dropped").replace("{vanity}", vanity)
+            embed = discord.Embed(title="New Vanity", description = message, color=self.bot.color)
+            try:
+                await channel.send(embed = embed)
+            except Exception:
+                continue
 
     @commands.Cog.listener("on_guild_update")
     async def vanity_check(self, before: discord.Guild, after: discord.Guild):
@@ -98,18 +120,26 @@ class Vanity(commands.Cog):
         """
         if not vanity or vanity.lower() == "none":
             return
-
-        for guild in guilds:
-            msg = guild.get("message")
-            message = (msg or f"Vanity **{vanity}** has been dropped").replace("{vanity}", vanity)
-            
-            embed = discord.Embed(
-                title="New Vanity",
-                description=message,
-                color=self.bot.color,
-            )
+        msg = None
+#        for guild in guilds:
+ #           msg = guild.get("message")
+        message = (msg or f"Vanity **{vanity}** has been dropped").replace("{vanity}", vanity)
+        embed = discord.Embed(
+            title="New Vanity",
+            description=message,
+            color=self.bot.color,
+        )
+        for channel in channel_ids:
+            await asyncio.sleep(0.01)
+            try:
+                await self.bot.send_raw(channel, embed = embed)
+            except Exception:
+                pass
+        return
 
         try:
+            data = {"method": "vanity_change", "vanity": vanity}
+            return await self.bot.connection.inform(data, destinations=self.bot.ipc.sources)
             await self.bot.ipc.roundtrip(
                 "send_message",
                 channel_id=channel_ids,

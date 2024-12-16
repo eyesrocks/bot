@@ -188,7 +188,7 @@ class CommandSelect(discord.ui.Select):
         embed = discord.Embed(
             title=f"**Commands in {selected_category}**",
             color=0x36393f,
-            description="\n".join(f"**{cmd}**" for cmd in commands_list) or "No commands available in this category."
+            description=f"```ansi\n\u001b[35m{', '.join(commands_list)}\u001b[0m\n```" if commands_list else "No commands available in this category."
         )
         embed.set_thumbnail(url=self.view.bot.user.display_avatar.url)
         embed.set_footer(text="Use the dropdown to switch categories.")
@@ -212,8 +212,8 @@ class MyHelpCommand(commands.HelpCommand):
             raise commands.CommandOnCooldown(None, retry_after, None)
 
         embed = discord.Embed(
-            title="Help",
-            description=f"{EMOJIS['luma_info']} **support: [/pomice](https://discord.gg/pomice)**\n<a:loading:1302351366584270899> **site: [greed](http://greed.wtf)**\n\n Use **,help [command name]** or select a category from the dropdown",
+            title="Menu",
+            description=f"Select a **category** to view it's commands.\n\n**Links**\n**[invite](https://discord.com/oauth2/authorize?client_id=1149535834756874250&permissions=8&integration_type=0&scope=bot)**\n**[support](https://discord.gg/pomice)**\n**[website](http://greed.wtf)**\n\nTotal Commands: **588**",
             color=0x36393f,
         )
         embed.set_author(name=self.context.bot.user.name, icon_url=self.context.bot.user.avatar)

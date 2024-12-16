@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Greed is a Discord bot serving over 18k+ guilds and 1.2mil+ users. It offers various automation features, commands, and integrations.">
+    <meta name="author" content="Your Name or Organization Name">
+    <meta name="keywords" content="Discord, bot, automation, commands, embeds, Greed">
+    <meta property="og:title" content="Greed - embed builder">
+    <meta property="og:description" content="Greed is a Discord bot serving over 18k+ guilds and 1.2mil+ users.">
+    <meta property="og:image" content="https://cdn.discordapp.com/attachments/1309828636857335809/1316879992172449892/acbed9f118d94e824f935b09434b2f1e.gif?ex=675ca790&is=675b5610&hm=d938bed009661a9e73acc85efa18db8910fb05a966302801a6c868d8dbbdb670&">
+    <meta property="og:url" content="https://greed.wtf">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Greed - Discord Bot">
+    <meta name="twitter:description" content="Greed is a Discord bot serving over 18k+ guilds and 1.2mil+ users.">
+    <meta name="twitter:image" content="https://cdn.discordapp.com/attachments/1309828636857335809/1316879992172449892/acbed9f118d94e824f935b09434b2f1e.gif?ex=675ca790&is=675b5610&hm=d938bed009661a9e73acc85efa18db8910fb05a966302801a6c868d8dbbdb670&">
+    <title>Discord Embed Builder</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            background-color: #181818;
+            color: #eaeaea;
+            justify-content: center;
+            align-items: center;
+            overflow-y: auto;
+            overflow-x: hidden !important;
+            position: relative;
+        }
+
+        .container {
+            display: flex;
+            width: 70%;
+            height: 80%;
+            max-width: 1200px;
+        }
+
+        .left-panel,
+        .preview {
+            width: 50%;
+            background: #202020;
+            padding: 20px;
+            box-shadow: 2px 0 15px rgba(0, 0, 0, 0.5);
+            border-radius: 12px;
+        }
+
+        .editor-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding-left: 30px;
+            position: relative;
+        }
+
+        .editor-buttons button {
+            padding: 12px;
+            background-color: #292929;
+            color: #eaeaea;
+            border: 1px solid #444;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            width: 100px;
+        }
+
+        .editor-buttons button:hover {
+            background-color: #333;
+            border-color: #666;
+        }
+
+        .editor-buttons button.active {
+            background-color: #1e90ff;
+            color: white;
+            border-color: #1c86ee;
+        }
+
+        .preview {
+            flex-grow: 1;
+            background: #2f3136;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+            padding: 20px;
+            border: 1px solid #333;
+            color: white;
+            font-size: 14px;
+            overflow-y: auto;
+        }
+
+        .preview em {
+            color: #888;
+        }
+
+        .embed {
+            display: flex;
+            flex-direction: column;
+            background: #2f3136;
+            border-left: 4px solid #1e90ff;
+            padding: 10px;
+            border-radius: 8px;
+            position: relative;
+        }
+
+        .embed-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #1e90ff;
+        }
+
+        .embed-description {
+            margin-top: 10px;
+            color: #dcdcdc;
+        }
+
+        .embed-author {
+            margin-bottom: 10px;
+            font-size: 12px;
+            color: #b0b0b0;
+        }
+
+        .embed-thumbnail {
+            position: absolute;
+            right: 10px;
+            top: 10px;
+            width: 60px;
+            height: 60px;
+            border-radius: 8px;
+        }
+
+        .embed-image {
+            margin-top: 10px;
+            max-width: 70%;
+            height: auto;
+            border-radius: 8px;
+        }
+
+        .editor-popup {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 50%;
+            max-width: 500px;
+            background: #202020;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+            padding: 20px;
+            border: 1px solid #333;
+            display: none;
+            flex-direction: column;
+            gap: 20px;
+            z-index: 1000;
+        }
+
+        .blur-background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(5px);
+            z-index: 999;
+            display: none;
+        }
+
+        .editor {
+            display: none;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .editor.active {
+            display: flex;
+        }
+
+        .editor input,
+        .editor textarea {
+            width: 100%;
+            padding: 10px;
+            background-color: #292929;
+            color: #eaeaea;
+            border: 1px solid #444;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .editor input:focus,
+        .editor textarea:focus {
+            border-color: #1e90ff;
+            outline: none;
+            box-shadow: 0 0 8px rgba(30, 144, 255, 0.5);
+        }
+
+        .copy-button {
+            align-self: flex-end;
+            padding: 10px 20px;
+            border: none;
+            background-color: #1e90ff;
+            color: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            box-shadow: 0 2px 5px rgba(30, 144, 255, 0.3);
+            transition: background-color 0.3s ease;
+        }
+
+        .copy-button:hover {
+            background-color: #1c86ee;
+        }
+
+        .editor-buttons h3 {
+            font-size: 14px;
+            font-weight: bold;
+            color: #eaeaea;
+            margin-bottom: 5px;
+        }
+
+        .copy-embed-icon,
+        .clear-embed-icon {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: #292929;
+            color: #eaeaea;
+            padding: 12px;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+            transition: background-color 0.3s ease;
+        }
+
+        .clear-embed-icon {
+            right: 50px;
+        }
+
+        .copy-embed-icon:hover,
+        .clear-embed-icon:hover {
+            background-color: #333;
+        }
+
+        .ripple {
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.6);
+            transform: scale(0);
+            animation: ripple-animation 0.6s linear;
+            pointer-events: none;
+        }
+
+        @keyframes ripple-animation {
+            to {
+                transform: scale(2);
+                opacity: 0;
+            }
+        }
+
+        @media screen and (max-width: 768px) {
+            .container {
+                flex-direction: column;
+                width: 100%;
+                height: auto;
+            }
+
+            .left-panel,
+            .preview {
+                width: 100%;
+                box-shadow: none;
+                margin-bottom: 20px;
+            }
+
+            .editor-buttons {
+                padding-left: 20px;
+            }
+
+            .editor-buttons button {
+                width: auto;
+                padding: 10px 15px;
+            }
+
+            .preview {
+                font-size: 12px;
+            }
+
+            .editor-popup {
+                width: 90%;
+                max-width: none;
+                padding: 15px;
+            }
+        }
+
+        @media screen and (max-width: 480px) {
+            .navbar {
+                padding: 8px;
+            }
+
+            .navbar .bot-name {
+                font-size: 16px;
+            }
+
+            .navbar .nav-links {
+                gap: 8px;
+            }
+
+            .navbar .nav-links a {
+                font-size: 12px;
+                padding: 5px 10px;
+            }
+
+            .navbar .support-icon {
+                font-size: 14px;
+            }
+
+            .editor-buttons button {
+                width: auto;
+                padding: 8px 10px;
+                font-size: 12px;
+            }
+
+            .editor input,
+            .editor textarea {
+                font-size: 12px;
+                padding: 7px;
+            }
+
+            .editor-popup {
+                width: 100%;
+                padding: 10px;
+            }
+
+            .copy-button {
+                padding: 8px 10px;
+            }
+
+            .copy-embed-icon,
+            .clear-embed-icon {
+                padding: 8px;
+                font-size: 10px;
+            }
+
+            .container {
+                padding: 10px;
+            }
+
+            .preview {
+                font-size: 10px;
+            }
+        }
+
+        .preloader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #1e1e1e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .spinner {
+            width: 200px;
+            height: 200px;
+            background: url('https://cdn.discordapp.com/avatars/1149535834756874250/9ca0c317bf5f4f56488b8839b743c1b3.png?size=1024') no-repeat center center;
+            background-size: contain;
+            animation: growShrink 1s infinite;
+        }
+
+        @keyframes growShrink {
+              0% {
+                     transform: scale(1);
+              }
+              50% {
+                     transform: scale(1.1);
+              }
+              100% {
+                     transform: scale(1);
+              }
+       }
+    </style>
+</head>
+
+<body>
+    
+    <div class="preloader">
+        <div class="spinner"></div>
+    </div>
+    <div class="container">
+        <div class="left-panel">
+            <div class="editor-buttons">
+                <div class="editor-button-item">
+                    <button data-field="title">Edit Title</button>
+                </div>
+                <div class="editor-button-item">
+                    <button data-field="description">Edit Description</button>
+                </div>
+                <div class="editor-button-item">
+                    <button data-field="author">Edit Author</button>
+                </div>
+                <div class="editor-button-item">
+                    <button data-field="image">Edit Image</button>
+                </div>
+                <div class="editor-button-item">
+                    <button data-field="thumbnail">Edit Thumbnail</button>
+                </div>
+                <!-- Copy Embed Code Icon -->
+                <div class="copy-embed-icon" onclick="copyEmbedCode()">&#128203;</div> <!-- Copy Icon -->
+                <!-- Clear Embed Code Icon -->
+                <div class="clear-embed-icon" onclick="clearEmbedCode()">&#10006;</div> <!-- Clear Icon -->
+            </div>
+
+        </div>
+
+        <div class="preview" id="embed-preview">
+            <em>No preview available</em>
+        </div>
+    </div>
+
+    <div class="blur-background" id="blur-background"></div>
+
+    <div class="editor-popup" id="editor-popup">
+        <div id="title-editor" class="editor">
+            <label for="title-input">Title:</label>
+            <input type="text" id="title-input" oninput="updatePreview('title', this.value)">
+        </div>
+        <div id="description-editor" class="editor">
+            <label for="description-input">Description:</label>
+            <textarea id="description-input" rows="5" oninput="updatePreview('description', this.value)"></textarea>
+        </div>
+        <div id="author-editor" class="editor">
+            <label for="author-input">Author:</label>
+            <input type="text" id="author-input" oninput="updatePreview('author', this.value)">
+        </div>
+        <div id="image-editor" class="editor">
+            <label for="image-input">Image URL:</label>
+            <input type="text" id="image-input" oninput="updatePreview('image', this.value)">
+        </div>
+        <div id="thumbnail-editor" class="editor">
+            <label for="thumbnail-input">Thumbnail URL:</label>
+            <input type="text" id="thumbnail-input" oninput="updatePreview('thumbnail', this.value)">
+        </div>
+        <button class="copy-button" onclick="copyEmbedCode()">Copy Embed Code</button>
+    </div>
+
+
+    <script>
+        const fields = {};
+        document.querySelectorAll('button, .copy-embed-icon, .clear-embed-icon').forEach(button => {
+            button.addEventListener('click', function (event) {
+                const ripple = document.createElement('span');
+                ripple.classList.add('ripple');
+                document.body.appendChild(ripple);
+                const size = Math.max(40, Math.min(100, Math.max(window.innerWidth, window.innerHeight) / 5)); // Smaller size for ripple
+                const x = event.clientX - size / 2;
+                const y = event.clientY - size / 2;
+
+                ripple.style.width = ripple.style.height = `${size}px`;
+                ripple.style.left = `${x}px`;
+                ripple.style.top = `${y}px`;
+                ripple.addEventListener('animationend', () => ripple.remove());
+            });
+        });
+
+        document.querySelectorAll('.editor-buttons button').forEach(button => {
+            button.addEventListener('click', () => {
+                const field = button.getAttribute('data-field');
+                openPopup(field);
+            });
+        });
+
+        function updatePreview(field, value) {
+            fields[field] = value.trim();
+            if (!value.trim()) {
+                delete fields[field];
+            }
+
+            const preview = document.getElementById('embed-preview');
+            if (Object.keys(fields).length === 0) {
+                preview.innerHTML = '<em>No preview available</em>';
+                return;
+            }
+
+            const title = fields.title ? `<div class="embed-title">${fields.title}</div>` : '';
+            const author = fields.author ? `<div class="embed-author">${fields.author}</div>` : '';
+            const description = fields.description ? `<div class="embed-description">${fields.description}</div>` : '';
+            const thumbnail = fields.thumbnail ? `<img class="embed-thumbnail" src="${fields.thumbnail}" alt="Thumbnail">` : '';
+            const image = fields.image ? `<img class="embed-image" src="${fields.image}" alt="Image">` : '';
+
+            preview.innerHTML = `
+        <div class="embed">
+          ${thumbnail}
+          ${author}
+          ${title}
+          ${description}
+          ${image}
+        </div>
+      `;
+        }
+
+        function openPopup(field) {
+            document.getElementById('editor-popup').style.display = 'flex';
+            document.getElementById('blur-background').style.display = 'block';
+
+            document.querySelectorAll('.editor').forEach(editor => editor.classList.remove('active'));
+            document.getElementById(`${field}-editor`).classList.add('active');
+        }
+
+        function closePopup() {
+            document.getElementById('editor-popup').style.display = 'none';
+            document.getElementById('blur-background').style.display = 'none';
+        }
+
+        function copyEmbedCode() {
+            const embedCode = generateEmbedCode();
+            const textArea = document.createElement('textarea');
+            textArea.value = embedCode;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+        }
+
+        function generateEmbedCode() {
+            let embedCode = '';
+            if (fields.title) embedCode += `{title: ${fields.title}}$v`;
+            if (fields.description) embedCode += `{description: ${fields.description}}$v`;
+            if (fields.image) embedCode += `{image: ${fields.image}}$v`;
+            if (fields.thumbnail) embedCode += `{thumbnail: ${fields.thumbnail}}$v`;
+            if (embedCode.endsWith('$v')) {
+                embedCode = embedCode.slice(0, -2);
+            }
+
+            return embedCode;
+        }
+
+        function clearEmbedCode() {
+            for (const field in fields) {
+                delete fields[field];
+            }
+            const preview = document.getElementById('embed-preview');
+            preview.innerHTML = '<em>No preview available</em>';
+            document.querySelectorAll('.editor input, .editor textarea').forEach(input => {
+                input.value = '';
+            });
+        }
+
+        document.getElementById('blur-background').addEventListener('click', closePopup);
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                closePopup();
+            }
+        });
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+
+                const preloader = document.querySelector('.preloader');
+                preloader.style.opacity = '0';
+                preloader.style.transition = 'opacity 1s ease';
+
+                setTimeout(() => {
+                    preloader.style.display = 'none';
+                    document.querySelector('.main-container').style.display = 'block';
+                }, 1000);
+            }, 3000);
+        });
+    </script>
+</body>
+
+</html>

@@ -28,59 +28,102 @@ pause_emoji = "<:greed_pause:1207661063093620787>"
 replay_emoji = "<:greed_replay:1207661068856598528>"
 queue_emoji = "<:greed_queue:1207661066620764192>"
 
-class Player(pomice.Player):
+class Player(pomice.Player):    
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._bound_channel: Optional[discord.TextChannel] = None
-        self.message: Optional[discord.Message] = None
-        self.track: Optional[pomice.Track] = None
-        self.context: Optional[commands.Context] = None
-        self.queue: asyncio.Queue = asyncio.Queue()
-        self.waiting: bool = False
-        self.loop: Union[str, bool] = False
+        self._current_message: Optional[discord.Message] = None
+        self._current_track: Optional[pomice.Track] = None
+        self._context: Optional[commands.Context] = None
+        self._waiting: bool = False
+        self._loop_mode: LoopMode = LoopMode.OFF
         self._volume: int = 65
+        self._active_filters: set[str] = set()
+        self.queue = asyncio.Queue()
+
+    @property
+    def current(self) -> Optional[pomice.Track]:
+        """The currently playing track."""
+        return self._current_track
+
+    @current.setter 
+    def current(self, value: Optional[pomice.Track]):
+        self._current_track = value
+
+    @property
+    def context(self) -> Optional[commands.Context]:
+        """The context of the player's invocation."""
+        return self._context
+
+    @context.setter
+    def context(self, value: Optional[commands.Context]):
+        self._context = value
 
     @property
     def bound_channel(self) -> Optional[discord.TextChannel]:
-        if not self._bound_channel:
-            if self.channel and self.channel.category:
-                self._bound_channel = next(
-                    (channel for channel in self.channel.category.text_channels 
-                     if channel.permissions_for(self.guild.me).send_messages), None)
-            if not self._bound_channel:
-                self._bound_channel = next(
-                    (channel for channel in self.guild.text_channels 
-                     if channel.permissions_for(self.guild.me).send_messages), None)
-        if not self._bound_channel:
-            raise ValueError(
-                "Failed to locate a suitable bound_channel where the bot can send messages. "
-                "Please ensure the bot has proper permissions."
-            )
+        """The text channel the player is bound to."""
+        if not self._bound_channel and self.guild:
+            try:
+                if self.channel and self.channel.category:
+                    self._bound_channel = next(
+                        (c for c in self.channel.category.text_channels 
+                         if c.permissions_for(self.guild.me).send_messages), 
+                        None
+                    )
+                if not self._bound_channel:
+                    self._bound_channel = next(
+                        (c for c in self.guild.text_channels 
+                         if c.permissions_for(self.guild.me).send_messages),
+                        None
+                    )
+            except Exception as e:
+                logger.error(f"Error finding bound channel: {e}")
         return self._bound_channel
 
     @bound_channel.setter
-    def bound_channel(self, channel: discord.TextChannel):
-        self._bound_channel = channel
+    def bound_channel(self, value: Optional[discord.TextChannel]):
+        self._bound_channel = value
+
+    @property 
+    def loop(self) -> str:
+        """The current loop mode."""
+        return self._loop_mode.value
+
+    @loop.setter
+    def loop(self, value: Union[str, LoopMode, bool]):
+        if isinstance(value, bool):
+            self._loop_mode = LoopMode.TRACK if value else LoopMode.OFF
+        elif isinstance(value, str):
+            try:
+                self._loop_mode = LoopMode(value.lower())
+            except ValueError:
+                self._loop_mode = LoopMode.OFF
+        elif isinstance(value, LoopMode):
+            self._loop_mode = value
+        else:
+            self._loop_mode = LoopMode.OFF
 
     async def _update_now_playing_message(self, track: pomice.Track):
-        """Update the now playing message."""
+        """Update the now playing message with track info."""
+        if not self.bound_channel:
+            logger.error("No bound channel for now playing message")
+            return
+
         try:
-            if not self.bound_channel:
-                raise ValueError("Bound channel not found while updating now playing message.")
-            if self.message:
-                await self.message.delete()
+            if self._current_message:
+                with suppress(discord.HTTPException):
+                    await self._current_message.delete()
+
+            embed = discord.Embed(color=0x2B2D31)
+            embed.description = f"> **Now playing** [**{track.title}**]({track.uri})"
             
-            embed = discord.Embed(
-                description=f"> **Now playing** [**{track.title}**]({track.uri})"
-            )
             if track.track_type == pomice.TrackType.YOUTUBE:
                 embed.set_image(url=track.thumbnail)
             else:
                 embed.set_thumbnail(url=track.thumbnail)
             
-            self.message = await self.bound_channel.send(embed=embed)
-        except ValueError as ve:
-            logger.error(f"Channel error: {ve}")
+            self._current_message = await self.bound_channel.send(embed=embed, view=MusicInterface(self.bot))
+
         except Exception as e:
             logger.error(f"Failed to update now playing message: {e}")
             self._bound_channel = None
@@ -88,30 +131,136 @@ class Player(pomice.Player):
     async def play(self, track: pomice.Track) -> Optional[bool]:
         """Play a track with error handling."""
         try:
+            self._current_track = track
+            
             if not self.bound_channel:
-                raise ValueError("Bound channel not found. Cannot play track.")
-            return await super().play(track)
-        except ValueError as ve:
-            logger.error(f"ValueError while playing track: {ve}")
-            if self.context:
-                await self.context.send(
-                    "Cannot play the track as no valid text channel is bound. "
-                    "Please check the bot's permissions and try again."
-                )
-        except pomice.exceptions.TrackLoadError as e:
-            logger.error(f"Failed to play track {track.title}: {str(e)}")
+                raise ValueError("No bound channel available")
+
+            # Ensure we call the parent class play method BEFORE updating message
+            result = await super().play(track)
+            
+            # Only update the now playing message if the track started playing
+            if result is not False:
+                await self._update_now_playing_message(track)
+                
+            return result
+
+        except Exception as e:
+            logger.error(f"Error playing track: {e}")
             if self.context:
                 await self.context.fail(f"Could not play **[{track.title}]({track.uri})**")
-            if self.queue._queue:
+            
+            if not self.queue.empty():
                 try:
-                    self.queue._queue.remove(track)
-                    next_track = self.queue._queue[0]
-                    await self.play(next_track)
-                except (IndexError, ValueError):
+                    self.queue._queue = [t for t in self.queue._queue if t != track]
+                    if self.queue._queue:
+                        next_track = self.queue._queue[0] 
+                        await self.play(next_track)
+                    else:
+                        await self.teardown()
+                except Exception as e:
+                    logger.error(f"Error handling queue: {e}")
+            return None
+
+    async def insert(self, track: pomice.Track, *, filter: bool = True, bump: bool = False) -> bool:
+        """Insert a track into the queue with optional metadata filtering."""
+        try:
+            if filter and track.info.get("sourceName") == "youtube":
+                async with self.bot.session.get(
+                    "https://metadata-filter.vercel.app/api/youtube",
+                    params={"track": track.title}
+                ) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        track.title = data["data"].get("track", track.title)
+
+            if bump:
+                self.queue._queue.insert(0, track)
+            else:
+                await self.queue.put(track)
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to insert track: {e}")
+            return False
+
+    async def next_track(self, ignore_playing: bool = False) -> Optional[pomice.Track]:
+        """Get and play the next track in queue."""
+        if not ignore_playing and (self.is_playing or self._waiting):
+            return None
+
+        self._waiting = True
+        try:
+            track = None
+            
+            # Handle loop modes
+            if self._loop_mode == LoopMode.TRACK and self.current:
+                track = self.current
+            else:
+                try:
+                    async with async_timeout.timeout(300):
+                        if not self.queue.empty():
+                            track = await self.queue.get()
+                            if self._loop_mode == LoopMode.QUEUE:
+                                await self.queue.put(track)
+                except asyncio.TimeoutError:
                     await self.teardown()
-            logger.info(f"Queue size after error: {len(self.queue._queue)}")
-        return None
-    
+                    return None
+
+            if track:
+                # Actually play the track
+                play_result = await self.play(track)
+                if play_result is not False:
+                    return track
+                else:
+                    logger.error(f"Failed to play track {track.title}")
+                    return await self.next_track(ignore_playing=True)
+            else:
+                await self.teardown()
+                return None
+
+        except Exception as e:
+            logger.error(f"Error in next_track: {e}")
+            return None
+        finally:
+            self._waiting = False
+
+    async def teardown(self):
+        """Safely clean up player resources."""
+        try:
+            # Clear queue
+            self.queue._queue.clear()
+            
+            # Reset filters
+            await self.reset_filters()
+            
+            # Destroy player if it exists
+            if self.guild and self.guild.id in self._node._players:
+                await self.destroy()
+            
+            # Clean up message
+            if self._current_message:
+                with suppress(discord.HTTPException):
+                    await self._current_message.delete()
+                    
+            # Reset state
+            self._current_track = None
+            self._current_message = None
+            self._waiting = False
+            self._loop_mode = LoopMode.OFF
+            self._active_filters.clear()
+            
+        except Exception as e:
+            logger.error(f"Error in teardown: {e}")
+
+    @property
+    def waiting(self) -> bool:
+        return self._waiting
+
+    @waiting.setter
+    def waiting(self, value: bool):
+        self._waiting = value
+
     @property
     def get_percentage(self) -> int:
         pos_seconds = self.position // 1000 if self.position else 0
@@ -154,70 +303,6 @@ class Player(pomice.Player):
     async def remove_track(self, track: pomice.Track):
         self.queue._queue = [t for t in self.queue._queue if t != track]
 
-    async def insert(self, track: pomice.Track, filter_metadata: bool = True, bump: bool = False) -> bool:
-        """Insert track into queue with optional metadata filtering and bumping."""
-        if filter_metadata and track.info.get("sourceName") == "youtube":
-            try:
-                async with self.bot.session.get(
-                    "https://metadata-filter.vercel.app/api/youtube",
-                    params={"track": track.title}
-                ) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        track.title = data["data"].get("track", track.title)
-            except Exception as e:
-                logger.error(f"Failed to filter metadata: {e}")
-
-        if bump:
-            self.queue._queue.insert(0, track)
-        else:
-            await self.queue.put(track)
-        return True
-
-    async def next_track(self, ignore_playing: bool = False) -> Optional[pomice.Track]:
-        """Get and play next track in queue."""
-        if not ignore_playing and (self.is_playing or self.waiting):
-            return None
-
-        self.waiting = True
-        try:
-            track = self.track if self.loop == "track" else None
-            if not track:
-                async with async_timeout.timeout(300):
-                    track = await self.queue.get()
-                    if self.loop == "queue":
-                        await self.queue.put(track)
-
-            self.track = track
-            await self.play(track)
-
-            if self.bound_channel:
-                logger.info(f"got bound channel {self.bound_channel}")
-                await self._update_now_playing_message(track)
-
-            return track
-
-        except asyncio.TimeoutError:
-            await self.teardown()
-            return None
-        finally:
-            self.waiting = False
-
-    async def _update_now_playing_message(self, track: pomice.Track):
-        """Update the now playing message."""
-        try:
-            if self.message:
-                await self.message.delete()
-            
-            embed = discord.Embed(
-                description=f"> **Now playing** [**{track.title}**]({track.uri})"
-            )
-            embed.set_image(url=track.thumbnail) if track.track_type == pomice.TrackType.YOUTUBE else embed.set_thumbnail(url=track.thumbnail)
-            self.message = await self.bound_channel.send(embed=embed)
-        except Exception as e:
-            logger.error(f"Failed to update now playing message: {e}")
-            self.bound_channel = None
-
     async def skip(self):
         """Skip current track."""
         if self.is_paused:
@@ -231,14 +316,36 @@ class Player(pomice.Player):
         """Set loop state."""
         self.loop = state
 
-    async def teardown(self):
-        """Clean up player resources."""
-        self.queue._queue.clear()
-        await self.reset_filters()
-        with suppress(KeyError):
-            if self.guild.id in self._node._players:
-                await self.destroy()
+    async def add_filter(self, filter_type: str, fast_apply: bool = True) -> None:
+        """Add a filter safely."""
+        try:
+            if isinstance(filter_type, str):
+                if filter_type in self.filters:
+                    raise pomice.FilterTagAlreadyInUse(filter_type)
+                await super().add_filter(filter_type, fast_apply)
+                self.filters.add(filter_type)
+            else:
+                # Handle filter objects (e.g. Timescale, Equalizer)
+                filter_name = filter_type.__class__.__name__.lower()
+                if filter_name in self.filters:
+                    raise pomice.FilterTagAlreadyInUse(filter_name)
+                await super().add_filter(filter_type, fast_apply)
+                self.filters.add(filter_name)
+        except Exception as e:
+            logger.error(f"Error adding filter {filter_type}: {e}")
+            raise
 
+    async def remove_filter(self, filter_type: str, fast_apply: bool = True) -> None:
+        """Remove a filter safely."""
+        try:
+            filter_name = filter_type.lower()
+            if filter_name not in self.filters:
+                raise pomice.FilterTagNotInUse(filter_name)
+            await super().remove_filter(filter_name, fast_apply)
+            self.filters.remove(filter_name)
+        except Exception as e:
+            logger.error(f"Error removing filter {filter_type}: {e}")
+            raise
 
     def __repr__(self) -> str:
         return f"<Player guild={self.guild.id} connected={self.is_connected} playing={self.is_playing}>"
@@ -503,62 +610,73 @@ class Music(commands.Cog):
         )
         logger.info("Created LavaLink Node Pool Connection")
         
-    async def get_player(self, ctx: Context, *, connect: bool = True, check_connected: bool = True) -> Optional[Player]:
-        if not hasattr(self.bot, "node"):
-            raise commands.CommandError("The **Lavalink** node hasn't been **initialized** yet")
-
-        user_voice = ctx.author.voice
-        bot_voice = ctx.guild.me.voice
-
-        if not user_voice:
-            if check_connected:
-                raise commands.CommandError("You're not **connected** to a voice channel")
-            return None
-
-        if bot_voice and bot_voice.channel != user_voice.channel:
-            raise commands.CommandError("I'm **already** connected to another voice channel")
-
-        player = self.bot.node.get_player(ctx.guild.id)
-        if not player or not bot_voice:
-            if not connect:
-                if ctx.voice_client:
-                    await ctx.voice_client.disconnect()
-                    return None
-                raise commands.CommandError("I'm not **connected** to a voice channel")
-            
-            try:
-                await user_voice.channel.connect(cls=Player, self_deaf=True)
-                player = self.bot.node.get_player(ctx.guild.id)
-                if not player:
-                    raise commands.CommandError("Failed to initialize the player after connecting")
-                logger.info(f"Connected to voice channel: {user_voice.channel.name}")
-            except Exception as e:
-                logger.error(f"Failed to connect to voice channel: {e}")
-                raise commands.CommandError("Could not connect to the voice channel")
-
+    async def get_player(
+        self, ctx: Context, *, connect: bool = True, check_connected: bool = True
+    ) -> Optional[Player]:
+        """Get or create a player instance for a guild."""
         try:
-            if not player.bound_channel or player.bound_channel.id != ctx.channel.id:
-                player.bound_channel = ctx.channel
-                logger.info(f"Bound channel successfully set to: {ctx.channel.name}")
+            if not hasattr(self.bot, "node"):
+                await self.check_node()
+                
+            if check_connected and not ctx.author.voice:
+                if not check_connected:
+                    return None
+                raise commands.CommandError("You must be in a voice channel")
+
+            if (
+                ctx.guild.me.voice 
+                and ctx.guild.me.voice.channel 
+                and ctx.author.voice
+                and ctx.guild.me.voice.channel != ctx.author.voice.channel
+            ):
+                raise commands.CommandError("Already connected to different voice channel")
+
+            player = self.bot.node.get_player(ctx.guild.id)
+            
+            if not player and not ctx.guild.me.voice:
+                if not connect:
+                    if ctx.voice_client:
+                        return await ctx.voice_client.disconnect()
+                    raise commands.CommandError("Not connected to voice channel")
+                    
+                try:
+                    channel = ctx.author.voice.channel
+                    player = await channel.connect(cls=Player, self_deaf=True)
+                    if not player:
+                        raise commands.CommandError("Failed to create player")
+                        
+                    # Initialize player attributes after connection
+                    if hasattr(player, "__post_init__"):
+                        player.__post_init__()
+                        
+                    player.bound_channel = ctx.channel
+                    await player.set_volume(65)
+                    
+                except Exception as e:
+                    if ctx.voice_client:
+                        await ctx.voice_client.disconnect()
+                    raise commands.CommandError(f"Failed to connect: {str(e)}")
+
+            return player
+
         except Exception as e:
-            logger.error(f"Failed to set bound channel: {e}")
-            raise commands.CommandError("Failed to bind the text channel for the player. Please check permissions.")
-
-        if not bot_voice:
-            await ctx.voice_client.set_volume(65)
-
-        return player
-
+            logger.error(f"Error getting player: {e}")
+            raise commands.CommandError(str(e))
 
     @tasks.loop(minutes=5)
     async def music_autodisconnect(self):
-        if not hasattr(self.bot, "node"):
-            await self.check_node()
-            return
+        """Safely check and disconnect inactive players."""
+        try:
+            if not hasattr(self.bot, "node"):
+                await self.check_node()
+                return
 
-        for player in list(self.bot.node.players.values()):
-            if not player.is_playing and player.is_paused:
-                await player.teardown()
+            for player in list(self.bot.node.players.values()):
+                if isinstance(player, Player):
+                    if not player.is_playing and player.is_paused:
+                        await player.teardown()
+        except Exception as e:
+            logger.error(f"Error in autodisconnect: {e}")
 
     @commands.Cog.listener()
     async def on_pomice_track_end(self, player: pomice.Player, track: pomice.Track, reason: str):
@@ -603,11 +721,21 @@ class Music(commands.Cog):
             await player.teardown()
 
 
-    async def get_tracks(self, ctx: Context, player: Player, query: str, search_type: Optional[pomice.SearchType] = None):
+    async def get_tracks(self, ctx: Context, player: Optional[Player], query: str, search_type: Optional[pomice.SearchType] = None):
+        if not hasattr(self.bot, "node"):
+            raise commands.CommandError("The Lavalink node hasn't been initialized yet")
+            
         try:
-            return await player.get_tracks(query=query, ctx=ctx, search_type=search_type)
+            if player:
+                return await player.get_tracks(query=query, ctx=ctx, search_type=search_type)
+            else:
+                return await self.bot.node.get_tracks(query=query, ctx=ctx, search_type=search_type)
         except Exception:
-            return await player.get_tracks(query=query, ctx=ctx, search_type=pomice.SearchType.scsearch)
+            search_type = pomice.SearchType.scsearch
+            if player:
+                return await player.get_tracks(query=query, ctx=ctx, search_type=search_type)
+            else:
+                return await self.bot.node.get_tracks(query=query, ctx=ctx, search_type=search_type)
 
     @commands.command(name="playing", aliases=["current", "nowplaying", "np"], brief="Show current playing song", example=",playing")
     async def playing(self, ctx: Context, member: Optional[discord.Member] = None):
@@ -664,7 +792,7 @@ class Music(commands.Cog):
                 embeds.append(embed)
             return await ctx.paginate(embeds)
         
-        if query.lower() in ["-liked", "--liked", "liked"]:
+        if isinstance(query, str) and query.lower() in ["-liked", "--liked", "liked"]:
             results, errors = [], []
             likes = await self.bot.db.fetch(
                 "SELECT track, artist FROM lastfm_likes WHERE user_id = $1", ctx.author.id

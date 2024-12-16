@@ -64,4 +64,5 @@ EMOJIS = {
     "Code": "",
     "stats_icon_white": "",
     "online_blank": "",
+    "line": "",
 }

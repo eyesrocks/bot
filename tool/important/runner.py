@@ -82,7 +82,7 @@ class RebootRunner:
         async for changes in awatch(self.path):
             for change_type, file_path in changes:
                 file_path = Path(file_path)
-                if ".git" in str(file_path) or file_path.suffix != ".py":
+                if ".git" in str(file_path) or file_path.suffix != ".py" or "custom" in file_path.parts:
                     continue
                 try:
                     if await self._is_git_operation():
@@ -113,7 +113,14 @@ class RebootRunner:
                     git_dir / "HEAD.lock",
                     git_dir / "refs.lock",
                 ]
-                return any(lock.exists() for lock in lock_files)
+                # Use asyncio.gather to check files concurrently
+                exists_results = await asyncio.gather(
+                    *[
+                        self.loop.run_in_executor(None, lock.exists)
+                        for lock in lock_files
+                    ]
+                )
+                return any(exists_results)
         except Exception:
             pass
         return False
@@ -122,22 +129,27 @@ class RebootRunner:
         """Loads all cogs on startup."""
         self.logger.info("Preloading cogs...")
         try:
-            files = list(self.path.rglob("*.py"))
+            # Run glob operation in executor to prevent blocking
+            files = await self.loop.run_in_executor(
+                None, lambda: list(self.path.rglob("*.py"))
+            )
             self.logger.debug(f"Found {len(files)} potential cog files")
-            for file in files:
-                if file.name.startswith("_"):
-                    continue
-                try:
-                    cog_path: str = self.get_dotted_path(file)
-                    self.logger.debug(f"Attempting to load: {cog_path}")
-                    await self._load_cog(cog_path)
-                except Exception as e:
-                    self.logger.error(f"Failed to load {file}: {str(e)}")
+            # Load cogs concurrently in batches
+            batch_size = 10
+            for i in range(0, len(files), batch_size):
+                batch = files[i:i + batch_size]
+                await asyncio.gather(*[
+                    self._load_cog(self.get_dotted_path(file))
+                    for file in batch
+                    if not file.name.startswith("_") and "custom" not in file.parts
+                ])
         except Exception as e:
             self.logger.error(f"Error during cog preloading: {str(e)}")
 
     async def _load_cog(self, cog_path: str) -> None:
         """Loads a cog."""
+        if "custom" in cog_path:
+            return
         try:
             await self.client.load_extension(cog_path)
             self.logger.info(f"Loaded cog: {cog_path}")
@@ -156,6 +168,8 @@ class RebootRunner:
 
     async def _reload_cog(self, cog_path: str) -> None:
         """Reloads a cog."""
+        if "custom" in cog_path:
+            return
         if self.auto_commit:
             await self._auto_commit_changes()
         try:
@@ -170,20 +184,30 @@ class RebootRunner:
     async def _auto_commit_changes(self) -> None:
         """Automatically commits changes using git. Only runs on the main cluster."""
         try:
-            # Only proceed if this is the main cluster
             if not hasattr(self.client, 'connection') or self.client.connection.local_name != self.main_cluster:
                 return self.logger.debug(f"Skipping git commit on non-main cluster: {getattr(self.client.connection, 'local_name', 'unknown')}")
 
             self.logger.info("Performing git commit on main cluster")
-            process = await asyncio.create_subprocess_shell(
-                "git add . && git commit -m 'Auto commit' && git push --force",
-                stderr=asyncio.subprocess.PIPE,
-            )
-            _, stderr = await process.communicate()
-            if stderr:
-                self.logger.warning(f"Git error: {stderr.decode()}")
-            else:
-                self.logger.info("Successfully committed and pushed changes")
+            
+            commands = [
+                ('git', 'add', '.'),
+                ('git', 'commit', '-m', 'Auto commit'),
+                ('git', 'push', '--force')
+            ]
+            
+            for cmd in commands:
+                process = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                stdout, stderr = await process.communicate()
+                
+                if process.returncode != 0 and stderr:
+                    self.logger.warning(f"Git command {cmd[0]} failed: {stderr.decode()}")
+                    return
+                
+            self.logger.info("Successfully committed and pushed changes")
         except Exception as e:
             self.logger.error(f"Git commit failed: {e}")
 

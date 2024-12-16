@@ -1,73 +1,173 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Greed</title>
-  <link href="css/style.css" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Greed is a Discord bot serving over 18k+ guilds and 1.2mil+ users. It offers various automation features, commands, and integrations.">
+    <meta name="author" content="Your Name or Organization Name">
+    <meta name="keywords" content="Discord, bot, automation, commands, embeds, Greed">
+    <meta property="og:title" content="Greed - home">
+    <meta property="og:description" content="Greed is a Discord bot serving over 18k+ guilds and 1.2mil+ users.">
+    <meta property="og:image" content="https://cdn.discordapp.com/attachments/1309828636857335809/1316879992172449892/acbed9f118d94e824f935b09434b2f1e.gif?ex=675ca790&is=675b5610&hm=d938bed009661a9e73acc85efa18db8910fb05a966302801a6c868d8dbbdb670&">
+    <meta property="og:url" content="https://greed.wtf">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Greed - home">
+    <meta name="twitter:description" content="Greed is a Discord bot serving over 18k+ guilds and 1.2mil+ users.">
+    <meta name="twitter:image" content="https://cdn.discordapp.com/attachments/1309828636857335809/1316879992172449892/acbed9f118d94e824f935b09434b2f1e.gif?ex=675ca790&is=675b5610&hm=d938bed009661a9e73acc85efa18db8910fb05a966302801a6c868d8dbbdb670&">
+    <title>Greed - Discord Bot</title>
+    <link rel="stylesheet" href="/style.css">
+    <link rel="icon" href="index/icon.gif" type="image/gif">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.2/dist/gsap.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
 </head>
+
 <body>
-  <div class="background"></div>
-  <div class="content">
-    <div class="profile-image">
-      <img src="https://i.imgur.com/ZDOjcXT.gif" alt="Profile">
+    <div class="preloader">
+        <div class="spinner"></div>
     </div>
-    <div class="title">Greed</div>
-    <div class="description">
-      <br>
-      <div class="user-info"></div>
-    </div>
-    <div class="buttons">
-      <a href="https://discord.gg/pomice" class="btn discord">Support</a>
-    </div>
-  </div>
+    
+    <div class="main-container">
+        <div class="hero">
+            <button id="mode-toggle" class="mode-toggle-button">🌙</button>
+            <button id="mute-toggle" class="mute-toggle-button"></button>
+            <img src="https://cdn.discordapp.com/attachments/1301628329111326755/1317975530380726362/9ca0c317bf5f4f56488b8839b743c1b3.png?ex=6760a3dd&is=675f525d&hm=79e66404e8d7c90ea0efefee1d2e1374895ca8ccc8a38b6d4c753fb87605ef2d&" alt="Profile Image" class="profile-image" id="profile-image">
+            <h1 class="brand-title">Greed.</h1>
+            <p class="subtext">Greed is serving over 18k+ guilds & 1.2mil+ users</p>
+            <div class="button-grid">
+                <a href="https://discord.gg/pomice" target="_blank" class="button">Discord</a>
+                <a href="https://discord.com/oauth2/authorize?client_id=1149535834756874250&permissions=8&integration_type=0&scope=bot" class="button">Invite</a>
+                <a href="commands" class="button">Commands</a>
+                <a href="embed" class="button">Embeds</a>
+            </div>
+        </div>
+
+        <section id="combined-section">
+            <div class="sections-container">
+                <!-- Information Box -->
+                <div class="section-box" id="information-box">
+                    <h2>Information</h2>
+                    <p class="anim-text"></p>
+                </div>
+        
+                <!-- Statistics Box -->
+                <div class="section-box" id="statistics-box">
+                    <h2>Statistics</h2>
+                    <p class="stat-text">
+                        Guilds Served: 18k+<br>
+                        Active Users: 1.2 million+<br>
+                        Commands Available: 500+<br>
+                        Integrations: Multiple (Discord, Webhooks, and more)
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Integrations Section -->
+        <section id="integrations-section">
+            <h2 class="integrations-header">Integrations</h2>
+            <div class="integration-grid">
+                <div class="integration-box">
+                    <div class="integration-icon">
+                        <i class="fas fa-shield-alt"></i>
+                    </div>
+                    <h3 class="integration-title">Automod</h3>
+                    <p class="integration-description">Block unwanted messages, slurs, and spam in your server with Greed’s Automod feature.</p>
+                </div>
+                <div class="integration-box">
+                    <div class="integration-icon">
+                        <i class="fas fa-bomb"></i>
+                    </div>
+                    <h3 class="integration-title">Antinuke</h3>
+                    <p class="integration-description">Protect your server from attacks and nukes with Greed’s Antinuke system.</p>
+                </div>
+                <div class="integration-box">
+                    <div class="integration-icon">
+                        <i class="fab fa-instagram"></i>
+                    </div>
+                    <h3 class="integration-title">Social Media</h3>
+                    <p class="integration-description">Use Greed to integrate social media commands like Instagram, TikTok, and more.</p>
+                </div>
+            </div>
+        </section>
 
 
-    <div class="cta-section">
-        <h2>Want to see all of the commands?</h2>
-        <p>To view 500+ commands click the button below</p>
-        <a href="/commands">commands</a>
-      </div>
 
 
-  <div id="features" class="features-section">
-    <div class="feature-box">
-      <i class="fas fa-wallet"></i>
-      <h3>Economy System</h3>
-      <p>Manage virtual currency, offer rewards, and create a thriving economy in your server.</p>
-    </div>
+    <script>
+        const infoText = "Greed is a powerful Discord bot offering various automation features. It serves over 18k+ guilds and 1.2 million+ users. The bot enhances the Discord experience with commands for automation, embeds, and much more.";
+        const infoElement = document.querySelector("#information-box .anim-text");
+        infoElement.innerHTML = infoText;
+        gsap.from(".brand-title", { opacity: 0, y: 30, duration: 1 });
+        gsap.from(".subtext", { opacity: 0, y: 20, duration: 1, delay: 0.5 });
+        const toggleButton = document.getElementById("mode-toggle");
+        const body = document.body;
+        const profileImage = document.getElementById("profile-image");
 
-    <div class="feature-box">
-      <i class="fas fa-music"></i>
-      <h3>LastFM Integration</h3>
-      <p>Track your music listening habits and share your top tracks with the community.</p>
-    </div>
+        toggleButton.addEventListener("click", () => {
+            body.classList.toggle("dark-mode");
 
-    <div class="feature-box">
-      <i class="fas fa-shield-alt"></i>
-      <h3>Anti-Nuke Protection</h3>
-      <p>Protect your server from malicious users and prevent harmful activities with advanced anti-nuke features.</p>
-    </div>
+            if (body.classList.contains("dark-mode")) {
+                toggleButton.textContent = "🌞";
+                profileImage.src = "https://cdn.discordapp.com/attachments/1309828636857335809/1316879992172449892/acbed9f118d94e824f935b09434b2f1e.gif?ex=67609c10&is=675f4a90&hm=3be70ed9a17700f1ff51d8ad213d7eaeb5ceedb7651a9802272c55f828c4fd9b&";
+            } else {
+                toggleButton.textContent = "🌙";
+                profileImage.src = "https://cdn.discordapp.com/attachments/1301628329111326755/1317975530380726362/9ca0c317bf5f4f56488b8839b743c1b3.png?ex=6760a3dd&is=675f525d&hm=79e66404e8d7c90ea0efefee1d2e1374895ca8ccc8a38b6d4c753fb87605ef2d&";
+            }
+        });
 
-    <div class="feature-box">
-      <i class="fas fa-clipboard-list"></i>
-      <h3>ModLogs</h3>
-      <p>Track and log moderation actions to maintain transparency and order in your server.</p>
-    </div>
+        if (localStorage.getItem("mode") === "dark") {
+            body.classList.add("dark-mode");
+            toggleButton.textContent = "🌞";
+            profileImage.src = "/root/greed/website/public/index/greed_dark.gif";
+        }
 
-    <div class="feature-box">
-      <i class="fas fa-trophy"></i>
-      <h3>Level Up System</h3>
-      <p>Gamify your community with a level up system based on activity, rewarding your most active members.</p>
-    </div>
+        window.addEventListener("load", () => {
+            if (body.classList.contains("dark-mode")) {
+                localStorage.setItem("mode", "dark");
+            } else {
+                localStorage.setItem("mode", "light");
+            }
+        });
 
-    <div class="feature-box">
-      <i class="fas fa-gavel"></i>
-      <h3>Advanced Moderation</h3>
-      <p>Powerful moderation tools to help you manage your server effectively, from banning to warnings.</p>
-    </div>
-  </div>
+        const muteButton = document.getElementById("mute-toggle");
+        const audioPlayer = document.getElementById("audioPlayer");
 
+        muteButton.addEventListener("click", () => {
+            if (audioPlayer.muted) {
+                audioPlayer.muted = false;
+                muteButton.textContent = "🔊"; 
+                audioPlayer.muted = true;
+                muteButton.textContent = "🔇"; 
+            }
+        });
+
+
+        window.onload = () => {
+            audioPlayer.play();
+        };
+
+        window.addEventListener('load', () => {
+    const audioPlayer = document.getElementById('audioPlayer');
+
+    audioPlayer.muted = false;
+    audioPlayer.play().catch(error => {
+        console.error('Error playing audio:', error);
+    });
+});
+window.addEventListener('load', () => {
+            setTimeout(() => {
+
+                const preloader = document.querySelector('.preloader');
+                preloader.style.opacity = '0';
+                preloader.style.transition = 'opacity 1s ease';
+
+                setTimeout(() => {
+                    preloader.style.display = 'none';
+                    document.querySelector('.main-container').style.display = 'block';
+                }, 1000); 
+            }, 1350);
+        });
+    </script>
 </body>
 </html>

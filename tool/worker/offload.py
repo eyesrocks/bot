@@ -4,13 +4,16 @@ import asyncio
 import os
 from contextlib import suppress
 from functools import partial
-from typing import Awaitable, Callable, TypeVar
+from typing import Awaitable, Callable, TypeVar, TYPE_CHECKING
 from typing_extensions import ParamSpec
 
 import distributed.client
 from tornado import gen
 import dill
 from .dask import get_dask, start_dask
+
+if TYPE_CHECKING:
+    from tool.greed import Greed
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -62,7 +65,7 @@ def offloaded(f: Callable[P, T]) -> Callable[P, Awaitable[T]]:
         loop = asyncio.get_running_loop()
         cf_future = loop.create_future()
         dask = get_dask()
-        if dask.status == "closed":
+        if dask.status == "closed": 
             await start_dask()
         meth = partial(f, *a, **ka)
         cf_future.dask_future = dask.submit(meth, pure=False)

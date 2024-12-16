@@ -37,6 +37,7 @@ from pydantic import BaseModel
 import uuid
 from asyncpg import exceptions
 
+
 class ModerationStatistics(BaseModel):
     bans: Optional[int] = 0
     unbans: Optional[int] = 0
@@ -50,6 +51,7 @@ class ModerationStatistics(BaseModel):
     async def from_data(cls, data: dict):
         return cls(**data)
 
+
 class CaseType(Enum):
     bans = auto()
     unbans = auto()
@@ -60,6 +62,7 @@ class CaseType(Enum):
     unmutes = auto()
     warns = auto()
 
+
 def create_dataclass(class_name: str, fields: List[str]) -> Type:
     """
     Dynamically creates a dataclass with given field names, making all fields optional.
@@ -69,19 +72,27 @@ def create_dataclass(class_name: str, fields: List[str]) -> Type:
     :return: A new dataclass type.
     """
     # Create annotations where each field is Optional[str] and default is None
-    annotations: Dict[str, Type[Optional[str]]] = {field_name: Optional[str] for field_name in fields}
-    
+    annotations: Dict[str, Type[Optional[str]]] = {
+        field_name: Optional[str] for field_name in fields
+    }
+
     # Create a dictionary of default values (None) for each field
     defaults = {field_name: field(default=None) for field_name in fields}
-    
+
     # Create the dataclass dynamically
-    dynamic_dataclass = dataclass(type(class_name, (object,), {"__annotations__": annotations, **defaults}))
-    
+    dynamic_dataclass = dataclass(
+        type(class_name, (object,), {"__annotations__": annotations, **defaults})
+    )
+
     return dynamic_dataclass
 
+
 def make_dataclass(class_name: str, count: int) -> Type:
-    numbers = [num2words(i, to="ordinal").replace("-","_") for i in range(1, (count + 1))]
+    numbers = [
+        num2words(i, to="ordinal").replace("-", "_") for i in range(1, (count + 1))
+    ]
     return create_dataclass(class_name, numbers)
+
 
 class InvalidError(TypeError):
     def __init__(self, **kwargs):
@@ -96,18 +107,23 @@ class GuildChannel(commands.Converter):
             if channel and isinstance(channel, discord.abc.GuildChannel):
                 return channel
 
-        match = re.match(r'<#(\d+)>', argument)
+        match = re.match(r"<#(\d+)>", argument)
         if match:
             channel_id = int(match.group(1))
             channel = ctx.guild.get_channel(channel_id)
             if channel and isinstance(channel, discord.abc.GuildChannel):
                 return channel
 
-        channels = {c.name.lower(): c.id for c in ctx.guild.channels if isinstance(c, discord.abc.GuildChannel)}
+        channels = {
+            c.name.lower(): c.id
+            for c in ctx.guild.channels
+            if isinstance(c, discord.abc.GuildChannel)
+        }
         if match := closest_match(argument.lower(), list(channels.keys())):
             return ctx.guild.get_channel(channels[match])
 
         raise commands.CommandError(f"Channel `{argument}` not found")
+
 
 class Args:
     def __init__(self, count: Optional[int] = 2):
@@ -123,7 +139,6 @@ class Args:
                 raise commands.CommandError("please include a `,` between arguments")
         return_type = make_dataclass("Arguments", self.count)
         return return_type(*args)
-
 
 
 @dataclass
@@ -160,8 +175,9 @@ class RoleArgs(commands.Converter):
         roles = await Role().convert(ctx, args.first)
         return RoleArguments(roles=roles, arg=args.second)
 
+
 class RandomConverter(commands.Converter):
-    async def convert(self, ctx: Context, argument: str): 
+    async def convert(self, ctx: Context, argument: str):
         args = await Argument().convert(ctx, argument)
         return args
 
@@ -185,6 +201,15 @@ class Moderation(Cog):
         self.bot = bot
         self.locks = defaultdict(asyncio.Lock)
         self.tasks = {}
+
+    async def cog_load(self):
+        await self.bot.db.execute(
+            """CREATE TABLE IF NOT EXISTS jail_config (
+                guild_id BIGINT PRIMARY KEY,
+                role_id BIGINT,
+                channel_id BIGINT
+            )"""
+        )
 
     async def get_int(self, string: str):
         t = ""
@@ -227,9 +252,6 @@ class Moderation(Cog):
             )
         )
 
-
-
-
     async def role_all_task(
         self,
         ctx: Context,
@@ -242,8 +264,10 @@ class Moderation(Cog):
         async with self.locks[f"role-all-{ctx.guild.id}"]:
             members = ctx.guild.members
             members = [
-                m for m in ctx.guild.members if m.top_role < ctx.guild.me.top_role
-                if (m.bot if bots else not m.bot) 
+                m
+                for m in ctx.guild.members
+                if m.top_role < ctx.guild.me.top_role
+                if (m.bot if bots else not m.bot)
                 and (role in m.roles if remove else role not in m.roles)
                 and (role.mentionable if mentionable else True)
             ]
@@ -251,17 +275,27 @@ class Moderation(Cog):
                 return await message.edit(
                     embed=discord.Embed(
                         color=self.bot.color,
-                        description=f"No users found to {'remove' if remove else 'add'} {role.mention} {'from' if remove else 'to'}"
+                        description=f"No users found to {'remove' if remove else 'add'} {role.mention} {'from' if remove else 'to'}",
                     )
                 )
 
             chunk_size = 10
-            member_chunks = [members[i:i + chunk_size] for i in range(0, len(members), chunk_size)]
+            member_chunks = [
+                members[i : i + chunk_size] for i in range(0, len(members), chunk_size)
+            ]
             processed = 0
 
             for chunk in member_chunks:
                 tasks = [
-                    (member.remove_roles(role, reason=f"Mass role removal by {ctx.author}") if remove else member.add_roles(role, reason=f"Mass role addition by {ctx.author}"))
+                    (
+                        member.remove_roles(
+                            role, reason=f"Mass role removal by {ctx.author}"
+                        )
+                        if remove
+                        else member.add_roles(
+                            role, reason=f"Mass role addition by {ctx.author}"
+                        )
+                    )
                     for member in chunk
                 ]
                 await asyncio.gather(*tasks, return_exceptions=True)
@@ -271,14 +305,14 @@ class Moderation(Cog):
                     await message.edit(
                         embed=discord.Embed(
                             color=self.bot.color,
-                            description=f"Progress: {processed}/{len(members)} members processed..."
+                            description=f"Progress: {processed}/{len(members)} members processed...",
                         )
                     )
 
             await message.edit(
                 embed=discord.Embed(
                     color=self.bot.color,
-                    description=f"Successfully {'removed' if remove else 'added'} {role.mention} {'from' if remove else 'to'} {processed} members"
+                    description=f"Successfully {'removed' if remove else 'added'} {role.mention} {'from' if remove else 'to'} {processed} members",
                 )
             )
 
@@ -288,8 +322,6 @@ class Moderation(Cog):
         await asyncio.sleep(sleep_time)
         await channel.edit(slowmode_delay=0)
         return True
-
-
 
     async def setup_database(self):
         """Ensure the report_whitelist table exists."""
@@ -304,7 +336,6 @@ class Moderation(Cog):
         except Exception as e:
             print(f"Error creating table: {e}")
 
-
     async def moderator_logs(self, ctx: Context, description: str):
         try:
             await self.bot.db.execute(
@@ -313,11 +344,14 @@ class Moderation(Cog):
                 ctx.guild.id,
                 ctx.author.id,
                 description,
-                datetime.datetime.now()
+                datetime.datetime.now(),
             )
         except exceptions.UniqueViolationError:
-            print(f"Record with id {ctx.message.id} already exists. Skipping insertion.")
+            print(
+                f"Record with id {ctx.message.id} already exists. Skipping insertion."
+            )
         return
+
     @commands.command(
         name="nsfw", brief="Toggle nsfw for a channel", example=",nsfw #channel"
     )
@@ -365,16 +399,22 @@ class Moderation(Cog):
         )
 
     async def setup_mute_roles(self, ctx: Context):
-        rmute = discord.PermissionOverwrite(add_reactions=False, use_external_emojis=False, use_external_stickers=False)
+        rmute = discord.PermissionOverwrite(
+            add_reactions=False, use_external_emojis=False, use_external_stickers=False
+        )
         imute = discord.PermissionOverwrite(embed_links=False, attach_files=False)
-        imute_role = discord.utils.get(ctx.guild.roles, name="imute") or await ctx.guild.create_role(name = "imute")
-        rmute_role = discord.utils.get(ctx.guild.roles, name="rmute") or await ctx.guild.create_role(name = "rmute")
+        imute_role = discord.utils.get(
+            ctx.guild.roles, name="imute"
+        ) or await ctx.guild.create_role(name="imute")
+        rmute_role = discord.utils.get(
+            ctx.guild.roles, name="rmute"
+        ) or await ctx.guild.create_role(name="rmute")
         for channel in ctx.guild.channels:
             if not isinstance(channel, (discord.VoiceChannel, discord.StageChannel)):
                 if rmute_role not in channel.overwrites:
-                    await channel.set_permissions(rmute_role, overwrite = rmute)
+                    await channel.set_permissions(rmute_role, overwrite=rmute)
                 if imute_role not in channel.overwrites:
-                    await channel.set_permissions(imute_role, overwrite = imute)
+                    await channel.set_permissions(imute_role, overwrite=imute)
         return True
 
     @slowmode.command(
@@ -427,7 +467,9 @@ class Moderation(Cog):
                 return False
 
     @commands.command(
-        name="banned", brief="view the reason a user is banned", example=",banned sudosql"
+        name="banned",
+        brief="view the reason a user is banned",
+        example=",banned sudosql",
     )
     @commands.bot_has_permissions(ban_members=True)
     @commands.has_permissions(moderate_members=True)
@@ -534,8 +576,10 @@ class Moderation(Cog):
             return await ctx.fail(
                 f"reaction mute **role** not found please run `{ctx.prefix}setme`"
             )
-        if member.guild_permissions.administrator: 
-            return await ctx.fail(f"{member.mention} has administrator so this won't work")
+        if member.guild_permissions.administrator:
+            return await ctx.fail(
+                f"{member.mention} has administrator so this won't work"
+            )
         if not (r := await self.bot.hierarchy(ctx, member)):
             return r
         if role in member.roles:
@@ -545,7 +589,9 @@ class Moderation(Cog):
             )
         else:
             await member.add_roles(role)
-            return await ctx.success(f"**{member.mention}** has been **reaction muted**")
+            return await ctx.success(
+                f"**{member.mention}** has been **reaction muted**"
+            )
 
     @commands.command(
         name="imagemute",
@@ -563,11 +609,15 @@ class Moderation(Cog):
             )
         if not (r := await self.bot.hierarchy(ctx, member)):
             return r
-        if member.guild_permissions.administrator: 
-            return await ctx.fail(f"{member.mention} has administrator so this won't work")
+        if member.guild_permissions.administrator:
+            return await ctx.fail(
+                f"{member.mention} has administrator so this won't work"
+            )
         if role in member.roles:
             await member.remove_roles(role)
-            return await ctx.success(f"**image mute** for **{member.mention}** has been **REMOVED**")
+            return await ctx.success(
+                f"**image mute** for **{member.mention}** has been **REMOVED**"
+            )
         else:
             await member.add_roles(role)
             return await ctx.success(f"**{member.mention}** has been **image muted**")
@@ -753,16 +803,18 @@ class Moderation(Cog):
                 return await ctx.fail(
                     f"**{role_input[0].mention}** is **higher than me**"
                 )
-            
+
             if not role_input:
                 return await ctx.warning("You must **mention a role**")
-                
+
             removed = []
             added = []
             roles = member.roles
             for role in role_input:
                 if ctx.guild.me.guild_permissions.manage_roles is False:
-                    return await ctx.fail(f"I do not have permission to **manage** roles")
+                    return await ctx.fail(
+                        f"I do not have permission to **manage** roles"
+                    )
                 if role in roles:
                     roles.remove(role)
                     removed.append(f"{role.mention}")
@@ -863,17 +915,19 @@ class Moderation(Cog):
         await self.role_all_task(ctx, message, role, True, False, False)
         return
 
-    @commands.command(name = "modstats", brief = "see statistics of a moderator")
-    async def modstats(self, ctx: Context, *, moderator: Optional[Member] = commands.Author):
+    @commands.command(name="modstats", brief="see statistics of a moderator")
+    async def modstats(
+        self, ctx: Context, *, moderator: Optional[Member] = commands.Author
+    ):
         if data := await self.store_statistics(ctx, moderator, False):
             data = ModerationStatistics(**data)
-            e = discord.Embed(color = self.bot.color, title = f"{moderator.name}'s mod stats")
+            e = discord.Embed(
+                color=self.bot.color, title=f"{moderator.name}'s mod stats"
+            )
             for key, value in data.dict().items():
-                e.add_field(name = key, value = value, inline = True)
-            return await ctx.send(embed = e)
+                e.add_field(name=key, value=value, inline=True)
+            return await ctx.send(embed=e)
         return await ctx.fail(f"no moderation stats stored for {moderator.mention}")
-
-
 
     @roleall_bots.command(
         name="remove",
@@ -1121,17 +1175,30 @@ class Moderation(Cog):
 
     def clean_name(self, name: str):
         logger.info(name)
-        if "--category" in name: return name.split("--category")[0]
-        if "—category" in name: return name.split("—category")[0]
-        if "-category" in name: return name.split("-category")[0]
+        if "--category" in name:
+            return name.split("--category")[0]
+        if "—category" in name:
+            return name.split("—category")[0]
+        if "-category" in name:
+            return name.split("-category")[0]
         return name
 
-    @channel.command(name="create", brief="Create a new channel in a guild", parameters = {"category": {"converter": str, "description": "the category to make the channel under", "default": None}})
+    @channel.command(
+        name="create",
+        brief="Create a new channel in a guild",
+        parameters={
+            "category": {
+                "converter": str,
+                "description": "the category to make the channel under",
+                "default": None,
+            }
+        },
+    )
     @commands.has_permissions(manage_channels=True)
     @commands.bot_has_permissions(manage_channels=True)
     async def channel_create(self, ctx, type: str = "text", *, name: str):
         if category := ctx.parameters.get("category"):
-            obj = await CategoryChannel().convert(ctx = ctx, argument = category)
+            obj = await CategoryChannel().convert(ctx=ctx, argument=category)
             name = self.clean_name(name)
         else:
             obj = ctx.guild
@@ -1142,28 +1209,60 @@ class Moderation(Cog):
             )
         elif "forum" in type:
             try:
-                c = await obj._create_channel(name = name, channel_type = discord.ChannelType.forum, reason=f"invoked by author | {ctx.author.id}")
-                c = discord.ForumChannel(state = self.bot._connection, guild = ctx.guild, data = c)
+                c = await obj._create_channel(
+                    name=name,
+                    channel_type=discord.ChannelType.forum,
+                    reason=f"invoked by author | {ctx.author.id}",
+                )
+                c = discord.ForumChannel(
+                    state=self.bot._connection, guild=ctx.guild, data=c
+                )
             except Exception:
-                return await ctx.fail(f"your guild doesn't have access to forum channels")
+                return await ctx.fail(
+                    f"your guild doesn't have access to forum channels"
+                )
         elif "media" in type:
             try:
-                c = await obj._create_channel(name = name, channel_type = discord.ChannelType.media, reason = f"invoked by author | {ctx.author.id}")
-                c = discord.MediaChannel(state = self.bot._connection, guild = ctx.guild, data = c)
+                c = await obj._create_channel(
+                    name=name,
+                    channel_type=discord.ChannelType.media,
+                    reason=f"invoked by author | {ctx.author.id}",
+                )
+                c = discord.MediaChannel(
+                    state=self.bot._connection, guild=ctx.guild, data=c
+                )
             except Exception:
-                return await ctx.fail(f"your guild doesn't have access to media channels")
+                return await ctx.fail(
+                    f"your guild doesn't have access to media channels"
+                )
         elif "stage" in type:
             try:
-                c = await obj._create_channel(name = name, channel_type = discord.ChannelType.stage, reason = f"invoked by author | {ctx.author.id}")
-                c = discord.StageChannel(state = self.bot._connection, guild = ctx.guild, data = c)
+                c = await obj._create_channel(
+                    name=name,
+                    channel_type=discord.ChannelType.stage,
+                    reason=f"invoked by author | {ctx.author.id}",
+                )
+                c = discord.StageChannel(
+                    state=self.bot._connection, guild=ctx.guild, data=c
+                )
             except Exception:
-                return await ctx.fail(f"your guild doesn't have access to stage channels")
+                return await ctx.fail(
+                    f"your guild doesn't have access to stage channels"
+                )
         elif "news" in type:
             try:
-                c = await obj._create_channel(name = name, channel_type = discord.ChannelType.news, reason = f"invoked by author | {ctx.author.id}")
-                c = discord.NewsChannel(state = self.bot._connection, guild = ctx.guild, data = c)
+                c = await obj._create_channel(
+                    name=name,
+                    channel_type=discord.ChannelType.news,
+                    reason=f"invoked by author | {ctx.author.id}",
+                )
+                c = discord.NewsChannel(
+                    state=self.bot._connection, guild=ctx.guild, data=c
+                )
             except Exception:
-                return await ctx.fail(f"your guild doesn't have access to news channels")
+                return await ctx.fail(
+                    f"your guild doesn't have access to news channels"
+                )
         else:
             c = await obj.create_voice_channel(
                 name=name, reason=f"invoked by author | {ctx.author.id}"
@@ -1174,7 +1273,10 @@ class Moderation(Cog):
     @commands.has_permissions(manage_channels=True)
     @commands.bot_has_permissions(manage_channels=True)
     async def channel_delete(
-        self, ctx, *, channel: Union[TextChannel, VoiceChannel, discord.abc.GuildChannel]
+        self,
+        ctx,
+        *,
+        channel: Union[TextChannel, VoiceChannel, discord.abc.GuildChannel],
     ):
         channel_name = channel.name
         await channel.delete()
@@ -1199,7 +1301,9 @@ class Moderation(Cog):
     )
     @commands.has_permissions(manage_channels=True)
     @commands.bot_has_permissions(manage_channels=True)
-    async def channel_duplicate(self, ctx, *, channel: Union[TextChannel, VoiceChannel]):
+    async def channel_duplicate(
+        self, ctx, *, channel: Union[TextChannel, VoiceChannel]
+    ):
         c = await channel.clone(reason=f"invoked by author | {ctx.author.id}")
         return await ctx.success(f"**Duplicated** `{channel.name}` into {c.mention}")
 
@@ -1308,6 +1412,7 @@ class Moderation(Cog):
         except discord.NotFound:
             await ctx.fail(f"{user.name} is already **banned** from the server.")
             return await ctx.fail(f"{user.name} is already **banned** from the server.")
+
     async def do_unban(self, ctx, u: Union[discord.Member, discord.User, str]):
         if isinstance(u, discord.User):
             pass  # type: ignore
@@ -1503,131 +1608,200 @@ class Moderation(Cog):
             await ctx.success(f"{member.mention} has been **muted** for **{tf}**")
 
     async def do_jail(self, ctx: Context, member: discord.Member):
-        jailed = discord.utils.get(ctx.guild.roles, name="jailed")
-        if not jailed:
+        jail_data = await self.bot.db.fetchrow(
+            """SELECT role_id FROM jail_config WHERE guild_id = $1""", ctx.guild.id
+        )
+
+        if not jail_data:
             raise CommandError(
-                f"role for **jail** not found please run `{ctx.prefix}setme`"
+                f"Jail role not configured. Please run `{ctx.prefix}setme`"
             )
-        if await self.bot.db.fetchval(  # type: ignore
-            """SELECT roles FROM jailed WHERE guild_id = $1 AND user_id = $2""",
-            ctx.guild.id,
-            member.id,
-        ):
-            if jailed not in member.roles:
-                await member.add_roles(jailed)
-        else:
-            roles = [m for m in member.roles if m.is_assignable()]
-            ids = [r.id for r in roles]
-            ids_str = ",".join(str(i) for i in ids)
-            await self.moderator_logs(ctx, f"jailed **{member.name}**")
+
+        jailed = ctx.guild.get_role(jail_data["role_id"])
+        if not jailed:
+            raise CommandError(f"Jail role not found. Please run `{ctx.prefix}setme`")
+
+        roles = [m for m in member.roles if m.is_assignable()]
+        ids = [r.id for r in roles]
+        ids_str = ",".join(str(i) for i in ids)
+
+        try:
             await self.bot.db.execute(
                 """INSERT INTO jailed (guild_id, user_id, roles) VALUES ($1, $2, $3)""",
                 ctx.guild.id,
                 member.id,
                 ids_str,
             )
+        except asyncpg.exceptions.UniqueViolationError:
+            await self.bot.db.execute(
+                """UPDATE jailed SET roles = $3 WHERE guild_id = $1 AND user_id = $2""",
+                ctx.guild.id,
+                member.id,
+                ids_str,
+            )
+
+        if jailed not in member.roles:
             after_roles = [r for r in member.roles if not r.is_assignable()]
             after_roles.append(jailed)
             await member.edit(roles=after_roles, reason=f"jailed by {ctx.author.name}")
-            return True
+            await self.moderator_logs(ctx, f"jailed **{member.name}**")
 
-    async def store_statistics(self, ctx: Context, member: Member, store: Optional[bool] = True):
-            command = ctx.command.qualified_name
-            if command == "ban":
-                case_type = CaseType.bans
-            elif command == "kick":
-                case_type = CaseType.kicks
-            elif command == "unban":
-                case_type = CaseType.unbans
-            elif command == "jail":
-                case_type = CaseType.jails
-            elif command == "unjail":
-                case_type = CaseType.unjails
-            elif command == "untime":
-                case_type = CaseType.unmutes
-            elif command == "mute":
-                case_type = CaseType.mutes
-            elif command == "warn":
-                case_type = CaseType.warns
-            elif command == "modstats":
-                if not store:
-                    data = await self.bot.db.fetchval("""SELECT data FROM moderation_statistics WHERE guild_id = $1 AND user_id = $2""", ctx.guild.id, member.id)
-                    if data:
-                        try:
-                            return json.loads(data)
-                        except (json.JSONDecodeError, TypeError):
-                            return {}
-                    return {}
-                else:
-                    return
-            else:
-                return
-            
-            existing_data = await self.bot.db.fetchval("""SELECT data FROM moderation_statistics WHERE guild_id = $1 AND user_id = $2""", ctx.guild.id, member.id)
-            try:
-                data = json.loads(existing_data) if existing_data else {}
-            except (json.JSONDecodeError, TypeError):
-                data = {}
-            
+        return True
+
+    async def store_statistics(
+        self, ctx: Context, member: Member, store: Optional[bool] = True
+    ):
+        command = ctx.command.qualified_name
+        if command == "ban":
+            case_type = CaseType.bans
+        elif command == "kick":
+            case_type = CaseType.kicks
+        elif command == "unban":
+            case_type = CaseType.unbans
+        elif command == "jail":
+            case_type = CaseType.jails
+        elif command == "unjail":
+            case_type = CaseType.unjails
+        elif command == "untime":
+            case_type = CaseType.unmutes
+        elif command == "mute":
+            case_type = CaseType.mutes
+        elif command == "warn":
+            case_type = CaseType.warns
+        elif command == "modstats":
             if not store:
-                return data
-                
-            name = str(case_type.name)
-            if not data.get(name):
-                data[name] = 1
-            else:
-                data[name] += 1
-                
-            try:
-                json_data = json.dumps(data)
-            except (TypeError, ValueError):
-                json_data = "{}"
-                
-            await self.bot.db.execute(
-                """INSERT INTO moderation_statistics (guild_id, user_id, data) 
-                VALUES($1, $2, $3) ON CONFLICT(guild_id, user_id) 
-                DO UPDATE SET data = $3""",
-                ctx.guild.id, member.id, json_data
-            )
-            return True
-        
-
-    async def do_unjail(self, ctx: Context, member: discord.Member):
-        jailed = discord.utils.get(ctx.guild.roles, name="jailed")
-        if not jailed:
-            raise CommandError(
-                f"role for **jail** not found please run `{ctx.prefix}setme`"
-            )
-        if check := await self.bot.db.fetchval(
-            """SELECT roles FROM jailed WHERE guild_id = $1 AND user_id = $2""",
-            ctx.guild.id,
-            member.id,
-        ):
-            if jailed in member.roles:
-                roles = [ctx.guild.get_role(int(r)) for r in check.split(",")]
-                member_roles = [r for r in member.roles if r != jailed]
-                roles = list(set(roles + member_roles))
-                await member.edit(roles=roles, reason=f"unjailed by {ctx.author.name}")
-                await self.bot.db.execute(
-                    """DELETE FROM jailed WHERE guild_id = $1 AND user_id = $2""",
+                data = await self.bot.db.fetchval(
+                    """SELECT data FROM moderation_statistics WHERE guild_id = $1 AND user_id = $2""",
                     ctx.guild.id,
                     member.id,
                 )
-                return await self.moderator_logs(ctx, f"unjailed **{member.name}**")
+                if data:
+                    try:
+                        return json.loads(data)
+                    except (json.JSONDecodeError, TypeError):
+                        return {}
+                return {}
+            else:
+                return
         else:
+            return
+
+        existing_data = await self.bot.db.fetchval(
+            """SELECT data FROM moderation_statistics WHERE guild_id = $1 AND user_id = $2""",
+            ctx.guild.id,
+            member.id,
+        )
+        try:
+            data = json.loads(existing_data) if existing_data else {}
+        except (json.JSONDecodeError, TypeError):
+            data = {}
+
+        if not store:
+            return data
+
+        name = str(case_type.name)
+        if not data.get(name):
+            data[name] = 1
+        else:
+            data[name] += 1
+
+        try:
+            json_data = json.dumps(data)
+        except (TypeError, ValueError):
+            json_data = "{}"
+
+        await self.bot.db.execute(
+            """INSERT INTO moderation_statistics (guild_id, user_id, data) 
+                VALUES($1, $2, $3) ON CONFLICT(guild_id, user_id) 
+                DO UPDATE SET data = $3""",
+            ctx.guild.id,
+            member.id,
+            json_data,
+        )
+        return True
+
+    async def do_unjail(self, ctx: Context, member: discord.Member):
+        jail_data = await self.bot.db.fetchrow(
+            """SELECT role_id FROM jail_config WHERE guild_id = $1""", ctx.guild.id
+        )
+
+        if not jail_data:
+            raise CommandError(
+                f"Jail role not configured. Please run `{ctx.prefix}setme`"
+            )
+
+        jailed = ctx.guild.get_role(jail_data["role_id"])
+        if not jailed:
+            raise CommandError(f"Jail role not found. Please run `{ctx.prefix}setme`")
+
+        if jailed not in member.roles:
             raise CommandError(f"{member.mention} isn't **jailed**")
 
-    @commands.command(
-        name="jail", brief="jail a member", example=",jail @sudosql laddering"
+        stored_roles = await self.bot.db.fetchval(
+            """SELECT roles FROM jailed WHERE guild_id = $1 AND user_id = $2""",
+            ctx.guild.id,
+            member.id,
+        )
+
+        if not stored_roles:
+            raise CommandError(f"No stored roles found for {member.mention}")
+
+        try:
+            roles_to_add = []
+            for role_id in stored_roles.split(","):
+                if role := ctx.guild.get_role(int(role_id)):
+                    if role.is_assignable():
+                        roles_to_add.append(role)
+
+            current_roles = [
+                r for r in member.roles if r != jailed and not r.is_default()
+            ]
+
+            final_roles = list(set(roles_to_add + current_roles))
+
+            final_roles.append(ctx.guild.default_role)
+
+            await member.edit(
+                roles=final_roles, reason=f"unjailed by {ctx.author.name}"
+            )
+
+            await self.bot.db.execute(
+                """DELETE FROM jailed WHERE guild_id = $1 AND user_id = $2""",
+                ctx.guild.id,
+                member.id,
+            )
+
+            await self.moderator_logs(ctx, f"unjailed **{member.name}**")
+            return True
+
+        except discord.Forbidden:
+            raise CommandError("I don't have permission to manage roles")
+        except discord.HTTPException as e:
+            raise CommandError(f"Failed to unjail member: {str(e)}")
+
+    @commands.group(
+        name="jail",
+        brief="jail a member",
+        example=",jail @sudosql laddering",
+        invoke_without_command=True,
     )
     @commands.bot_has_permissions(administrator=True)
     @commands.has_permissions(moderate_members=True)
     async def jail(self, ctx: Context, *, member: Member):
         if not (r := await self.bot.hierarchy(ctx, member)):
             return r
-        role = discord.utils.get(ctx.guild.roles, name="jailed")
-        if role is None:
-            return await ctx.fail("**jailed** role is not found")
+
+        jail_data = await self.bot.db.fetchrow(
+            """SELECT role_id FROM jail_config WHERE guild_id = $1""", ctx.guild.id
+        )
+
+        if not jail_data:
+            return await ctx.fail("**jailed** role not configured")
+
+        role = ctx.guild.get_role(jail_data["role_id"])
+        if not role:
+            return await ctx.fail("**jailed** role not found")
+
         if role.position > ctx.guild.me.top_role.position:
             return await ctx.fail("**jailed** role is higher than my **top role**")
         if role.position > ctx.author.top_role.position:
@@ -1638,6 +1812,48 @@ class Moderation(Cog):
         await self.store_statistics(ctx, ctx.author)
         await ctx.success(f"{member.mention} has been **jailed**")
         return
+
+    @jail.command(
+        name="channel", brief="Set the jail channel", example=",jail channel #jail"
+    )
+    @commands.has_permissions(administrator=True)
+    async def jail_channel(self, ctx, channel: TextChannel):
+        jail_data = await self.bot.db.fetchrow(
+            """SELECT channel_id FROM jail_config WHERE guild_id = $1""", ctx.guild.id
+        )
+        if not jail_data:
+            await self.bot.db.execute(
+                """INSERT INTO jail_config (guild_id, channel_id) VALUES ($1, $2)""",
+                ctx.guild.id,
+                channel.id,
+            )
+            return await ctx.success(
+                f"**Jail channel** has been set to {channel.mention}"
+            )
+        await self.bot.db.execute(
+            """UPDATE jail_config SET channel_id = $1 WHERE guild_id = $2""",
+            channel.id,
+            ctx.guild.id,
+        )
+        return await ctx.success(
+            f"**Jail channel** has been updated to {channel.mention}"
+        )
+
+    @jail.command(name="role", brief="Set the jail role", example=",jail role @jailed")
+    @commands.has_permissions(administrator=True)
+    async def jail_role(self, ctx, role: Role):
+        role = role[0]
+        if role.position > ctx.guild.me.top_role.position:
+            return await ctx.fail("**jailed** role is higher than my **top role**")
+        if role.position > ctx.author.top_role.position:
+            return await ctx.fail("**jailed** role is higher than your **top role**")
+        await self.bot.db.execute(
+            """INSERT INTO jail_config (guild_id, role_id) VALUES ($1, $2)
+            ON CONFLICT(guild_id) DO UPDATE SET role_id = excluded.role_id""",
+            ctx.guild.id,
+            role.id,
+        )
+        return await ctx.success(f"**Jailed** role has been set to {role.mention}")
 
     @commands.group(
         name="setup",
@@ -1652,34 +1868,34 @@ class Moderation(Cog):
     async def setup(self, ctx: Context):
         await self.setup_mute_roles(ctx)
 
-
-        category = discord.utils.get(ctx.guild.categories, name=f"{self.bot.user.name}-mod")
+        category = discord.utils.get(
+            ctx.guild.categories, name=f"{self.bot.user.name}-mod"
+        )
         if not category:
             category = await ctx.guild.create_category_channel(
                 name=f"{self.bot.user.name}-mod",
                 overwrites={
-                    ctx.guild.default_role: discord.PermissionOverwrite(view_channel=False)
+                    ctx.guild.default_role: discord.PermissionOverwrite(
+                        view_channel=False
+                    )
                 },
             )
-
 
         jail_role = discord.utils.get(ctx.guild.roles, name="jailed")
         if not jail_role:
             jail_role = await ctx.guild.create_role(name="jailed")
 
-
-        logs = next(
-            (ch for ch in ctx.guild.text_channels if ch.name == "logs"), None
-        )
+        logs = next((ch for ch in ctx.guild.text_channels if ch.name == "logs"), None)
         if not logs:
             logs = await ctx.guild.create_text_channel(
                 name="logs",
                 overwrites={
-                    ctx.guild.default_role: discord.PermissionOverwrite(view_channel=False)
+                    ctx.guild.default_role: discord.PermissionOverwrite(
+                        view_channel=False
+                    )
                 },
             )
         await logs.edit(category=category)
-
 
         jail_channel = next(
             (ch for ch in ctx.guild.text_channels if "jail" in ch.name.lower()), None
@@ -1702,13 +1918,21 @@ class Moderation(Cog):
 
         await jail_channel.edit(category=category)
 
-
         for channel in ctx.guild.text_channels:
             if channel != jail_channel and channel != logs:
                 await channel.set_permissions(
                     jail_role, view_channel=False, send_messages=False
                 )
 
+        # Store jail role and channel IDs
+        await self.bot.db.execute(
+            """INSERT INTO jail_config (guild_id, role_id, channel_id) 
+            VALUES($1, $2, $3) ON CONFLICT(guild_id) 
+            DO UPDATE SET role_id = excluded.role_id, channel_id = excluded.channel_id""",
+            ctx.guild.id,
+            jail_role.id,
+            jail_channel.id,
+        )
 
         await self.bot.db.execute(
             """INSERT INTO moderation_channel (guild_id, category_id, channel_id)
@@ -1736,6 +1960,11 @@ class Moderation(Cog):
                 await self.do_unjail(ctx, member)
         await self.bot.db.execute(
             """DELETE FROM jailed WHERE guild_id = $1""", ctx.guild.id
+        )
+
+        # Clear jail config
+        await self.bot.db.execute(
+            """DELETE FROM jail_config WHERE guild_id = $1""", ctx.guild.id
         )
 
         for r in ["rmute", "imute", "jailed"]:
@@ -1854,7 +2083,9 @@ class Moderation(Cog):
             await member.edit(nick=None)
             return await ctx.success(f"**Reset** {member.mention}'s nickname")
         await member.edit(nick=nickname)
-        return await ctx.success(f"**Changed** {member.mention}'s nickname to **{nickname}**")
+        return await ctx.success(
+            f"**Changed** {member.mention}'s nickname to **{nickname}**"
+        )
 
     @commands.command(
         name="forcenick",
@@ -1928,15 +2159,18 @@ class Moderation(Cog):
         if ctx.invoked_subcommand is None:
             channel = ctx.channel
             if isinstance(channel, Thread):
-                await channel.edit(locked = True)
+                await channel.edit(locked=True)
             else:
                 permissions = channel.overwrites_for(ctx.guild.default_role)
                 permissions.send_messages = False
                 permissions.add_reactions = False
                 permissions.view_channel = True
-                await channel.set_permissions(ctx.guild.default_role, overwrite=permissions)
+                await channel.set_permissions(
+                    ctx.guild.default_role, overwrite=permissions
+                )
                 if role_id := await self.bot.db.fetchval(
-                    """SELECT role_id FROM lock_role WHERE guild_id = $1""", ctx.guild.id
+                    """SELECT role_id FROM lock_role WHERE guild_id = $1""",
+                    ctx.guild.id,
                 ):
                     if role := ctx.guild.get_role(role_id):
                         await channel.set_permissions(role, overwrite=permissions)
@@ -2014,7 +2248,7 @@ class Moderation(Cog):
     async def unlock(self, ctx):
         channel = ctx.channel
         if isinstance(channel, Thread):
-            await channel.edit(locked = False)
+            await channel.edit(locked=False)
         else:
             permissions = channel.overwrites_for(ctx.guild.default_role)
             permissions.send_messages = True
@@ -2063,9 +2297,12 @@ class Moderation(Cog):
             return await ctx.fail(
                 f"There are **no roles** to restore to {member.mention}"
             )
-        
 
-    @commands.command(name="strip", aliases=["stripstaff"], brief="Remove all roles from a user in a guild")
+    @commands.command(
+        name="strip",
+        aliases=["stripstaff"],
+        brief="Remove all roles from a user in a guild",
+    )
     @commands.has_permissions(manage_roles=True)
     @commands.bot_has_permissions(administrator=True)
     async def strip(self, ctx: Context, *, member: discord.Member):
@@ -2124,12 +2361,7 @@ class Moderation(Cog):
         name="disable",
         brief="Disable a command for the guild",
         example=",command disable ban",
-        parameters={
-            "channel": {
-                "converter": TextChannel,
-                "default": None
-            }
-        }
+        parameters={"channel": {"converter": TextChannel, "default": None}},
     )
     @commands.has_permissions(manage_guild=True)
     async def disable_command(self, ctx: commands.Context, *, command: str):
@@ -2141,14 +2373,21 @@ class Moderation(Cog):
         else:
             command = command[1].split(" ", 2)[-1]
         if cmd := self.bot.get_command(command):
-            data = json.loads(await self.bot.db.fetchval("""SELECT channels FROM disabled_commands where guild_id = $1 AND command = $2""", ctx.guild.id, cmd.qualified_name) or "[]")
+            data = json.loads(
+                await self.bot.db.fetchval(
+                    """SELECT channels FROM disabled_commands where guild_id = $1 AND command = $2""",
+                    ctx.guild.id,
+                    cmd.qualified_name,
+                )
+                or "[]"
+            )
             if channel := await ctx.parameters.get("channel"):
                 data.append(channel.id)
             await self.bot.db.execute(
                 """INSERT INTO disabled_commands (guild_id, command, channels) VALUES($1,$2,$3) ON CONFLICT(guild_id, command) DO UPDATE SET channels = excluded.channels""",
                 ctx.guild.id,
                 cmd.qualified_name.lower(),
-                json.dumps(data)
+                json.dumps(data),
             )
             await ctx.success(f"`{cmd.qualified_name}` has been **disabled**")
         else:
@@ -2409,8 +2648,6 @@ class Moderation(Cog):
 
         await ctx.message.delete()
         await self.delete_message_list(ctx, limit, check)
-    
-
 
     @commands.command(
         name="cleanup",
@@ -2437,7 +2674,6 @@ class Moderation(Cog):
         message = await ctx.send("👍🏼")
         await message.delete()
 
-
     @commands.group(
         name="warn",
         brief="Warn a member in a guild",
@@ -2445,7 +2681,9 @@ class Moderation(Cog):
         invoke_without_command=True,
     )
     @commands.has_permissions(manage_messages=True)
-    async def warn(self, ctx: Context, member: Member, *, reason: str) -> discord.Message:
+    async def warn(
+        self, ctx: Context, member: Member, *, reason: str
+    ) -> discord.Message:
         if member.top_role >= ctx.author.top_role:
             return await ctx.fail("you can't warn someone higher than you")
         if member == ctx.guild.owner:
@@ -2465,7 +2703,7 @@ class Moderation(Cog):
         )
         await self.store_statistics(ctx, ctx.author)
         return await ctx.success(f"**Warned** {member.mention} for `{reason}`")
-    
+
     @warn.command(
         name="list",
         brief="List all warnings for a member",
@@ -2480,30 +2718,32 @@ class Moderation(Cog):
         )
         if not warnings:
             return await ctx.fail(f"{member.mention} has no warnings.")
-        
+
         embed = discord.Embed(
             title=f"Warnings for {member}",
             color=self.bot.color,
-            timestamp=discord.utils.utcnow()
+            timestamp=discord.utils.utcnow(),
         )
-        
+
         for warning in warnings:
             moderator = ctx.guild.get_member(warning["moderator_id"])
             embed.add_field(
                 name=f"Warning **{warning['id']}** - {discord.utils.format_dt(warning['created_at'], style='R')}",
                 value=f"**Reason:** {warning['reason']}\n**Moderator:** {moderator.mention if moderator else 'Unknown'}",
-                inline=False
+                inline=False,
             )
-        
+
         return await ctx.send(embed=embed)
-    
+
     @warn.command(
         name="remove",
         brief="Remove a warning from a member",
         example=",warn remove @sudosql 1",
     )
     @commands.has_permissions(manage_messages=True)
-    async def warn_remove(self, ctx: Context, member: discord.Member, id: str) -> discord.Message:
+    async def warn_remove(
+        self, ctx: Context, member: discord.Member, id: str
+    ) -> discord.Message:
         if member.top_role >= ctx.author.top_role:
             return await ctx.fail("you can't warn someone higher than you")
         if member == ctx.guild.owner:
@@ -2519,8 +2759,10 @@ class Moderation(Cog):
             id,
         )
         if not warning:
-            return await ctx.fail(f"{member.mention} doesn't have a warning with ID `{id}`.")
-        
+            return await ctx.fail(
+                f"{member.mention} doesn't have a warning with ID `{id}`."
+            )
+
         await self.bot.db.execute(
             """DELETE FROM warnings WHERE guild_id = $1 AND user_id = $2 AND id = $3""",
             ctx.guild.id,
@@ -2529,7 +2771,7 @@ class Moderation(Cog):
         )
         await self.store_statistics(ctx, ctx.author)
         return await ctx.success(f"Removed warning `{id}` from {member.mention}")
-    
+
     @warn.command(
         name="clear",
         brief="Clear all warnings for a member",
@@ -2602,15 +2844,14 @@ class Moderation(Cog):
             )
             return await ctx.success(
                 f"Added pic perms to {member.mention} in {channel.mention}"
-            )    
-
-
-
+            )
 
     @commands.group(name="report", invoke_without_command=True)
     async def report(self, ctx):
         """Base command for the report system."""
-        await ctx.send("Use `report add <@user>`, `report remove <@user>`, or `report send <message>`")
+        await ctx.send(
+            "Use `report add <@user>`, `report remove <@user>`, or `report send <message>`"
+        )
 
     @report.command(name="add")
     @commands.is_owner()
@@ -2661,7 +2902,9 @@ class Moderation(Cog):
                 "DELETE FROM report_whitelist WHERE user_id = $1", user_id
             )
 
-            await ctx.success(f"User {user.mention} has been removed from the whitelist.")
+            await ctx.success(
+                f"User {user.mention} has been removed from the whitelist."
+            )
         except Exception as e:
             await ctx.fail(f"Error removing user: {e}")
             print(f"Error removing user {user.id} from whitelist: {e}")
@@ -2691,22 +2934,22 @@ class Moderation(Cog):
                             {
                                 "name": "User",
                                 "value": f"{ctx.author.mention} (`{ctx.author.id}`)",
-                                "inline": True
+                                "inline": True,
                             },
                             {
                                 "name": "Server",
                                 "value": f"{ctx.guild.name} (`{ctx.guild.id}`)",
-                                "inline": True
+                                "inline": True,
                             },
                             {
                                 "name": "Channel",
                                 "value": f"{ctx.channel.name} (`{ctx.channel.id}`)",
-                                "inline": True
+                                "inline": True,
                             },
                         ],
                         "footer": {
                             "text": f"Report submitted on {ctx.message.created_at.strftime('%Y-%m-%d %H:%M:%S')}"
-                        }
+                        },
                     }
                 ]
             }
@@ -2720,24 +2963,27 @@ class Moderation(Cog):
                         {
                             "name": "Server Invite",
                             "value": f"[Click here to join]({invite_link})",
-                            "inline": False
+                            "inline": False,
                         }
                     )
             except discord.Forbidden:
                 # If the bot doesn't have permission to fetch invites
                 pass
 
-
             # Webhook URL (replace with your actual webhook URL)
             webhook_url = "https://discord.com/api/webhooks/1316476312633999441/XP8d_WYaNuoizHkVP1ThcwYTPQYd3cJiDbqnpLB7nIzh36NNNVn9I6sbi5CvHi_Ujy9T"
-            
+
             # Send the webhook with the report embed
             async with aiohttp.ClientSession() as session:
                 async with session.post(webhook_url, json=embed) as response:
                     if response.status == 204:
-                        await ctx.success("Your report has been successfully submitted!")
+                        await ctx.success(
+                            "Your report has been successfully submitted!"
+                        )
                     else:
-                        await ctx.fail("Failed to submit the report. Please try again later.")
+                        await ctx.fail(
+                            "Failed to submit the report. Please try again later."
+                        )
                         print(f"Failed to send webhook, status code: {response.status}")
 
         except Exception as e:

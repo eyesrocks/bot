@@ -94,7 +94,7 @@ class plural:
         result += plural if abs(v) != 1 else singular
         return result
 
-
+PERKS_IMAGE_URL = "https://cdn.discordapp.com/attachments/1301628329111326755/1317350684382990357/ea0c12e2acc4c390abb75c0430f72040.png?ex=675e5dee&is=675d0c6e&hm=5c6891dec920afa9017065f05a6b75532f4da5f8f82427de8ec529080e0631b8&"
 DISCORD_FILE_PATTERN = r"(https://|http://)?(cdn\.|media\.)discord(app)?\.(com|net)/(attachments|avatars|icons|banners|splashes)/[0-9]{17,22}/([0-9]{17,22}/(?P<filename>.{1,256})|(?P<hash>.{32}))\.(?P<mime>[0-9a-zA-Z]{2,4})?"
 
 
@@ -1879,6 +1879,21 @@ Latency    : {round(self.bot.latency * 1000)}ms```""",
             await ctx.send(verse)
 
 
+    @commands.command()
+    async def perks(self, ctx):
+        """Sends an embed with donator perks."""
+        embed = discord.Embed(
+            title="Donator Perks",
+            description="Donator perks are now done **[exclusively](https://discord.gg/pomice)** using the integrated server subscription feature, of which there are two tiers.",
+            color=self.bot.color
+        )
+
+        embed.add_field(name="> Tier 1", value="> $4.99 per month", inline=False)
+        embed.add_field(name="> Tier 2", value="> $9.99 per month", inline=False)
+        embed.set_image(url="https://cdn.discordapp.com/attachments/1301628329111326755/1317350684382990357/ea0c12e2acc4c390abb75c0430f72040.png?ex=675e5dee&is=675d0c6e&hm=5c6891dec920afa9017065f05a6b75532f4da5f8f82427de8ec529080e0631b8&")
+        embed.set_footer(text="Subscriptions are monthly payments. Your perks will last as long as your subscription does.")
+
+        await ctx.send(embed=embed)
 
 
 async def setup(bot):

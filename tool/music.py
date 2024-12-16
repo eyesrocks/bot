@@ -485,62 +485,58 @@ class Music(commands.Cog):
     async def on_voice_state_update(
         self,
         member: discord.Member,
-        before: discord.VoiceState,
-        after: discord.VoiceState,
+        before: discord.VoiceState, 
+        after: discord.VoiceState
     ):
-        if before.channel:
-            if self.bot.user in before.channel.members:
-                if player := self.bot.node.get_player(member.guild.id):
-                    if len(player.channel.members) == 1:
-                        return await player.teardown()
-        if member.id != self.bot.user.id:
+        if not hasattr(self.bot, "node"):
             return
 
-        if (
-            not hasattr(self.bot, "node")
-            or (player := self.bot.node.get_player(member.guild.id)) is None
-        ):
+        if member.id == self.bot.user.id and not after.channel:
+            if player := self.bot.node.get_player(member.guild.id):
+                await player.destroy()
             return
-        if not after.channel:
-            await player.destroy()
+
+        if before.channel and self.bot.user in before.channel.members:
+            player = self.bot.node.get_player(member.guild.id)
+            if player and len(before.channel.members) == 1:
+                await player.teardown()
 
     async def get_player(
         self, ctx: Context, *, connect: bool = True, check_connected: bool = True
-    ):
+    ) -> Optional[Player]:
+        """Get or create a player instance for a guild."""
+        # Verify Lavalink node exists
         if not hasattr(self.bot, "node"):
-            raise commands.CommandError(
-                "The **Lavalink** node hasn't been **initialized** yet"
-            )
+            raise commands.CommandError("Lavalink node not initialized")
 
-        if not ctx.author.voice:
-            if check_connected is False:
+        if check_connected and not ctx.author.voice:
+            if not check_connected:
                 return None
-            raise commands.CommandError("You're not **connected** to a voice channel")
+            raise commands.CommandError("You must be in a voice channel")
 
         if (
-            ctx.guild.me.voice
+            ctx.guild.me.voice 
+            and ctx.guild.me.voice.channel 
+            and ctx.author.voice
             and ctx.guild.me.voice.channel != ctx.author.voice.channel
         ):
-            raise commands.CommandError(
-                "I'm **already** connected to another voice channel"
-            )
+            raise commands.CommandError("Already connected to different voice channel")
 
-        if (
-            player := self.bot.node.get_player(ctx.guild.id)
-        ) is None or not ctx.guild.me.voice:
+        player = self.bot.node.get_player(ctx.guild.id)
+        
+        if not player and not ctx.guild.me.voice:
             if not connect:
                 if ctx.voice_client:
                     return await ctx.voice_client.disconnect()
-
-                raise commands.CommandError("I'm not **connected** to a voice channel")
-            else:
+                raise commands.CommandError("Not connected to voice channel")
+                
+            try:
                 await ctx.author.voice.channel.connect(cls=Player, self_deaf=True)
                 player = self.bot.node.get_player(ctx.guild.id)
-                try:
-                    player.bound_channel = ctx.channel
-                except Exception:
-                    pass
+                player.bound_channel = ctx.channel
                 await ctx.voice_client.set_volume(65)
+            except Exception as e:
+                raise commands.CommandError(f"Failed to connect: {str(e)}")
 
         return player
 

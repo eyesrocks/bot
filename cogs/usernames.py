@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 import logging
+from asyncio import sleep
 
 class UsernameTracker(commands.Cog):
     def __init__(self, bot):
@@ -29,6 +30,8 @@ class UsernameTracker(commands.Cog):
         await self.bot.db.execute(create_username_changes_table)
         await self.bot.db.execute(create_tracking_channels_table)
 
+
+
     @commands.Cog.listener()
     async def on_user_update(self, before, after):
         """This will be called when a user updates their username."""
@@ -46,8 +49,16 @@ class UsernameTracker(commands.Cog):
                     description = f"**{old_username}** has been **dropped**.",
                     timestamp = discord.utils.utcnow()
                 )
-                
+                for channel in channel_ids:
+                    await sleep(0.01)
+                    try:
+                        await self.bot.send_raw(channel, embed = embed)
+                    except Exception:
+                        pass
+                return
                 try:
+                    data = {"method": "username_change", "username": old_username}
+#                    return await self.bot.connection.inform(data, destinations=self.bot.ipc.sources)
                     await self.bot.ipc.roundtrip(
                         "send_message", 
                         channel_id=channel_ids,
@@ -55,6 +66,21 @@ class UsernameTracker(commands.Cog):
                     )
                 except Exception as e:
                     self.logger.warning(f"Failed to send username change notifications: {e}")
+
+    @commands.Cog.listener("on_username_change")
+    async def dispatch_username_change(self, username: str):
+        if not (rows := await self.bot.db.fetch("""SELECT channel_id FROM tracking_channels WHERE guild_id = ANY($1::BIGINT[])""", [g.id for g in self.bot.guilds])):
+            return
+        async def emit(row):
+            if not (channel := self.bot.get_channel(row.channel_id)):
+                return
+            permissions = channel.permissions_for(channel.guild.me)
+            if not permissions.send_messages or not permissions.embed_links:
+                return
+            embed = discord.Embed(description = f"**{username}** has been **dropped**.", timestamp = discord.utils.utcnow())
+            return await channel.send(embed = embed)
+        for row in rows:
+            await emit(row)
 
     async def get_tracking_channel(self):
         """Get all tracking channels from the database."""

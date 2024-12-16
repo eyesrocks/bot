@@ -6,6 +6,7 @@ from config import CONFIG_DICT
 import argparse
 from discord.utils import setup_logging
 setup_logging()
+from loguru import logger
 
 TOKEN = CONFIG_DICT["token"]
 headers = {
@@ -20,13 +21,16 @@ cluster_id = args.cluster
 
 if __name__ == "__main__":
     ips = ["23.160.168.123", "23.160.168.124", "23.160.168.125"]
-    response = requests.get('https://discord.com/api/v10/gateway/bot', headers=headers)
-    data = response.json()
-    shard_count = data['shards']
+#    response = requests.get('https://discord.com/api/v10/gateway/bot', headers=headers)
+  #  data = response.json()
+    _shard_count = 25 #data['shards']
+    per_cluster = (_shard_count + 2) // 3
+    shard_count = per_cluster * 3
     shards = [i for i in range(shard_count)]
-    per_cluster = round(len(shards) / len(ips))
+#    per_cluster = round(len(shards) / len(ips))
     shard_chunks = chunk_list(shards, per_cluster)
     shard_array = shard_chunks[cluster_id - 1 if cluster_id > 0 else 0]
     local_addr = (ips[cluster_id - 1 if cluster_id > 0 else 0], 0)
+    logger.info(f"starting cluster with shards {shard_array[0]}-{shard_array[-1]} with {per_cluster} per cluster")
     bot = Greed(CONFIG_DICT, shard_count=shard_count, shard_ids=shard_array, local_address=local_addr)
     asyncio.run(bot.go())

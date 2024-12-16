@@ -5,6 +5,7 @@ import psutil
 from tornado import gen
 from typing import Callable
 from loguru import logger
+import os
 
 GLOBAL_DASK = {}
 
@@ -41,7 +42,7 @@ async def start_dask(bot, address: str) -> distributed.Client:
                 asynchronous=True,
                 processes=True,
                 threads_per_worker=1,
-                n_workers=3,
+                n_workers=os.cpu_count(),
             ),
             direct_to_workers=True,
             asynchronous=True,

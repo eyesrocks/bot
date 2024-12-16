@@ -1,39 +1,225 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Commands</title>
-  <link rel="stylesheet" href="css/commands.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+
+<head <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="All the commands greed offers.">
+    <meta name="author" content="Your Name or Organization Name">
+    <meta name="keywords" content="Discord, bot, automation, commands, embeds, Greed">
+    <meta property="og:title" content="Greed - commands">
+    <meta property="og:description" content="All the commands greed offers.">
+    <meta property="og:image"
+        content="https://cdn.discordapp.com/attachments/1309828636857335809/1316879992172449892/acbed9f118d94e824f935b09434b2f1e.gif?ex=675ca790&is=675b5610&hm=d938bed009661a9e73acc85efa18db8910fb05a966302801a6c868d8dbbdb670&">
+    <meta property="og:url" content="https://greed.wtf/commands">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Greed - commands">
+    <meta name="twitter:description" content="All the commands greed offers.">
+    <meta name="twitter:image"
+        content="https://cdn.discordapp.com/attachments/1309828636857335809/1316879992172449892/acbed9f118d94e824f935b09434b2f1e.gif?ex=675ca790&is=675b5610&hm=d938bed009661a9e73acc85efa18db8910fb05a966302801a6c868d8dbbdb670&">
+    <title>Command Page</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="./assets/css/commands.css">
 </head>
+
 <body>
-  <header>
-    <div class="logo">
-      <img src="greed.gif" alt="Logo">
-      <h1>Commands</h1>
+    <div id="preloader">
+        <div id="botLogo"></div>
     </div>
-    <div class="actions">
-      <a href="/">Home</a>
-      <a href="status">Status</a>
-      <a href="https://discord.gg/pomice" style="background: #5865F2;">Support</a>
-    </div>
-  </header>
+    <nav>
+        <ul>
+            <li><a href="https://greed.wtf/">Home</a></li>
+            <li><a href="https://discord.gg/pomice">Support</a></li>
+        </ul>
+    </nav>
+    <div id="copyPopup" class="popup">Command copied!</div>
+    <section class="hero">
+        <h1>Command List</h1>
+        <div class="categories-container">
+            <button id="searchButton" class="search-btn">
+                <i class="fas fa-search"></i>
+            </button>
 
-  <div class="categories-wrapper">
-    <div class="scroll-arrow-container left" onclick="scrollCategories(-200)">
-      <i class="scroll-arrow fas fa-chevron-left"></i>
-    </div>
-    <div class="categories-container" id="categoriesContainer"></div>
-    <div class="scroll-arrow-container right" onclick="scrollCategories(200)">
-      <i class="scroll-arrow fas fa-chevron-right"></i>
-    </div>
-  </div>
+            <div class="categories-wrapper">
+                <div class="categories" id="categories"></div>
+            </div>
+        </div>
+        <div id="searchPopupOverlay" class="search-popup-overlay"></div>
+        <div id="searchPopup" class="search-popup">
+            <input type="text" id="searchInput" placeholder="Search for a command..." autofocus>
+        </div>
 
-  <div class="commands-grid" id="commandsGrid"></div>
 
-  <div class="toast-container" id="toastContainer"></div>
+    </section>
+    <section class="main-content">
+        <div id="commands" class="commands-grid"></div>
+    </section>
+    <footer>
+        <p>&copy; 2024 Greed. Made with 💗 by gator.</p>
+    </footer>
+    <button id="backToTop">&#8593;</button>
+    <script>
+        window.addEventListener('load', function () {
+            setTimeout(function () {
+                
+                document.getElementById('preloader').style.display = 'none';
 
-  <script src="commands.js"></script>
+                document.querySelector('nav').classList.remove('hidden');
+                document.querySelector('.hero').classList.remove('hidden');
+                document.querySelector('.categories-container').classList.remove('hidden');
+                document.querySelector('.main-content').classList.remove('hidden');
+                document.querySelector('footer').classList.remove('hidden');
+                document.querySelector('#backToTop').classList.remove('hidden');
+            }, 2000);
+        });
+        async function loadCommands() {
+            try {
+                const response = await fetch('assets/commands.json');
+                const data = await response.json();
+                renderCategories(data);
+            } catch (error) {
+                console.error('Error loading JSON:', error);
+            }
+        }
+        function renderCategories(data) {
+            const categoriesContainer = document.getElementById('categories');
+            const categoryKeys = Object.keys(data);
+            const allCategory = 'All';
+            const allCommands = categoryKeys.reduce((acc, category) => acc.concat(data[category]), []);
+            data[allCategory] = allCommands;
+            const allCategoryDiv = document.createElement('div');
+            allCategoryDiv.classList.add('category', 'selected');
+            allCategoryDiv.innerText = `${allCategory} `;
+            const allCommandCount = document.createElement('span');
+            allCommandCount.classList.add('command-count');
+            allCommandCount.innerText = `(${allCommands.length})`;
+            allCategoryDiv.appendChild(allCommandCount);
+            allCategoryDiv.addEventListener('click', () => {
+                selectCategory(allCategory, data);
+            });
+            categoriesContainer.appendChild(allCategoryDiv);
+            categoryKeys.forEach(category => {
+                if (category !== allCategory) {
+                    const categoryDiv = document.createElement('div');
+                    categoryDiv.classList.add('category');
+                    categoryDiv.innerText = `${category} `;
+                    const commandCount = document.createElement('span');
+                    commandCount.classList.add('command-count');
+                    commandCount.innerText = `(${data[category].length})`;
+                    categoryDiv.appendChild(commandCount);
+                    categoryDiv.addEventListener('click', () => {
+                        selectCategory(category, data);
+                    });
+                    categoriesContainer.appendChild(categoryDiv);
+                }
+            });
+            selectCategory(allCategory, data);
+        }
+        function selectCategory(category, data) {
+            const commandsContainer = document.getElementById('commands');
+            commandsContainer.innerHTML = '';
+            const commands = data[category];
+            commands.forEach(command => {
+                const commandCard = document.createElement('div');
+                commandCard.classList.add('command-card');
+                const commandName = document.createElement('h3');
+                commandName.innerText = command.name;
+                const commandBrief = document.createElement('p');
+                commandBrief.innerText = command.brief;
+                const commandPerms = document.createElement('p');
+                commandPerms.classList.add('perms');
+                commandPerms.innerText = `Required Permissions: ${command.perms}`;
+                const copyIcon = document.createElement('button');
+                copyIcon.classList.add('copy-icon');
+                copyIcon.innerHTML = '<i class="fas fa-copy"></i>';
+                copyIcon.addEventListener('click', () => {
+                    copyToClipboard(command.name);
+                });
+                commandCard.appendChild(commandName);
+                commandCard.appendChild(commandBrief);
+                commandCard.appendChild(commandPerms);
+                commandCard.appendChild(copyIcon);
+                commandsContainer.appendChild(commandCard);
+            });
+            const allCategories = document.querySelectorAll('.category');
+            allCategories.forEach(cat => cat.classList.remove('selected'));
+            const selectedCategoryDiv = [...allCategories].find(cat => cat.innerText.includes(category));
+            if (selectedCategoryDiv) {
+                selectedCategoryDiv.classList.add('selected');
+            }
+        }
+        function copyToClipboard(command) {
+            const textarea = document.createElement('textarea');
+            textarea.value = command;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            const popup = document.getElementById('copyPopup');
+            popup.innerText = `Command "${command}" copied to clipboard!`;
+            popup.classList.add('show');
+            setTimeout(() => {
+                popup.classList.remove('show');
+            }, 2000);
+        }
+        document.getElementById('backToTop').addEventListener('click', () => {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        });
+        window.onscroll = function () {
+            const button = document.getElementById('backToTop');
+            if (document.body.scrollTop > 200 || document.documentElement.scrollTop > 200) {
+                button.classList.add('show');
+            } else {
+                button.classList.remove('show');
+            }
+        };
+        loadCommands();
+        let debounceTimeout;
+        document.getElementById('searchButton').addEventListener('click', () => {
+            document.getElementById('searchPopup').style.display = 'block';
+            document.getElementById('searchPopupOverlay').style.display = 'block';
+            document.getElementById('searchInput').focus();
+        });
+        document.getElementById('searchInput').addEventListener('input', function () {
+            const searchTerm = this.value.trim();
+            clearTimeout(debounceTimeout);
+            debounceTimeout = setTimeout(() => {
+                filterCommands(searchTerm);
+            }, 300);
+        });
+        document.addEventListener('click', function (e) {
+            const popup = document.getElementById('searchPopup');
+            const overlay = document.getElementById('searchPopupOverlay');
+            const input = document.getElementById('searchInput');
+            const searchButton = document.getElementById('searchButton');
+            if (!popup.contains(e.target) && !searchButton.contains(e.target) && !input.contains(e.target)) {
+                closePopup();
+            }
+        });
+        function closePopup() {
+            document.getElementById('searchPopup').style.display = 'none';
+            document.getElementById('searchPopupOverlay').style.display = 'none';
+            document.getElementById('searchInput').value = '';
+        }
+        function filterCommands(searchTerm) {
+            const commandsContainer = document.getElementById('commands');
+            const allCommandCards = commandsContainer.getElementsByClassName('command-card');
+            Array.from(allCommandCards).forEach(card => {
+                card.style.display = 'none';
+            });
+            Array.from(allCommandCards).forEach(card => {
+                const commandName = card.querySelector('h3').innerText.toLowerCase();
+                const commandBrief = card.querySelector('p').innerText.toLowerCase();
+                if (commandName.includes(searchTerm.toLowerCase()) || commandBrief.includes(searchTerm.toLowerCase())) {
+                    card.style.display = 'block'; 
+                }
+            });
+        }
+    </script>
 </body>
+
 </html>

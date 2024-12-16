@@ -126,6 +126,8 @@ class Events(commands.Cog):
         self.bot = bot
         self.locks = defaultdict(asyncio.Lock)
         self.no_snipe = []
+        self.cooldowns = {}
+        self.cooldown_messages = {}
         self.maintenance = True
         self.voicemaster_clear.start()
         self.system_sticker = None
@@ -1590,69 +1592,53 @@ class Events(commands.Cog):
     @commands.Cog.listener("on_member_join")
     @ratelimit("pingonjoin:{guild.id}", 2, 3, False)
     async def pingonjoin_listener(self, member: discord.Member):
-        """Handles pinging new members when they join."""
-        self.MAX_DELAY = 10
-        self.MIN_DELAY = 2
-        self.DEFAULT_THRESHOLD = 3
-        self.MAX_MENTIONS = 20
-
+        """Groups multiple joins together and pings them in a single message."""
         if not member.guild.me.guild_permissions.send_messages:
             return
 
         try:
-            # Cache key for pingonjoin configuration
-            key = f"pingonjoin:{member.guild.id}"
-            record = await cache.get(key)
+            # Get cached config or fetch from DB
+            cache_key = f"pingonjoin:{member.guild.id}"
+            config = await cache.get(cache_key) or await self.bot.db.fetchrow(
+                "SELECT channel_id, threshold, message FROM pingonjoin WHERE guild_id = $1",
+                member.guild.id
+            )
 
-            if not record:
-                # Fetch configuration from the database
-                record = await self.bot.db.fetchrow(
-                    "SELECT channel_id, threshold, message FROM pingonjoin WHERE guild_id = $1",
-                    member.guild.id
-                )
-                if record:
-                    record = dict(record)
-                    await cache.set(key, record)
-
-            if not record:
+            if not config:
                 return
 
-            # Retrieve and validate the channel
-            channel = member.guild.get_channel(record["channel_id"])
+            if not await cache.get(cache_key):
+                await cache.set(cache_key, dict(config))
+
+            channel = member.guild.get_channel(config["channel_id"])
             if not isinstance(channel, discord.TextChannel):
                 return
 
-            # Determine the delay and construct the message
-            delay = min(max(record.get("threshold", self.DEFAULT_THRESHOLD) + 1, self.MIN_DELAY), self.MAX_DELAY)
-            message_template = record.get("message", "{user.mention}")
-
-            # Collect members to ping
+            delay = min(max(config.get("threshold", 3) + 1, 2), 10)
+            message_template = config.get("message", "{user.mention}")
             members = [member]
-            start_time = time.time()
+            deadline = time.time() + delay
 
-            try:
-                while (time.time() - start_time) < delay:
+            while len(members) < 20 and time.time() < deadline:
+                try:
                     new_member = await self.bot.wait_for(
                         "member_join",
-                        timeout=delay - (time.time() - start_time),
+                        timeout=deadline - time.time(),
                         check=lambda m: m.guild.id == member.guild.id
                     )
                     members.append(new_member)
-                    if len(members) >= self.MAX_MENTIONS:
-                        break
-            except asyncio.TimeoutError:
-                pass
+                except asyncio.TimeoutError:
+                    break
 
-            # Construct and send the final message
             mentions = ", ".join(m.mention for m in members)
             final_message = message_template.replace("{user.mention}", mentions)
-
+            
             with suppress(discord.Forbidden, discord.HTTPException):
-                message = await channel.send(final_message)
-                await message.delete(delay=delay + 1)
+                msg = await channel.send(final_message)
+                await msg.delete(delay=delay + 1)
 
         except Exception as e:
-            logger.error(f"Error in pingonjoin_listener for guild {member.guild.id}: {str(e)}")
+            logger.error(f"Error in pingonjoin_listener for {member.guild.id}: {e}")
 
 
     @commands.Cog.listener("on_member_join")
@@ -1691,7 +1677,39 @@ class Events(commands.Cog):
 
 
 
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        """Listens for the word 'greed' alone and responds, with cooldown to prevent spamming."""
+        if message.author.bot:
+            return  # Ignore bot messages
 
+        # Check if the message is exactly "greed"
+        if message.content.strip().lower() == "greed":
+            user_id = message.author.id
+
+            # Check if the user is on cooldown
+            if user_id in self.cooldowns:
+                # Check if the user is on a cooldown for cooldown messages
+                if user_id not in self.cooldown_messages:
+                    await message.channel.send(f"{message.author.mention}, please wait before using this again!")
+                    self.cooldown_messages[user_id] = True
+
+                    # Remove the user from the cooldown message dictionary after 5 seconds
+                    await asyncio.sleep(5)
+                    del self.cooldown_messages[user_id]
+                return
+
+            # Respond to the user
+            await message.channel.send(
+                f"{message.author.mention}: visit our [website](https://greed.wtf/), & join the support server **@ /pomice**"
+            )
+
+            # Add user to cooldown
+            self.cooldowns[user_id] = True
+
+            # Remove user from cooldown after 5 seconds
+            await asyncio.sleep(5)
+            del self.cooldowns[user_id]
 
 
 

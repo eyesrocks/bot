@@ -49,18 +49,34 @@
             "name": "disconnect",
             "brief": "Make greed leave your current voice channel",
             "example": ",disconnect"
+        },
+        {
+            "name": "presets",
+            "brief": "apply different presets to your music",
+            "example": ",h presets"
         }
+        
     ],
     "Miscellaneous": [
         {
-            "name": "valorant",
-            "brief": "lookup a user's valorant stats",
-            "example": ",valorant cop#00001"
+            "name": "ai (premium)",
+            "brief": "ask or give a promt to an ai model",
+            "example": ",ai (your prompt)"
+        },
+        {
+            "name": "reskin (premium)",
+            "brief": "reskin/customize the bot to suit how you want it to look",
+            "example": ",h reskin"
         },
         {
             "name": "variables",
             "brief": "show all embed variables used for the bots embed creator",
             "example": ",variables"
+        },
+        {
+            "name": "caption",
+            "brief": "caption a user's messages",
+            "example": ",caption [replied message]"
         },
         {
             "name": "tts",
@@ -106,6 +122,11 @@
             "name": "selfpurge",
             "brief": "Clear your messages from a chat",
             "example": ",selfpurge 100"
+        },
+        {
+            "name": "username (booster)",
+            "brief": "enable username tracking in your server",
+            "example": ",h username"
         }
     ],
     "LastFM": [
@@ -163,6 +184,11 @@
             "name": "lastfm embed",
             "brief": "Create a custom embed for your lastfm now playing command",
             "example": ",lastfm embed {embed code}"
+        },
+        {
+            "name": "voicetrack",
+            "brief": "show a graph of how long you have been in a vc for",
+            "example": ",voicetrack"
         },
         {
             "name": "lastfm variables",
@@ -693,6 +719,11 @@
             "example": ",purge bots 100"
         },
         {
+            "name": "private server (booster)",
+            "brief": "set your server to be private and reject users from entering",
+            "example": ",h privateserver"
+        },
+        {
             "name": "cleanup",
             "brief": "Cleans up all bot messages from the channel",
             "example": ",cleanup"
@@ -850,6 +881,11 @@
             "name": "kiss",
             "brief": "kiss another user.",
             "example": ",kiss @wurri"
+        },
+        {
+            "name": "fuck (booster & NSFW)",
+            "brief": "fuck another user.",
+            "example": ",fuck @wurri"
         },
         {
             "name": "hug",

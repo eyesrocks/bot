@@ -863,16 +863,20 @@ class Context(commands.Context):
         reskin = await self.reskin()
         if reskin:
             webhook = reskin["webhook"]
-            kwargs["username"] = reskin["username"]
+            kwargs["username"] = reskin["username"] 
             kwargs["avatar_url"] = reskin["avatar_url"]
             kwargs["wait"] = True
 
             delete_after = kwargs.pop("delete_after", None)
+            view = kwargs.get("view")
             kwargs.pop("stickers", None)
             kwargs.pop("reference", None)
             kwargs.pop("followup", None)
+            
             try:
-                 self.response = await webhook.send(*args, **kwargs)
+                self.response = await webhook.send(*args, **kwargs)
+                if view and not view.is_finished():
+                    self.bot._connection.store_view(view, self.response.id)
             except discord.NotFound:
                 reskin = await self.bot.pool.fetch_config(self.guild.id, "reskin") or {}
                 del reskin["webhooks"][str(self.channel.id)]
@@ -881,7 +885,7 @@ class Context(commands.Context):
                     self.bot.db.update_config(self.guild.id, "reskin", reskin),
                     cache.delete_many(
                         f"reskin:channel:{self.channel.id}",
-                        f"reskin:webhook:{self.channel.id}",
+                        f"reskin:webhook:{self.channel.id}", 
                         f"reskin:guild:channel:{self.guild.id}:{self.channel.id}"
                     )
                 )
@@ -892,6 +896,7 @@ class Context(commands.Context):
                     await self.response.delete(delay=delete_after)
 
                 return self.response
+
         self.response = await super().send(*args, **kwargs)
         return self.response
 
@@ -1003,7 +1008,6 @@ class Context(commands.Context):
 
 class MSG:
 
-    
     async def edit(
         self: discord.Message,
         *,
@@ -1016,101 +1020,37 @@ class MSG:
         allowed_mentions: Optional[AllowedMentions] = MISSING,
         view: Optional[View] = MISSING,
     ) -> Message:
-        """|coro|
-
-        Edits the message.
-
-        The content must be able to be transformed into a string via ``str(content)``.
-
-        .. versionchanged:: 1.3
-            The ``suppress`` keyword-only parameter was added.
-
-        .. versionchanged:: 2.0
-            Edits are no longer in-place, the newly edited message is returned instead.
-
-        .. versionchanged:: 2.0
-            This function will now raise :exc:`TypeError` instead of
-            ``InvalidArgument``.
-
-        Parameters
-        -----------
-        content: Optional[:class:`str`]
-            The new content to replace the message with.
-            Could be ``None`` to remove the content.
-        embed: Optional[:class:`Embed`]
-            The new embed to replace the original with.
-            Could be ``None`` to remove the embed.
-        embeds: List[:class:`Embed`]
-            The new embeds to replace the original with. Must be a maximum of 10.
-            To remove all embeds ``[]`` should be passed.
-
-            .. versionadded:: 2.0
-        attachments: List[Union[:class:`Attachment`, :class:`File`]]
-            A list of attachments to keep in the message as well as new files to upload. If ``[]`` is passed
-            then all attachments are removed.
-
-            .. note::
-
-                New files will always appear after current attachments.
-
-            .. versionadded:: 2.0
-        suppress: :class:`bool`
-            Whether to suppress embeds for the message. This removes
-            all the embeds if set to ``True``. If set to ``False``
-            this brings the embeds back if they were suppressed.
-            Using this parameter requires :attr:`~.Permissions.manage_messages`.
-        delete_after: Optional[:class:`float`]
-            If provided, the number of seconds to wait in the background
-            before deleting the message we just edited. If the deletion fails,
-            then it is silently ignored.
-        allowed_mentions: Optional[:class:`~discord.AllowedMentions`]
-            Controls the mentions being processed in this message. If this is
-            passed, then the object is merged with :attr:`~discord.Client.allowed_mentions`.
-            The merging behaviour only overrides attributes that have been explicitly passed
-            to the object, otherwise it uses the attributes set in :attr:`~discord.Client.allowed_mentions`.
-            If no object is passed at all then the defaults given by :attr:`~discord.Client.allowed_mentions`
-            are used instead.
-
-            .. versionadded:: 1.4
-        view: Optional[:class:`~discord.ui.View`]
-            The updated view to update this message with. If ``None`` is passed then
-            the view is removed.
-
-        Raises
-        -------
-        HTTPException
-            Editing the message failed.
-        Forbidden
-            Tried to suppress a message without permissions or
-            edited a message's content or embed that isn't yours.
-        TypeError
-            You specified both ``embed`` and ``embeds``
-
-        Returns
-        --------
-        :class:`Message`
-            The newly edited message.
-        """
+        """Edits the message."""
+        message = None
+        
         try:
             rs = await reskin(self._state._get_client(), self.channel, name=self.author.name)
             if rs:
                 if "webhook" in rs:
                     webhook = rs["webhook"]
                     try:
-                        msg = await webhook.edit_message(self.id, content=content, embeds=embeds, embed=embed, attachments=attachments, view=view)
+                        msg = await webhook.edit_message(
+                            self.id, 
+                            content=content, 
+                            embeds=embeds, 
+                            embed=embed, 
+                            attachments=attachments, 
+                            view=view
+                        )
                         if delete_after:
                             await msg.delete(delay=delete_after)
                         return msg
                     except Exception as e:
-                        logger.info(f"exception line 1100: {get_error(e)}")
+                        logger.info(f"Exception in webhook edit: {get_error(e)}")
                         pass
             else:
                 if not self.author.name == self._state._get_client().user.name:
-                    logger.info(f"{rs}")
+                    logger.info(f"Unexpected `rs` value: {rs}")
 
         except Exception as e:
-            logger.info(f"exception line 1103: {get_error(e)}")
+            logger.info(f"Exception in main edit block: {get_error(e)}")
             pass
+
         if content is not MISSING:
             previous_allowed_mentions = self._state.allowed_mentions
         else:
@@ -1139,21 +1079,12 @@ class MSG:
                 data = await self._state.http.edit_message(self.channel.id, self.id, params=params)
                 message = Message(state=self._state, channel=self.channel, data=data)
             except Exception:
-                try:
-                    rs = await reskin(self._state._get_client(), self.channel, name=self.author.name)
-                    webhook = rs["webhook"]
-                    try:
-                        msg = await webhook.edit_message(self.id, content=content, embeds=embeds, embed=embed, attachments=attachments, view=view)
-                        if delete_after:
-                            await msg.delete(delay=delete_after)
-                        return msg
-                    except Exception as e:
-                        log.info(f"exception line 1100: {get_error(e)}")
-                        pass
+                logger.info("Fallback HTTP edit failed.")
+                pass
 
-                except Exception as e:
-                    log.info(f"exception line 1103: {get_error(e)}")
-                    pass
+        if message is None:
+            logger.error("Message edit failed, returning original.")
+            raise RuntimeError("Failed to edit message via all attempted methods.")
 
         if view and not view.is_finished():
             self._state.store_view(view, self.id)

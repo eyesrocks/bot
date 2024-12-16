@@ -1714,69 +1714,6 @@ class Economy(commands.Cog):
             await ctx.fail("An error occurred while processing your command.")
             raise e  # Log the exception for debugging purposes
              
-    @commands.command(
-         name="hack",
-         brief="Attempt to hack another user and steal their bank balance.",
-         example=",hack @user"
-     )
-    @account() 
-    @commands.cooldown(1, 180, commands.BucketType.user)
-    async def hack(self, ctx: Context, target: discord.Member):
-         if target == ctx.author:
-             return await ctx.warning("You cannot hack yourself.")
-         
-         hacker_bank_balance = await self.get_balance(ctx.author)
-         target_bank_balance = await self.get_balance(target)
-         if target_bank_balance == 0:
-             return await ctx.warning(f"{target.display_name} has no bucks in their wallet to start a hack")
-         
-         if hacker_bank_balance == 0:
-             return await ctx.warning("You have no bucks in your bank to attempt a hack!")
-
-
-         progress = "💻 --------- 💻"
-         progress_message = await ctx.send(progress)
-
-
-         for i in range(7):
-             await asyncio.sleep(1.2)  
-             progress = f"💻 {'✔️' * (i+1)}{'-' * (7-i)} 💻"
-             await progress_message.edit(content=progress)
-         
-
-         success = random.random() < 0.25  
-         if success:
-             stolen_amount = target_bank_balance * 0.75 
-             await self.bot.db.execute(
-                 """UPDATE economy SET bank = bank + $1 WHERE user_id = $2""",
-                 stolen_amount,
-                 ctx.author.id,
-             )
-             await self.bot.db.execute(
-                 """UPDATE economy SET bank = bank - $1 WHERE user_id = $2""",
-                 stolen_amount,
-                 target.id,
-             )
-
-             progress = f"💻 {'✔️' * 7} ✅ 💻"
-             await progress_message.edit(content=progress)
-             return await ctx.currency(
-                 f"You successfully hacked **{target.display_name}** and stole **{self.format_int(stolen_amount)}** bucks!"
-             )
-         else:
-
-             await self.bot.db.execute(
-                 """UPDATE economy SET bank = 1000 WHERE user_id = $1""",
-                 ctx.author.id,
-             )
-
-             progress = f"💻 {'✔️' * 6} ❌ 💻"
-             await progress_message.edit(content=progress)
-             return await ctx.fail(
-                 "Your hacking attempt failed, and you lost all your bucks in your bank."
-             )
-
-
 
 async def setup(bot):
     await bot.add_cog(Economy(bot))

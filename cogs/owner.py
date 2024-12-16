@@ -43,6 +43,12 @@ class Owner(commands.Cog):
 
 
     async def cog_load(self):
+#        setattr(self.bot.connection.__events, "on_rival_information", self.bot.on_rival_information)
+        if hasattr(self.bot, "connection"):
+            bot = self.bot
+            @bot.connection.event
+            async def on_rival_information(data, id): return await bot.on_rival_information(data, id)
+#        bot.connection.__events.on_rival_information = self.bot.on_rival_information
         await self.bot.db.execute(
             """
             CREATE TABLE IF NOT EXISTS donators (
@@ -67,35 +73,43 @@ class Owner(commands.Cog):
 
     @tasks.loop(seconds=60)
     async def check_boosts(self):
-        """Check and sync boosters roles with boosters database."""
+        """Check and sync booster roles with boosters database."""
         try:
-            if not (guild := self.bot.get_guild(self.guild_id)):
+            guild = self.bot.get_guild(self.guild_id)
+            if not guild:
                 return
 
-            basic = guild.get_role(1301664266868363356)
-            if not (basic): 
+            booster_role = guild.get_role(1301664266868363356)
+            if not booster_role:
+                logger.warning("Could not find booster role")
                 return
 
-            await self.bot.db.executemany(
-                """
-                INSERT INTO boosters (user_id, ts)
-                VALUES ($1, CURRENT_TIMESTAMP) 
-                ON CONFLICT (user_id) DO NOTHING
-                """,
-                [(owner,) for owner in self.bot.owner_ids]
-            )
+            role_members = {member.id for member in booster_role.members}
+            owner_ids = set(self.bot.owner_ids)
 
-            role_members = set(m.id for m in basic.members)
+            all_boosters = role_members.union(owner_ids)
+
             await self.bot.db.executemany(
                 """
                 INSERT INTO boosters (user_id, ts)
                 VALUES ($1, CURRENT_TIMESTAMP)
                 ON CONFLICT (user_id) DO NOTHING
                 """,
-                [(member_id,) for member_id in role_members]
+                [(member_id,) for member_id in all_boosters]
             )
 
-            logger.info(f"Synced {len(role_members)} subscribers to boosters database")
+            await self.bot.db.execute(
+                """
+                DELETE FROM boosters
+                WHERE user_id NOT IN (SELECT user_id FROM boosters WHERE user_id = ANY($1::bigint[]))
+                """,
+                list(all_boosters)
+            )
+
+            logger.info(f"Synced {len(all_boosters)} boosters to database")
+
+        except Exception as e:
+            logger.error(f"Error in booster check: {e}", exc_info=True)
 
         except Exception as e:
             logger.error(f"Error in subscription check: {e}", exc_info=True)

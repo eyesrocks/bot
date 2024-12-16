@@ -29,7 +29,7 @@ class IPC:
         shard_ids = list(self.bot.shards.keys())
         self.cluster_id = next((i for i, chunk in enumerate(self.chunks) if any(shard_id in chunk for shard_id in shard_ids)), 0)
         self.bot.connection = Connection(local_name = f"cluster{str(self.cluster_id + 1)}", host = "127.0.0.1", port = 13254)
-        self.sources = [f"cluster{str(i)}" for i, chunk in enumerate(self.chunks, start = 1)]
+        self.sources = [f"cluster{str(i)}" for i, chunk in enumerate(self.chunks, start = 1)][:3]
         self.max_retries = 3
         self.retry_delay = 1
 

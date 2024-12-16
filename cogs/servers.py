@@ -469,16 +469,13 @@ class Servers(Cog):
             )
             if data:
                 if data.channels:
-                    try:
-                        channels = json.loads(data.channels)
-                        if message.channel.id in channels:
-                            return await self.bot.send_embed(
-                                destination=message.channel,
-                                code=data.message,
-                                user=message.author
-                            )
-                    except json.JSONDecodeError as e:
-                        logger.error(f"Failed to parse channels as JSON: {e}")
+                    channels = data.channels if isinstance(data.channels, list) else [data.channels]
+                    if message.channel.id in channels:
+                        return await self.bot.send_embed(
+                            destination=message.channel,
+                            code=data.message,
+                            user=message.author
+                        )
                 else:
                     logger.error("No channels found in the database.")
 

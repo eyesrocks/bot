@@ -993,3 +993,56 @@ class EmojiConfirmation(View):
                 )
 
         self.stop()
+
+class VmButtons(View):
+    def __init__(self, bot):
+        super().__init__(timeout=None)
+        self.bot = bot
+        self.value = None
+
+    async def handle_interaction_error(self, interaction: discord.Interaction, embed: discord.Embed):
+        """Helper method to safely respond to interactions"""
+        try:
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        except discord.NotFound:
+            # Interaction already timed out
+            pass
+        except discord.InteractionResponded:
+            # Interaction was already responded to
+            try:
+                await interaction.followup.send(embed=embed, ephemeral=True)
+            except:
+                pass
+
+    @discord.ui.button(
+        style=discord.ButtonStyle.grey,
+        emoji="<:greed_lock:1207661056554700810>",
+        custom_id="lock_button",
+    )
+    async def lock(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.voice:
+            embed = discord.Embed(
+                description="> You **aren't** connected to a **Voicemaster channel**",
+                color=0x2D2B31,
+            )
+            return await self.handle_interaction_error(interaction, embed)
+
+        # ...existing code...
+
+    @discord.ui.button(
+        style=discord.ButtonStyle.grey,
+        emoji="<:greed_unlock:1207661072086073344>",
+        custom_id="unlock_button",
+    )
+    async def unlock(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.voice:
+            embed = discord.Embed(
+                description="> You **aren't** connected to a **voicemaster channel**"
+            )
+            return await self.handle_interaction_error(interaction, embed)
+
+        # ...existing code...
+
+    # For all other button methods, replace direct interaction.response.send_message calls
+    # with self.handle_interaction_error(interaction, embed)
+    # ...existing code...

@@ -1,0 +1,297 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #000000;
+    color: #fff;
+    display: flex;
+    height: 100vh;
+    overflow: auto !important;
+}
+
+.container {
+    display: flex;
+    width: 100%;
+    flex-wrap: wrap;
+}
+
+.sidebar {
+    width: 250px;
+    background-color: #000000;
+    padding: 20px;
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.2);
+    overflow-y: auto;
+}
+
+.sidebar ul {
+    list-style: none;
+    padding: 0;
+}
+
+.sidebar li {
+    padding: 12px 20px;
+    margin-bottom: 15px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    text-align: center;
+    font-size: 16px;
+}
+
+.sidebar li:hover {
+    background-color: #FFD700;
+    color: #181818;
+}
+
+.sidebar .tab-link {
+    font-size: 18px;
+    font-weight: bold;
+    color: #f0f0f0;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.main-content {
+    flex-grow: 1;
+    padding: 30px;
+    overflow-y: auto;
+    background-color: #000000;
+    color: #fff;
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+h2 {
+    color: #FFD700;
+    font-size: 2rem;
+    font-weight: bold;
+    margin-bottom: 20px;
+}
+
+h3 {
+    color: #FFD700;
+    font-size: 1.5rem;
+    margin-bottom: 15px;
+}
+
+p {
+    font-size: 1.1rem;
+    color: #ccc;
+    margin-bottom: 15px;
+}
+
+pre {
+    background-color: #333;
+    padding: 15px;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 1.2rem;
+    margin-bottom: 20px;
+    overflow-x: auto;
+}
+
+code {
+    font-family: "Courier New", Courier, monospace;
+    font-size: 1.1rem;
+    color: #FFD700;
+}
+
+.command-section {
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    background-color: #000000;
+    border-radius: 8px;
+}
+
+.command-section h3 {
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+    color: #FFD700;
+}
+
+.command-section pre {
+    background-color: #222;
+    color: #FFD700;
+    padding: 10px;
+    border-radius: 8px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.command-section p {
+    font-size: 1rem;
+    color: #ccc;
+    margin-bottom: 1rem;
+}
+
+.sidebar li.active {
+    background-color: #FFD700;
+    color: #181818;
+    font-weight: bold;
+}
+
+.nav-buttons {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 20px;
+}
+
+.nav-btn {
+    background-color: #FFD700;
+    color: #181818;
+    border: none;
+    padding: 10px 20px;
+    font-size: 16px;
+    cursor: pointer;
+    border-radius: 5px;
+    transition: background-color 0.3s;
+}
+
+.nav-btn:hover {
+    background-color: #FFB300;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+
+th, td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+}
+
+th {
+    background-color: #333;
+    color: #FFD700;
+}
+
+td {
+    background-color: #1d1d1d;
+    color: #fff;
+}
+
+tr:hover {
+    background-color: #333;
+}
+
+td:first-child {
+    font-weight: bold;
+    color: #FFD700;
+}
+
+td:last-child {
+    color: #fff;
+}
+
+.variable-box {
+    background-color: #666666;
+    color: #fff;
+    padding: 10px 20px;
+    margin: 10px 0;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    margin-bottom: 10px;
+}
+
+.variable-box:hover {
+    background-color: #FFD700;
+}
+
+.variable-box p {
+    margin: 0;
+    font-size: 18px;
+    font-weight: bold;
+    color: #000000;
+}
+
+.variable-table {
+    display: none;
+    margin-top: 20px;
+}
+
+.variable-table table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.variable-table th,
+.variable-table td {
+    border: 1px solid #444;
+    padding: 10px;
+    text-align: left;
+}
+
+.variable-table th {
+    background-color: #444;
+    color: #FFD700;
+}
+
+.variable-table td {
+    background-color: #222;
+}
+
+.variable-box.expanded {
+    background-color: #FFD700;
+    color: #181818;
+}
+
+.variable-box .variable-table {
+    display: block;
+}
+
+@media (max-width: 768px) {
+    .container {
+        flex-direction: column;
+    }
+
+    .sidebar {
+        width: 100%;
+        height: auto;
+        box-shadow: none;
+        padding: 10px;
+    }
+
+    .sidebar li {
+        font-size: 14px;
+        padding: 10px;
+    }
+
+    .main-content {
+        padding: 20px;
+    }
+
+    h2 {
+        font-size: 1.5rem;
+    }
+
+    h3 {
+        font-size: 1.2rem;
+    }
+
+    .variable-box p {
+        font-size: 16px;
+    }
+
+    .nav-btn {
+        font-size: 14px;
+        padding: 8px 15px;
+    }
+
+    table {
+        font-size: 14px;
+    }
+
+    th, td {
+        padding: 8px;
+    }
+}

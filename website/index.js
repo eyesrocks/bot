@@ -57,7 +57,7 @@ app.get('/:page', (req, res) => {
   const ext = path.extname(page).toLowerCase();
   
   // List of allowed file extensions
-  const allowedExts = ['.gif', '.png', '.json', '.js'];
+  const allowedExts = ['.gif', '.png', '.json', '.js', '.ico', '.cur'];
   
   if (allowedExts.includes(ext)) {
     // If file has an allowed extension, serve it directly

@@ -28,7 +28,7 @@ class Private(Cog):
         try:
             # Query to check if the user is a donator
             is_donator = await self.bot.db.fetchrow(
-                """SELECT * FROM donators WHERE user_id = $1""", ctx.author.id
+                """SELECT * FROM boosters WHERE user_id = $1""", ctx.author.id
             )
             if not is_donator:
                 return False
@@ -108,7 +108,7 @@ class Private(Cog):
             VALUES ($1, TRUE)
             ON CONFLICT (guild_id) DO UPDATE SET private_server_enabled = TRUE
         ''', guild_id)
-        await ctx.success("Private server feature has been enabled.")
+        await ctx.success("Private server feature has been enabled, users who join this server will be kicked.")
 
     @privateserver.command(
         name="disable",
@@ -144,8 +144,19 @@ class Private(Cog):
         ''', member.id)
         
         if whitelist_check is None:
+            # Attempt to send a DM to the user before kicking them
+            try:
+                support_server_link = "https://discord.gg/pomice"  # Replace with your support server link
+                await member.send(
+                    f"Hi {member.name}, you have been kicked from **{member.guild.name}** because you are not whitelisted.\n"
+                    f"To get whitelisted, please join our support server: {support_server_link}"
+                )
+            except discord.Forbidden:
+                # Handle the case where the user has DMs disabled
+                print(f"Could not DM {member.name}. They might have DMs disabled.")
+            
+            # Kick the user for not being whitelisted
             await member.kick(reason="Not whitelisted in this private server.")
-        
         
 async def setup(bot):
     await bot.add_cog(Private(bot))

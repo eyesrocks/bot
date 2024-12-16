@@ -19,10 +19,14 @@ from loguru import logger
 from tool.important.services.Webhook import Webhook as Webhooks
 # from logging import getLogger
 # logger = getLogger(__name__)
-from typing import Any, Dict, Optional, Union, Callable
+from typing import Any, Dict, Optional, Union, Callable, Sequence
 from psutil import Process
 from aiohttp import ClientSession
-from discord import Message, Guild, AuditLogEntry, TextChannel
+from discord.utils import MISSING
+from discord.http import handle_message_parameters
+from discord.types.snowflake import SnowflakeList
+from discord import Message, Guild, AuditLogEntry, TextChannel, Embed, File, GuildSticker, StickerItem, AllowedMentions, MessageReference, PartialMessage
+from discord.ui import View
 from discord.ext import commands
 from discord.ext.commands import (
     AutoShardedBot as Bot,
@@ -196,7 +200,203 @@ class Greed(Bot):
         self.check(self.command_check)
         self.before_invoke(self.before_all_commands)
 
+    async def send_raw(self, channel_id: int, content: Optional[str] = None,
+        *,
+        tts: bool = False,
+        embed: Optional[Embed] = None,
+        embeds: Optional[Sequence[Embed]] = None,
+        file: Optional[File] = None,
+        files: Optional[Sequence[File]] = None,
+        stickers: Optional[Sequence[Union[GuildSticker, StickerItem]]] = None,
+        delete_after: Optional[float] = None,
+        nonce: Optional[Union[str, int]] = None,
+        allowed_mentions: Optional[AllowedMentions] = None,
+        reference: Optional[Union[Message, MessageReference, PartialMessage]] = None,
+        mention_author: Optional[bool] = None,
+        view: Optional[View] = None,
+        suppress_embeds: bool = False,
+        silent: bool = False,
+        **kwargs
+    ) -> Message:
+        """|coro|
 
+        Sends a message to the destination with the content given.
+
+        The content must be a type that can convert to a string through ``str(content)``.
+        If the content is set to ``None`` (the default), then the ``embed`` parameter must
+        be provided.
+
+        To upload a single file, the ``file`` parameter should be used with a
+        single :class:`~discord.File` object. To upload multiple files, the ``files``
+        parameter should be used with a :class:`list` of :class:`~discord.File` objects.
+        **Specifying both parameters will lead to an exception**.
+
+        To upload a single embed, the ``embed`` parameter should be used with a
+        single :class:`~discord.Embed` object. To upload multiple embeds, the ``embeds``
+        parameter should be used with a :class:`list` of :class:`~discord.Embed` objects.
+        **Specifying both parameters will lead to an exception**.
+
+        .. versionchanged:: 2.0
+            This function will now raise :exc:`TypeError` or
+            :exc:`ValueError` instead of ``InvalidArgument``.
+
+        Parameters
+        ------------
+        content: Optional[:class:`str`]
+            The content of the message to send.
+        tts: :class:`bool`
+            Indicates if the message should be sent using text-to-speech.
+        embed: :class:`~discord.Embed`
+            The rich embed for the content.
+        embeds: List[:class:`~discord.Embed`]
+            A list of embeds to upload. Must be a maximum of 10.
+
+            .. versionadded:: 2.0
+        file: :class:`~discord.File`
+            The file to upload.
+        files: List[:class:`~discord.File`]
+            A list of files to upload. Must be a maximum of 10.
+        nonce: :class:`int`
+            The nonce to use for sending this message. If the message was successfully sent,
+            then the message will have a nonce with this value.
+        delete_after: :class:`float`
+            If provided, the number of seconds to wait in the background
+            before deleting the message we just sent. If the deletion fails,
+            then it is silently ignored.
+        allowed_mentions: :class:`~discord.AllowedMentions`
+            Controls the mentions being processed in this message. If this is
+            passed, then the object is merged with :attr:`~discord.Client.allowed_mentions`.
+            The merging behaviour only overrides attributes that have been explicitly passed
+            to the object, otherwise it uses the attributes set in :attr:`~discord.Client.allowed_mentions`.
+            If no object is passed at all then the defaults given by :attr:`~discord.Client.allowed_mentions`
+            are used instead.
+
+            .. versionadded:: 1.4
+
+        reference: Union[:class:`~discord.Message`, :class:`~discord.MessageReference`, :class:`~discord.PartialMessage`]
+            A reference to the :class:`~discord.Message` to which you are replying, this can be created using
+            :meth:`~discord.Message.to_reference` or passed directly as a :class:`~discord.Message`. You can control
+            whether this mentions the author of the referenced message using the :attr:`~discord.AllowedMentions.replied_user`
+            attribute of ``allowed_mentions`` or by setting ``mention_author``.
+
+            .. versionadded:: 1.6
+
+        mention_author: Optional[:class:`bool`]
+            If set, overrides the :attr:`~discord.AllowedMentions.replied_user` attribute of ``allowed_mentions``.
+
+            .. versionadded:: 1.6
+        view: :class:`discord.ui.View`
+            A Discord UI View to add to the message.
+
+            .. versionadded:: 2.0
+        stickers: Sequence[Union[:class:`~discord.GuildSticker`, :class:`~discord.StickerItem`]]
+            A list of stickers to upload. Must be a maximum of 3.
+
+            .. versionadded:: 2.0
+        suppress_embeds: :class:`bool`
+            Whether to suppress embeds for the message. This sends the message without any embeds if set to ``True``.
+
+            .. versionadded:: 2.0
+        silent: :class:`bool`
+            Whether to suppress push and desktop notifications for the message. This will increment the mention counter
+            in the UI, but will not actually send a notification.
+
+            .. versionadded:: 2.2
+
+        Raises
+        --------
+        ~discord.HTTPException
+            Sending the message failed.
+        ~discord.Forbidden
+            You do not have the proper permissions to send the message.
+        ValueError
+            The ``files`` or ``embeds`` list is not of the appropriate size.
+        TypeError
+            You specified both ``file`` and ``files``,
+            or you specified both ``embed`` and ``embeds``,
+            or the ``reference`` object is not a :class:`~discord.Message`,
+            :class:`~discord.MessageReference` or :class:`~discord.PartialMessage`.
+
+        Returns
+        ---------
+        :class:`~discord.Message`
+            The message that was sent.
+        """
+
+        state = self._connection
+        content = str(content) if content is not None else None
+        previous_allowed_mention = state.allowed_mentions
+
+        if stickers is not None:
+            sticker_ids: SnowflakeList = [sticker.id for sticker in stickers]
+        else:
+            sticker_ids = MISSING
+
+        if reference is not None:
+            try:
+                reference_dict = reference.to_message_reference_dict()
+            except AttributeError:
+                raise TypeError('reference parameter must be Message, MessageReference, or PartialMessage') from None
+        else:
+            reference_dict = MISSING
+
+        if view and not hasattr(view, '__discord_ui_view__'):
+            raise TypeError(f'view parameter must be View not {view.__class__.__name__}')
+
+        if suppress_embeds or silent:
+            from discord.message import MessageFlags  # circular import
+
+            flags = MessageFlags._from_value(0)
+            flags.suppress_embeds = suppress_embeds
+            flags.suppress_notifications = silent
+        else:
+            flags = MISSING
+
+        with handle_message_parameters(
+            content=content,
+            tts=tts,
+            file=file if file is not None else MISSING,
+            files=files if files is not None else MISSING,
+            embed=embed if embed is not None else MISSING,
+            embeds=embeds if embeds is not None else MISSING,
+            nonce=nonce,
+            allowed_mentions=allowed_mentions,
+            message_reference=reference_dict,
+            previous_allowed_mentions=previous_allowed_mention,
+            mention_author=mention_author,
+            stickers=sticker_ids,
+            view=view,
+            flags=flags,
+        ) as params:
+            data = await state.http.send_message(channel_id, params=params, **kwargs)
+
+        ret = state.create_message(channel=channel, data=data)
+        if view and not view.is_finished():
+            state.store_view(view, ret.id)
+
+        if delete_after is not None:
+            await ret.delete(delay=delete_after)
+        return ret
+
+    async def on_rival_information(self, data: Any, id: str):
+        method = data["method"]
+        logger.info(f"received information with the method {method}")
+        if method == "send_message":
+            embed = data["kwargs"].get("embed")
+            content = data["kwargs"].get("content")
+            channel_id = data["kwargs"]["channel_id"]
+            if channel := self.get_channel(int(channel_id)):
+                kwargs = {}
+                if embed:
+                    embed = discord.Embed.from_dict(embed)
+                    kwargs["embed"] = embed
+                if content:
+                    kwargs["content"] = content
+                await channel.send(**kwargs)
+        elif method == "username_change":
+            self.dispatch("username_change", data["username"])
+        elif method == "vanity_change":
+            self.dispatch("vanity_change", data["vanity"])
 
     def get_timestamp(self, dt: Optional[datetime.datetime] = None, style: str = "R"):
         if dt is None:
@@ -290,7 +490,7 @@ class Greed(Bot):
 
     async def before_all_commands(self, ctx: Context):
         rs = await reskin(self, ctx.channel, author=ctx.author)
-        if not len(rs) == 0:
+        if not rs:
             if ctx.command is not None:
                 if "purge" not in ctx.command.qualified_name:
                     if ctx.guild and ctx.channel:
@@ -744,6 +944,7 @@ class Greed(Bot):
         super().run(self.config["token"], *args, **kwargs)
 
     async def request_invite(self, user_id: int):
+        return
         link = f"https://discord.com/oauth2/authorize?client_id={user_id}&permissions=0&scope=applications.commands%20bot"
         session = ClientSession()
         webhook = discord.Webhook.from_url(session = session, url = "https://discord.com/api/webhooks/1312506540271472731/aHazRNKWx4w12CZI5zN_v5EwrOfmlZs7KZ1pSzqYMtIwCWjYV_q2G_FwABhQ2tgHCKEf")
@@ -1025,8 +1226,15 @@ class Greed(Bot):
         app_emojis = await self.get_emojis()
         for emoji in app_emojis:
             if emoji.name == name:
+                EMOJIS[name] = str(emoji)
                 return emoji
-        return await self.create_application_emoji(name=name, image=data)
+        try:
+            emoji = await self.create_application_emoji(name=name, image=data)
+            EMOJIS[name] = str(emoji)
+            return emoji
+        except discord.HTTPException as e:
+            logger.error(f"Failed to create emoji {name}: {e}")
+            return None
 
     async def setup_emojis(self):
         for key, value in EMOJIS.items():
@@ -1036,8 +1244,7 @@ class Greed(Bot):
                         path = f"assets/{key}{ext}"
                         if os.path.exists(path):
                             file_data = await read_file(path)
-                            created_emoji = await self.create_emoji(key, file_data)
-                            EMOJIS[key] = str(created_emoji)
+                            await self.create_emoji(key, file_data)
                             break
                     else:
                         logger.error(f"Warning: No emoji file found for {key}")
