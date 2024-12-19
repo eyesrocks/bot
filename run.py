@@ -5,8 +5,9 @@ from tool.greed import Greed
 from config import CONFIG_DICT
 import argparse
 from discord.utils import setup_logging
-setup_logging()
 from loguru import logger
+
+setup_logging()
 
 TOKEN = CONFIG_DICT["token"]
 headers = {
@@ -20,14 +21,12 @@ cluster_id = args.cluster
 
 
 if __name__ == "__main__":
-    ips = ["23.160.168.123", "23.160.168.124", "23.160.168.125"]
+    ips = ["23.160.168.122", "23.160.168.124", "23.160.168.125"]
 #    response = requests.get('https://discord.com/api/v10/gateway/bot', headers=headers)
   #  data = response.json()
-    _shard_count = 25 #data['shards']
-    per_cluster = (_shard_count + 2) // 3
-    shard_count = per_cluster * 3
+    shard_count = 20
+    per_cluster = 7
     shards = [i for i in range(shard_count)]
-#    per_cluster = round(len(shards) / len(ips))
     shard_chunks = chunk_list(shards, per_cluster)
     shard_array = shard_chunks[cluster_id - 1 if cluster_id > 0 else 0]
     local_addr = (ips[cluster_id - 1 if cluster_id > 0 else 0], 0)

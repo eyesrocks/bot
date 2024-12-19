@@ -45,7 +45,6 @@ def cascade_future(future: distributed.Future, cf_future: asyncio.Future):
             cf_future.set_result(result)
     elif status == "cancelled":
         cf_future.cancel()
-        # Necessary for wait() and as_completed() to wake up
         cf_future.set_running_or_notify_cancel()
     else:
         try:
@@ -65,8 +64,9 @@ def offloaded(f: Callable[P, T]) -> Callable[P, Awaitable[T]]:
         loop = asyncio.get_running_loop()
         cf_future = loop.create_future()
         dask = get_dask()
-        if dask.status == "closed": 
-            await start_dask()
+        if dask.status == "closed":
+            greed = Greed
+            await start_dask(greed, "127.0.0.1:8787")
         meth = partial(f, *a, **ka)
         cf_future.dask_future = dask.submit(meth, pure=False)
         cf_future.dask_future.add_done_callback(cf_callback)

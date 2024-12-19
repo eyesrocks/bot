@@ -1023,73 +1023,75 @@ class MSG:
         """Edits the message."""
         message = None
         
+        if not (self.author.id == self._state._get_client().user.id or 
+                isinstance(self.channel, discord.TextChannel) and 
+                self.channel.permissions_for(self.guild.me).manage_messages):
+            raise discord.Forbidden("Cannot edit a message authored by another user")
+        
         try:
             rs = await reskin(self._state._get_client(), self.channel, name=self.author.name)
-            if rs:
-                if "webhook" in rs:
-                    webhook = rs["webhook"]
-                    try:
-                        msg = await webhook.edit_message(
-                            self.id, 
-                            content=content, 
-                            embeds=embeds, 
-                            embed=embed, 
-                            attachments=attachments, 
-                            view=view
-                        )
-                        if delete_after:
-                            await msg.delete(delay=delete_after)
-                        return msg
-                    except Exception as e:
-                        logger.info(f"Exception in webhook edit: {get_error(e)}")
-                        pass
-            else:
-                if not self.author.name == self._state._get_client().user.name:
-                    logger.info(f"Unexpected `rs` value: {rs}")
+            if rs and "webhook" in rs:
+                webhook = rs["webhook"]
+                try:
+                    msg = await webhook.edit_message(
+                        self.id,
+                        content=content if content is not MISSING else None,
+                        embeds=embeds if embeds is not MISSING else None, 
+                        embed=embed if embed is not MISSING else None,
+                        attachments=attachments if attachments is not MISSING else None,
+                        view=view if view is not MISSING else None
+                    )
+                    if delete_after:
+                        await msg.delete(delay=delete_after)
+                    return msg
+                except discord.NotFound:
+                    pass
+                except Exception as e:
+                    logger.debug(f"Webhook edit failed: {get_error(e)}")
+                    # Fall through to normal edit
+                    pass
 
         except Exception as e:
-            logger.info(f"Exception in main edit block: {get_error(e)}")
-            pass
+            logger.debug(f"Reskin check failed: {get_error(e)}")
 
-        if content is not MISSING:
-            previous_allowed_mentions = self._state.allowed_mentions
-        else:
-            previous_allowed_mentions = None
+        # Normal message edit
+        try:
+            if content is not MISSING:
+                previous_allowed_mentions = self._state.allowed_mentions
+            else:
+                previous_allowed_mentions = None
 
-        if suppress is not MISSING:
-            flags = MessageFlags._from_value(self.flags.value)
-            flags.suppress_embeds = suppress
-        else:
-            flags = MISSING
+            if suppress is not MISSING:
+                flags = MessageFlags._from_value(self.flags.value)
+                flags.suppress_embeds = suppress
+            else:
+                flags = MISSING
 
-        if view is not MISSING:
-            self._state.prevent_view_updates_for(self.id)
+            if view is not MISSING:
+                self._state.prevent_view_updates_for(self.id)
 
-        with handle_message_parameters(
-            content=content,
-            flags=flags,
-            embed=embed,
-            embeds=embeds,
-            attachments=attachments,
-            view=view,
-            allowed_mentions=allowed_mentions,
-            previous_allowed_mentions=previous_allowed_mentions,
-        ) as params:
-            try:
+            with handle_message_parameters(
+                content=content,
+                flags=flags,
+                embed=embed,
+                embeds=embeds,
+                attachments=attachments,
+                view=view,
+                allowed_mentions=allowed_mentions,
+                previous_allowed_mentions=previous_allowed_mentions,
+            ) as params:
                 data = await self._state.http.edit_message(self.channel.id, self.id, params=params)
                 message = Message(state=self._state, channel=self.channel, data=data)
-            except Exception:
-                logger.info("Fallback HTTP edit failed.")
-                pass
 
-        if message is None:
-            logger.error("Message edit failed, returning original.")
-            raise RuntimeError("Failed to edit message via all attempted methods.")
+                if view and not view.is_finished():
+                    self._state.store_view(view, self.id)
 
-        if view and not view.is_finished():
-            self._state.store_view(view, self.id)
+                if delete_after is not None:
+                    await message.delete(delay=delete_after)
 
-        if delete_after is not None:
-            await self.delete(delay=delete_after)
+                return message
 
-        return message
+        except discord.HTTPException as e:
+            logger.error(f"Failed to edit message: {get_error(e)}")
+            raise
+

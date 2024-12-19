@@ -1149,14 +1149,20 @@ class Moderation(Cog):
             icon = await attachment.read()
         elif isinstance(icon, (discord.PartialEmoji, discord.Emoji)):
             async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    f"https://proxy.rival.rocks?url={icon.url}"
-                ) as f:
-                    icon = await f.read()
+                async with session.get(icon.url) as f:
+                    if f.status == 200:
+                        icon = await f.read()
+                    else:
+                        return await ctx.fail("Failed to fetch the emoji image")
         elif isinstance(icon, str):
+            if not icon.startswith(('http://', 'https://')):
+                return await ctx.fail("Please provide a valid image URL")
             async with aiohttp.ClientSession() as session:
-                async with session.get(f"https://proxy.rival.rocks?url={icon}") as f:
-                    icon = await f.read()
+                async with session.get(icon) as f:
+                    if f.status == 200:
+                        icon = await f.read()
+                    else:
+                        return await ctx.fail("Failed to fetch the image from URL")
         else:
             return await ctx.fail("This **cannot** be used for a **role icon**")
 
@@ -1169,7 +1175,7 @@ class Moderation(Cog):
     @commands.has_permissions(manage_channels=True)
     @commands.bot_has_permissions(manage_channels=True)
     async def channel(self, ctx):
-        if ctx.subcommand_passed is not None:  # Check if a subcommand was passed
+        if ctx.subcommand_passed is not None:
             return
         return await ctx.send_help(ctx.command)
 

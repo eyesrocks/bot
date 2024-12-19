@@ -175,6 +175,10 @@ class CommandSelect(discord.ui.Select):
         super().__init__(placeholder="Choose a category", options=options)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if retry_after := await self.view.bot.glory_cache.ratelimited(f"rl:help:{interaction.user.id}", 2, 4):
+            await interaction.response.send_message("You're doing that too fast!", ephemeral=True)
+            return False
+            
         if interaction.user != self.ctx.author:
             embed = Embed(
                 description=f"This is {self.ctx.author.mention}'s selection!",
@@ -208,12 +212,12 @@ class HelpView(discord.ui.View):
 
 class MyHelpCommand(commands.HelpCommand):
     async def send_bot_help(self, mapping: Optional[Mapping[str, commands.Command]]):
-        if retry_after := await self.context.bot.glory_cache.ratelimited(f"rl:user_commands{self.context.author.id}", 2, 4):
+        if retry_after := await self.context.bot.glory_cache.ratelimited(f"rl:help:{self.context.author.id}", 1, 5):
             raise commands.CommandOnCooldown(None, retry_after, None)
 
         embed = discord.Embed(
             title="Menu",
-            description=f"Select a **category** to view it's commands.\n\n**Links**\n**[invite](https://discord.com/oauth2/authorize?client_id=1149535834756874250&permissions=8&integration_type=0&scope=bot)**\n**[support](https://discord.gg/pomice)**\n**[website](http://greed.wtf)**\n\nTotal Commands: **588**",
+            description=f"Select a **category** to view it's commands.\n\n**Links**\n**[invite](https://discord.com/oauth2/authorize?client_id=1149535834756874250&permissions=8&integration_type=0&scope=bot)**\n**[support](https://discord.gg/pomice)**\n**[website](http://greed.wtf)**",
             color=0x36393f,
         )
         embed.set_author(name=self.context.bot.user.name, icon_url=self.context.bot.user.avatar)
@@ -231,9 +235,8 @@ class MyHelpCommand(commands.HelpCommand):
         raise InvalidSubCommand(f'**Command** "{command.qualified_name}" **has** `no subcommands.`')
 
     async def send_group_help(self, group):
-        if retry_after := await self.context.bot.glory_cache.ratelimited(f"rl:user_commands{self.context.author.id}", 2, 4):
+        if retry_after := await self.context.bot.glory_cache.ratelimited(f"rl:ghelp:{self.context.author.id}", 1, 5):
             raise commands.CommandOnCooldown(None, retry_after, None)
-
         embed = Embed(color=0x36393f, timestamp=datetime.datetime.now())
         ctx = self.context
         commands = [c for c in group.walk_commands()] + [group]
@@ -280,9 +283,8 @@ class MyHelpCommand(commands.HelpCommand):
             )
 
     async def send_command_help(self, command):
-        if retry_after := await self.context.bot.glory_cache.ratelimited(f"rl:user_commands{self.context.author.id}", 2, 4):
+        if retry_after := await self.context.bot.glory_cache.ratelimited(f"rl:chelp:{self.context.author.id}", 1, 5):
             raise commands.CommandOnCooldown(None, retry_after, None)
-
         embed = Embed(color=0x36393f, timestamp=datetime.datetime.now())
         aliases = ", ".join(command.aliases)
         embed.set_author(name=self.context.author.display_name, icon_url=self.context.author.display_avatar.url)
@@ -341,6 +343,6 @@ class MyHelpCommand(commands.HelpCommand):
         return usage
 
     async def command_not_found(self, string):
-        if retry_after := await self.context.bot.glory_cache.ratelimited(f"cnf:{self.context.guild.id}", 1, 3):
+        if retry_after := await self.context.bot.glory_cache.ratelimited(f"cnf:{self.context.author.id}", 1, 5):
             raise OnCooldown()
         raise commands.CommandError(f"**No command** named **{string}** exists")

@@ -152,7 +152,7 @@ class AI:
                 obj, content = text.split("[", 1)[1].split("]$~~~$", 1)
                 content = "\n".join(m for m in content.splitlines() if len(m) > 1)
                 try:
-                    obj = json.loads(f"[{obj}]")
+                    obj = loads(f"[{obj}]")
                 except Exception:
                     obj = {}
                 data = obj

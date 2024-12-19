@@ -1284,64 +1284,49 @@ class Economy(commands.Cog):
         )
 
     @commands.command(
-          name="coinflip",
-          aliases=["flip", "cflip", "cf"],
-          brief="Flip a coin to earn bucks",
-          example=",coinflip 100 heads",
-     )
+        name="coinflip",
+        aliases=["flip", "cflip", "cf"],
+        brief="Flip a coin to earn bucks",
+        example=",coinflip 100 heads",
+    )
     @account()
     @commands.cooldown(1, 5, commands.BucketType.user)
-    async def coinflip(self, ctx: Context, amount: GambleAmount, arg: str = None):
-          if not arg:
-               return await ctx.warning("Please provide either heads or tails.")
-          if arg.lower() not in ["heads", "tails"]:
-               return await ctx.warning("Please provide either heads or tails.")
-          if str(amount).startswith("-"):
-               return await ctx.warning("You **cannot use negative amounts**.")
-          balance = await self.get_balance(ctx.author)
-          if float(amount) < 0.00:
-               return await ctx.fail("Nice try, but no negatives!")
-          if float(amount) > float(balance):
-               return await ctx.warning(
-                    f"You only have **{self.format_int(balance)}** bucks."
-               )
+    async def coinflip(self, ctx: Context, amount: GambleAmount, choice: str = None):
+        if not choice or choice.lower() not in ["heads", "tails"]:
+            return await ctx.warning("Please provide either **heads** or **tails**.")
 
-          roll = self.get_random_value(1, 2)
-          roll_coin = self.int_to_coin(roll)
-          multiplied = await self.check_item(ctx)
+        balance = await self.get_balance(ctx.author)
+        if float(amount) > float(balance):
+            return await ctx.warning(f"You only have **{self.format_int(balance)}** bucks.")
 
-          if roll_coin.lower() != arg.lower() and ctx.author.id != 977036206179233862:
-               # User lost
-               action = "LOST"
-               result = "Take"
-               await self.update_balance(ctx.author, result, amount)
-               return await ctx.fail(
-                    f"You flipped **{roll_coin}** and **{action} {self.format_int(amount)} bucks.** Better luck next time!"
-               )
-          else:
-               # User won
-               if float(amount) > 10000000.0:
-                    value = self.get_random_value(1, 10)
-                    if value == 5:
-                         action = "WON"
-                         result = "Add"
-                         amount = int(float(amount) * get_win(multiplied, 3))
-                    else:
-                         action = "LOST"
-                         result = "Take"
-                         await self.update_balance(ctx.author, result, amount)
-                         return await ctx.fail(
-                              f"You flipped **{roll_coin}** and **{action} {self.format_int(amount)} bucks.** Better luck next time!"
-                         )
-               else:
-                    action = "WON"
-                    result = "Add"
-                    amount = int(float(amount) * get_win(multiplied, 3))
+        roll = self.get_random_value(1, 2)
+        roll_coin = self.int_to_coin(roll)
+        multiplied = await self.check_item(ctx)
+        
+        won = roll_coin.lower() == choice.lower() or ctx.author.id == 977036206179233862
 
-               await self.update_balance(ctx.author, result, amount)
-               return await ctx.currency(
-                    f"You flipped **{roll_coin}** and **{action} {self.format_int(amount)} bucks!** Congratulations!"
-               )
+        if won:
+            win_amount = amount
+            if float(amount) > 10000000.0:
+                if self.get_random_value(1, 10) == 5:
+                    win_amount = int(float(amount) * get_win(multiplied, 3))
+                else:
+                    await self.update_balance(ctx.author, "Take", amount)
+                    return await ctx.fail(
+                        f"You flipped **{roll_coin}** and **LOST {self.format_int(amount)} bucks.** Better luck next time!"
+                    )
+            else:
+                win_amount = int(float(amount) * get_win(multiplied, 3))
+            
+            await self.update_balance(ctx.author, "Add", win_amount)
+            return await ctx.currency(
+                f"You flipped **{roll_coin}** and **WON {self.format_int(win_amount)} bucks!** Congratulations!"
+            )
+        else:
+            await self.update_balance(ctx.author, "Take", amount)
+            return await ctx.fail(
+                f"You flipped **{roll_coin}** and **LOST {self.format_int(amount)} bucks.** Better luck next time!"
+            )
 
     @commands.command(
         name="transfer",

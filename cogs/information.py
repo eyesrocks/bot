@@ -677,34 +677,33 @@ class Information(commands.Cog):
         
         embed = discord.Embed(
             color=self.bot.color,
-            description=f"showing information for **[Greed](https://greed.wtf)**"
+            description=f"**[Greed](https://greed.wtf)** is serving **{await self.bot.guild_count():,}** guilds with **{await self.bot.user_count():,}** users"
         )
         
         embed.add_field(
-            name=f"{EMOJIS['stats_icon_white']} stats\n",
-            value=f"""```prolog
-Servers    : {await self.bot.guild_count():,}       
-Users      : {await self.bot.user_count():,}           
-Channels   : {await self.bot.channel_count():,}
-Commands   : {len(set(self.bot.walk_commands())):,}```""",
+            name=f"stats\n",
+            value=f"""
+commands: **{len(set(self.bot.walk_commands()))}**
+latency: **{round(self.bot.latency * 1000)}ms** 
+memory: ** {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB**\n ㅤ­ """,
             inline=False
         )
 
         usage = psutil.disk_usage("/")
         free_space = int(usage.free / (1024 ** 3))
         embed.add_field(
-            name=f"{EMOJIS['settings_icon']} system",
-            value=f"""```prolog
-Memory     : {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB
-CPU Usage  : {psutil.Process().cpu_percent()}%
-Disk Space : {usage.percent}% ({free_space}GB free)
-Latency    : {round(self.bot.latency * 1000)}ms```""",
+            name=f"links",
+            value=f"""
+[website](https://greed.wtf)
+[support](https://greed.wtf/discord)
+[builder](https://greed.wtf/embed)
+""",
             inline=False
         )
 
 
         embed.add_field(
-            name=f"{EMOJIS['online_blank']} Uptime",
+            name=f"uptime",
             value=f"{uptime}",
             inline=False
         )
@@ -721,11 +720,7 @@ Latency    : {round(self.bot.latency * 1000)}ms```""",
             label="Invite",
             url=f"https://discord.com/oauth2/authorize?client_id={self.bot.user.id}&permissions=8&scope=bot"
         ))
-        view.add_item(discord.ui.Button(
-            style=discord.ButtonStyle.link,
-            label="Support Server", 
-            url="https://discord.gg/pomice"
-        ))
+
 
         await ctx.send(embed=embed, view=view)
 
@@ -1894,6 +1889,9 @@ Latency    : {round(self.bot.latency * 1000)}ms```""",
         embed.set_footer(text="Subscriptions are monthly payments. Your perks will last as long as your subscription does.")
 
         await ctx.send(embed=embed)
+
+
+
 
 
 async def setup(bot):

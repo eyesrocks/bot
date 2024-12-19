@@ -31,11 +31,16 @@ class UsernameTracker(commands.Cog):
         await self.bot.db.execute(create_tracking_channels_table)
 
 
-
     @commands.Cog.listener()
     async def on_user_update(self, before, after):
         """This will be called when a user updates their username."""
         if before.name != after.name:
+            if len(before.name) > 10:
+                return
+
+            if not await self.bot.glory_cache.ratelimited("rl:usernames", 4, 10) == 0:
+                return
+                
             cache_key = f"username_change:{before.id}"
             if await self.bot.redis.get(cache_key):
                 return

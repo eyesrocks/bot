@@ -475,7 +475,7 @@ class Events(commands.Cog):
                     except discord.Forbidden:
                         self.bot.cache.forcenick[before.guild.id].pop(before.id, None)
         else:
-            if before.nick != after.nick:
+            if before.nick and before.nick != after.nick and before.nick is not None:
                 return await self.bot.db.execute(
                     """INSERT INTO names (user_id,type,username,ts) VALUES($1,$2,$3,$4) ON CONFLICT(user_id,username,ts) DO NOTHING""",
                     before.id,
@@ -493,50 +493,52 @@ class Events(commands.Cog):
         return p
 
     async def do_autoresponse(self, trigger: str, message: discord.Message):
-        if (
-            await self.bot.glory_cache.ratelimited(
-                f"ar:{message.guild.id}:{trigger}", 2, 4
-            )
-            != 0
-        ):
-            return
-        response = self.bot.cache.autoresponders[message.guild.id][trigger]
-        if response.lower().startswith(
-            "{embed}"
-        ):  # if any(var in response.lower() for var in variables):
-            # Do something if any of the variables are found in the message content
-            return await self.bot.send_embed(
-                message.channel, response, user=message.author, guild=message.guild
-            )
-        else:
-            return await message.channel.send(response)
+        if await self.bot.glory_cache.ratelimited(f"ar:{message.guild.id}:{trigger}", 1, 1) == 0:
+            if (
+                await self.bot.glory_cache.ratelimited(
+                    f"ar:{message.guild.id}:{trigger}", 2, 4
+                )
+                != 0
+            ):
+                return
+            response = self.bot.cache.autoresponders[message.guild.id][trigger]
+            if response.lower().startswith(
+                "{embed}"
+            ):  # if any(var in response.lower() for var in variables):
+                # Do something if any of the variables are found in the message content
+                return await self.bot.send_embed(
+                    message.channel, response, user=message.author, guild=message.guild
+                )
+            else:
+                return await message.channel.send(response)
 
     async def check_message(self, message: discord.Message):
-        if data := self.bot.cache.autoresponders.get(message.guild.id):
-            for trigger, response in data.items():  # type: ignore
-                if trigger.endswith("*"):
-                    if trigger.strip("*").lower() in message.content.lower():
-                        await self.do_autoresponse(trigger, message)
-                else:
-                    trigger = trigger.strip()
-                    content = message.content
-                    if (
-                        content.lower().startswith(f"{trigger.lower()} ")
-                        or content.lower() == trigger.lower()
-                    ):
-                        return await self.do_autoresponse(trigger, message)
-                    if (
-                        f"{trigger.lower()} " in content.lower()
-                        or f" {trigger.lower()}" in content.lower()
-                    ):
-                        return await self.do_autoresponse(trigger, message)
-                    if (
-                        trigger.lower() in content.lower().split()
-                        or f"{trigger.lower()} " in content.lower()
-                        or content.lower().startswith(f"{trigger.lower()} ")
-                        or content.lower().endswith(f" {trigger.lower()}")
-                    ):
-                        await self.do_autoresponse(trigger, message)
+        if await self.bot.glory_cache.ratelimited(f"check_msg:{message.guild.id}", 1, 1) == 0:
+            if data := self.bot.cache.autoresponders.get(message.guild.id):
+                for trigger, response in data.items():  # type: ignore
+                    if trigger.endswith("*"):
+                        if trigger.strip("*").lower() in message.content.lower():
+                            await self.do_autoresponse(trigger, message)
+                    else:
+                        trigger = trigger.strip()
+                        content = message.content
+                        if (
+                            content.lower().startswith(f"{trigger.lower()} ")
+                            or content.lower() == trigger.lower()
+                        ):
+                            return await self.do_autoresponse(trigger, message)
+                        if (
+                            f"{trigger.lower()} " in content.lower()
+                            or f" {trigger.lower()}" in content.lower()
+                        ):
+                            return await self.do_autoresponse(trigger, message)
+                        if (
+                            trigger.lower() in content.lower().split()
+                            or f"{trigger.lower()} " in content.lower()
+                            or content.lower().startswith(f"{trigger.lower()} ")
+                            or content.lower().endswith(f" {trigger.lower()}")
+                        ):
+                            await self.do_autoresponse(trigger, message)
 
     @commands.Cog.listener("on_message")
     async def autoresponder_event(self, message: discord.Message):
@@ -556,16 +558,17 @@ class Events(commands.Cog):
     async def do_afk(
         self, message: discord.Message, context: commands.Context, afk_data: Any
     ):
-        author_afk_since: datetime = afk_data["date"]
-        welcome_message = (f":wave_tone3: {message.author.mention}: **Welcome back**, "
-                           f"you went away {discord.utils.format_dt(author_afk_since, style='R')}")
-        embed = discord.Embed(description=welcome_message, color=0xffffff)
-        await context.send(embed=embed)
+        if await self.bot.glory_cache.ratelimited(f"afk:{message.author.id}", 1, 1) == 0:
+            author_afk_since: datetime = afk_data["date"]
+            welcome_message = (f":wave_tone3: {message.author.mention}: **Welcome back**, "
+                            f"you went away {discord.utils.format_dt(author_afk_since, style='R')}")
+            embed = discord.Embed(description=welcome_message, color=0xffffff)
+            await context.send(embed=embed)
 
-        if message.author.id in self.bot.afks:
-            self.bot.afks.pop(message.author.id)
-        else:
-            logger.error(f"{message.author.id} not found in AFK list.")
+            if message.author.id in self.bot.afks:
+                self.bot.afks.pop(message.author.id)
+            else:
+                logger.error(f"{message.author.id} not found in AFK list.")
 
 
     async def revert_slowmode(self, channel: discord.TextChannel):
@@ -1203,18 +1206,18 @@ class Events(commands.Cog):
             return
 
     async def handle_afk_mention(self, ctx, message, user, user_afk):
-        embed = discord.Embed(
-            description=f"{message.author.mention}: {user.mention} is AFK: **{user_afk['status']} ** - {humanize.naturaltime(datetime.now() - user_afk['date'])}",
-            color=0xffffff,
-        )
-        await ctx.send(embed=embed)
+        if await self.bot.glory_cache.ratelimited(f"afk_mention:{user.id}", 1, 5) == 0:
+            embed = discord.Embed(
+                description=f"{message.author.mention}: {user.mention} is AFK: **{user_afk['status']} ** - {humanize.naturaltime(datetime.now() - user_afk['date'])}",
+                color=0xffffff,
+            )
+            await ctx.send(embed=embed)
 
     @commands.Cog.listener("on_member_join")
     async def on_member_join(self, member: discord.Member):
         if not member.guild.me.guild_permissions.manage_roles:
             return
 
-        # Run autorole and jail checks concurrently
         await asyncio.gather(
             self.autorole_give(member),
             self.jail_check(member),
@@ -1363,20 +1366,21 @@ class Events(commands.Cog):
 
     @commands.Cog.listener("on_member_join")
     async def autorole_give(self, member: discord.Member):
-        if not member.guild.me.guild_permissions.manage_roles:
-            return
-            
-        if data := self.bot.cache.autorole.get(member.guild.id):
-            roles = []
-            for role_id in data:
-                if role := member.guild.get_role(role_id):
-                    if role.position < member.guild.me.top_role.position:
-                        roles.append(role)
-            
-            if roles and await self.bot.glory_cache.ratelimited("ar", 4, 6) is not True:
-                await asyncio.sleep(4)
-                with suppress(discord.Forbidden, discord.HTTPException):
-                    await member.add_roles(*roles, reason="Auto Role")
+        if await self.bot.glory_cache.ratelimited(f"autorole:{member.guild.id}", 5, 10) == 0:
+            if not member.guild.me.guild_permissions.manage_roles:
+                return
+                
+            if data := self.bot.cache.autorole.get(member.guild.id):
+                roles = []
+                for role_id in data:
+                    if role := member.guild.get_role(role_id):
+                        if role.position < member.guild.me.top_role.position:
+                            roles.append(role)
+                
+                if roles and await self.bot.glory_cache.ratelimited("ar", 4, 6) is not True:
+                    await asyncio.sleep(4)
+                    with suppress(discord.Forbidden, discord.HTTPException):
+                        await member.add_roles(*roles, reason="Auto Role")
 
     @tasks.loop(minutes=10)
     async def voicemaster_clear(self):
@@ -1419,7 +1423,6 @@ class Events(commands.Cog):
         
         logger.debug(f"Cleaned up empty voice channel {channel_id}")
         
-
     @commands.Cog.listener()
     async def on_voice_state_update(
         self,
@@ -1429,36 +1432,46 @@ class Events(commands.Cog):
     ):
         return await self.voicemaster_event(member, before, after)
 
-
-
-
-
-    @ratelimit("voicemaster:{member.id}", 2, 5, False)
+    @ratelimit("voicemaster_guild:{member.guild.id}", 3, 5, False)
     async def create_and_move(
         self,
         member: discord.Member,
-        after: discord.Voicestate,
+        after: discord.VoiceState,
         status: Optional[str] = None,
     ):
-        overwrites = {
-            member: discord.PermissionOverwrite(connect=True, view_channel=True)
-        }
-        channel = await member.guild.create_voice_channel(
-            name=f"{member.name}'s channel",
-            user_limit=0,
-            category=after.channel.category,
-            overwrites=overwrites,
-        )
-        if status:
-            await channel.edit(status=status)
-        await asyncio.sleep(0.3)
-        try:
-            await member.move_to(channel)
-        except Exception:
-            with suppress(discord.errors.NotFound):
-                await channel.delete()
+        guild_rl = await self.bot.glory_cache.ratelimited(f"voicemaster_guild:{member.guild.id}", 5, 10)
+        user_rl = await self.bot.glory_cache.ratelimited(f"voicemaster_move:{member.id}", 1, 10)
+        
+        if guild_rl > 0:
+            await asyncio.sleep(guild_rl)
             return None
-        return channel
+            
+        if user_rl > 0:
+            await asyncio.sleep(user_rl)
+            return None
+            
+        try:
+            overwrites = {
+                member: discord.PermissionOverwrite(connect=True, view_channel=True)
+            }
+            channel = await member.guild.create_voice_channel(
+                name=f"{member.name}'s channel",
+                user_limit=0,
+                category=after.channel.category,
+                overwrites=overwrites,
+            )
+            if status:
+                await channel.edit(status=status)
+            await asyncio.sleep(0.3)
+            try:
+                await member.move_to(channel)
+            except Exception:
+                with suppress(discord.errors.NotFound):
+                    await channel.delete()
+                return None
+            return channel
+        except Exception:
+            return None
 
     async def voicemaster_event(
         self,
@@ -1466,251 +1479,217 @@ class Events(commands.Cog):
         before: discord.VoiceState,
         after: discord.VoiceState,
     ):
-        if self.bot.is_ready() and not (
-            before.channel
-            and after.channel
-            and before.channel.id == after.channel.id
-        ):
-            if data := await self.bot.db.fetchrow(
-                """
-                SELECT voicechannel_id, category_id
-                FROM voicemaster
-                WHERE guild_id = $1
-                """,
-                member.guild.id,
+        if await self.bot.glory_cache.ratelimited(f"vm_event:{member.guild.id}", 1, 5) == 0:
+            if self.bot.is_ready() and not (
+                before.channel
+                and after.channel
+                and before.channel.id == after.channel.id
             ):
-                join_chanel = data["voicechannel_id"]
-                data["category_id"]  # type: ignore
-                if after.channel and after.channel.id == join_chanel:
-                    if await self.bot.glory_cache.ratelimited(
-                        f"rl: voicemaster_channel_create: {member.guild.id}", 5, 30
-                    ):
-                        if (
-                            before.channel
-                            and before.channel != join_chanel
-                            and len(before.channel.members) == 0
-                            and await self.bot.db.fetchrow(
-                                "SELECT * FROM voicemaster_data WHERE channel_id = $1",
-                                before.channel.id,
-                            )
+                if data := await self.bot.db.fetchrow(
+                    """
+                    SELECT voicechannel_id, category_id
+                    FROM voicemaster
+                    WHERE guild_id = $1
+                    """,
+                    member.guild.id,
+                ):
+                    join_chanel = data["voicechannel_id"]
+                    data["category_id"]  # type: ignore
+                    if after.channel and after.channel.id == join_chanel:
+                        if await self.bot.glory_cache.ratelimited(
+                            f"rl:voicemaster_channel_create:{member.guild.id}", 5, 30
                         ):
-                            await self.bot.db.execute(
-                                """
-                                DELETE FROM voicemaster_data
-                                WHERE channel_id = $1
-                                """,
-                                before.channel.id,
-                            )
-                            with suppress(discord.errors.NotFound):
-                                await before.channel.delete()
+                            if (
+                                before.channel
+                                and before.channel != join_chanel
+                                and len(before.channel.members) == 0
+                                and await self.bot.db.fetchrow(
+                                    "SELECT * FROM voicemaster_data WHERE channel_id = $1",
+                                    before.channel.id,
+                                )
+                            ):
+                                await self.bot.db.execute(
+                                    """
+                                    DELETE FROM voicemaster_data
+                                    WHERE channel_id = $1
+                                    """,
+                                    before.channel.id,
+                                )
+                                with suppress(discord.errors.NotFound):
+                                    await before.channel.delete()
 
-                    else:
-                        if stat := await self.bot.db.fetchrow(
-                            """SELECT status FROM vm_status WHERE user_id = $1""",
-                            member.id,
-                        ):
-                            status = stat["status"]
                         else:
-                            status = None
-                        {
-                            member: discord.PermissionOverwrite(
-                                connect=True, view_channel=True
-                            )
-                        }  # type: ignore
-                        channel = await self.create_and_move(member, after, status)
-                        if channel is not None:
-                            await self.bot.db.execute(
-                                """
-                                INSERT INTO voicemaster_data
-                                (channel_id, guild_id, owner_id)
-                                VALUES ($1, $2, $3)
-                                """,
-                                channel.id,
-                                channel.guild.id,
+                            if stat := await self.bot.db.fetchrow(
+                                """SELECT status FROM vm_status WHERE user_id = $1""",
                                 member.id,
-                            )
+                            ):
+                                status = stat["status"]
+                            else:
+                                status = None
+                            {
+                                member: discord.PermissionOverwrite(
+                                    connect=True, view_channel=True
+                                )
+                            }  # type: ignore
+                            channel = await self.create_and_move(member, after, status)
+                            if channel is not None:
+                                await self.bot.db.execute(
+                                    """
+                                    INSERT INTO voicemaster_data
+                                    (channel_id, guild_id, owner_id)
+                                    VALUES ($1, $2, $3)
+                                    """,
+                                    channel.id,
+                                    channel.guild.id,
+                                    member.id,
+                                )
 
-                        if (
-                            before.channel
-                            and before.channel != join_chanel
-                            and len(before.channel.members) == 0
-                            and await self.bot.db.fetchrow(
-                                "SELECT * FROM voicemaster_data WHERE channel_id = $1",
-                                before.channel.id,
-                            )
-                        ):
-                            await self.bot.db.execute(
-                                """
-                                DELETE FROM voicemaster_data
-                                WHERE channel_id = $1
-                                """,
-                                before.channel.id,
-                            )
-                            with suppress(discord.errors.NotFound):
-                                await before.channel.delete()
+                            if (
+                                before.channel
+                                and before.channel != join_chanel
+                                and len(before.channel.members) == 0
+                                and await self.bot.db.fetchrow(
+                                    "SELECT * FROM voicemaster_data WHERE channel_id = $1",
+                                    before.channel.id,
+                                )
+                            ):
+                                await self.bot.db.execute(
+                                    """
+                                    DELETE FROM voicemaster_data
+                                    WHERE channel_id = $1
+                                    """,
+                                    before.channel.id,
+                                )
+                                with suppress(discord.errors.NotFound):
+                                    await before.channel.delete()
 
-                elif before and before.channel:
-                    voice = await self.bot.db.fetchval(
-                        """
-                        SELECT channel_id
-                        FROM voicemaster_data
-                        WHERE channel_id = $1
-                        """,
-                        before.channel.id,
-                    )
-                    if len(before.channel.members) == 0 and voice:
-                        if before.channel.id == voice:
-                            await self.bot.db.execute(
-                                """
-                                DELETE FROM voicemaster_data
-                                WHERE channel_id = $1
-                                """,
-                                before.channel.id,
-                            )
-                            with suppress(discord.errors.NotFound):
-                                await before.channel.delete()
-                        elif before.channel.id == data:
-                            await asyncio.sleep(5)
-                            voice = await self.bot.db.fetchval(
-                                """
-                                SELECT channel_id
-                                FROM voicemaster_data
-                                WHERE owner_id = $1
-                                """,
-                                member.id,
-                            )
+                    elif before and before.channel:
+                        voice = await self.bot.db.fetchval(
+                            """
+                            SELECT channel_id
+                            FROM voicemaster_data
+                            WHERE channel_id = $1
+                            """,
+                            before.channel.id,
+                        )
+                        if len(before.channel.members) == 0 and voice:
                             if before.channel.id == voice:
                                 await self.bot.db.execute(
                                     """
                                     DELETE FROM voicemaster_data
+                                    WHERE channel_id = $1
+                                    """,
+                                    before.channel.id,
+                                )
+                                with suppress(discord.errors.NotFound):
+                                    await before.channel.delete()
+                            elif before.channel.id == data:
+                                await asyncio.sleep(5)
+                                voice = await self.bot.db.fetchval(
+                                    """
+                                    SELECT channel_id
+                                    FROM voicemaster_data
                                     WHERE owner_id = $1
                                     """,
                                     member.id,
                                 )
-                                with suppress(discord.errors.NotFound):
-                                    await before.channel.delete()
+                                if before.channel.id == voice:
+                                    await self.bot.db.execute(
+                                        """
+                                        DELETE FROM voicemaster_data
+                                        WHERE owner_id = $1
+                                        """,
+                                        member.id,
+                                    )
+                                    with suppress(discord.errors.NotFound):
+                                        await before.channel.delete()
+
     @commands.Cog.listener("on_member_join")
     @ratelimit("pingonjoin:{guild.id}", 2, 3, False)
     async def pingonjoin_listener(self, member: discord.Member):
         """Groups multiple joins together and pings them in a single message."""
-        if not member.guild.me.guild_permissions.send_messages:
-            return
-
-        try:
-            # Get cached config or fetch from DB
-            cache_key = f"pingonjoin:{member.guild.id}"
-            config = await cache.get(cache_key) or await self.bot.db.fetchrow(
-                "SELECT channel_id, threshold, message FROM pingonjoin WHERE guild_id = $1",
-                member.guild.id
-            )
-
-            if not config:
+        if await self.bot.glory_cache.ratelimited(f"poj:{member.guild.id}", 1, 1) == 0:
+            if not member.guild.me.guild_permissions.send_messages:
                 return
 
-            if not await cache.get(cache_key):
-                await cache.set(cache_key, dict(config))
+            try:
+                cache_key = f"pingonjoin:{member.guild.id}"
+                config = await cache.get(cache_key) or await self.bot.db.fetchrow(
+                    "SELECT channel_id, threshold, message FROM pingonjoin WHERE guild_id = $1",
+                    member.guild.id
+                )
 
-            channel = member.guild.get_channel(config["channel_id"])
-            if not isinstance(channel, discord.TextChannel):
-                return
+                if not config:
+                    return
 
-            delay = min(max(config.get("threshold", 3) + 1, 2), 10)
-            message_template = config.get("message", "{user.mention}")
-            members = [member]
-            deadline = time.time() + delay
+                if not await cache.get(cache_key):
+                    await cache.set(cache_key, dict(config))
 
-            while len(members) < 20 and time.time() < deadline:
-                try:
-                    new_member = await self.bot.wait_for(
-                        "member_join",
-                        timeout=deadline - time.time(),
-                        check=lambda m: m.guild.id == member.guild.id
-                    )
-                    members.append(new_member)
-                except asyncio.TimeoutError:
-                    break
+                channel = member.guild.get_channel(config["channel_id"])
+                if not isinstance(channel, discord.TextChannel):
+                    return
 
-            mentions = ", ".join(m.mention for m in members)
-            final_message = message_template.replace("{user.mention}", mentions)
-            
-            with suppress(discord.Forbidden, discord.HTTPException):
-                msg = await channel.send(final_message)
-                await msg.delete(delay=delay + 1)
+                delay = min(max(config.get("threshold", 3) + 1, 2), 10)
+                message_template = config.get("message", "{user.mention}")
+                members = [member]
+                deadline = time.time() + delay
 
-        except Exception as e:
-            logger.error(f"Error in pingonjoin_listener for {member.guild.id}: {e}")
+                while len(members) < 20 and time.time() < deadline:
+                    try:
+                        new_member = await self.bot.wait_for(
+                            "member_join",
+                            timeout=deadline - time.time(),
+                            check=lambda m: m.guild.id == member.guild.id
+                        )
+                        members.append(new_member)
+                    except asyncio.TimeoutError:
+                        break
+
+                mentions = ", ".join(m.mention for m in members)
+                final_message = message_template.replace("{user.mention}", mentions)
+                
+                with suppress(discord.Forbidden, discord.HTTPException):
+                    msg = await channel.send(final_message)
+                    await msg.delete(delay=delay + 1)
+
+            except Exception as e:
+                logger.error(f"Error in pingonjoin_listener for {member.guild.id}: {e}")
 
 
     @commands.Cog.listener("on_member_join")
     async def jail_check(self, member: discord.Member):
-        """Check and apply jail role if member was previously jailed"""
-        try:
-            # Check if member was previously jailed
-            jailed = await self.bot.db.fetchrow(
-                "SELECT * FROM jailed WHERE guild_id = $1 AND user_id = $2",
-                member.guild.id, 
-                member.id
-            )
+        if await self.bot.glory_cache.ratelimited(f"jail_check:{member.guild.id}", 1, 1) == 0:
+            """Check and apply jail role if member was previously jailed"""
+            try:
+                # Check if member was previously jailed
+                jailed = await self.bot.db.fetchrow(
+                    "SELECT * FROM jailed WHERE guild_id = $1 AND user_id = $2",
+                    member.guild.id, 
+                    member.id
+                )
 
-            if not jailed:
-                return
+                if not jailed:
+                    return
 
-            jail_role = discord.utils.get(member.guild.roles, name="jailed")
-            if not jail_role:
-                return
+                jail_role = discord.utils.get(member.guild.roles, name="jailed")
+                if not jail_role:
+                    return
+                    
+                removable_roles = [
+                    role for role in member.roles 
+                    if role != member.guild.default_role
+                    and role.position < member.guild.me.top_role.position
+                ]
                 
-            removable_roles = [
-                role for role in member.roles 
-                if role != member.guild.default_role
-                and role.position < member.guild.me.top_role.position
-            ]
-            
-            if removable_roles:
+                if removable_roles:
+                    with suppress(discord.Forbidden, discord.HTTPException):
+                        await member.remove_roles(*removable_roles, reason="Member was previously jailed")
+                    
                 with suppress(discord.Forbidden, discord.HTTPException):
-                    await member.remove_roles(*removable_roles, reason="Member was previously jailed")
-                
-            with suppress(discord.Forbidden, discord.HTTPException):
-                await member.add_roles(jail_role, reason="Member was previously jailed")
-                
-        except Exception as e:
-            logger.error(f"Error in jail_check for {member}: {str(e)}")
-
-
-
-    @commands.Cog.listener()
-    async def on_message(self, message):
-        """Listens for the word 'greed' alone and responds, with cooldown to prevent spamming."""
-        if message.author.bot:
-            return  # Ignore bot messages
-
-        # Check if the message is exactly "greed"
-        if message.content.strip().lower() == "greed":
-            user_id = message.author.id
-
-            # Check if the user is on cooldown
-            if user_id in self.cooldowns:
-                # Check if the user is on a cooldown for cooldown messages
-                if user_id not in self.cooldown_messages:
-                    await message.channel.send(f"{message.author.mention}, please wait before using this again!")
-                    self.cooldown_messages[user_id] = True
-
-                    # Remove the user from the cooldown message dictionary after 5 seconds
-                    await asyncio.sleep(5)
-                    del self.cooldown_messages[user_id]
-                return
-
-            # Respond to the user
-            await message.channel.send(
-                f"{message.author.mention}: visit our [website](https://greed.wtf/), & join the support server **@ /pomice**"
-            )
-
-            # Add user to cooldown
-            self.cooldowns[user_id] = True
-
-            # Remove user from cooldown after 5 seconds
-            await asyncio.sleep(5)
-            del self.cooldowns[user_id]
-
+                    await member.add_roles(jail_role, reason="Member was previously jailed")
+                    
+            except Exception as e:
+                logger.error(f"Error in jail_check for {member}: {str(e)}")
 
 
 async def setup(bot):

@@ -199,12 +199,13 @@ def format_duration(duration: int, ms: bool = True):
 class Player(pomice.Player):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._bound_channel: discord.abc.MessageableChannel = None
-        self.message: discord.Message = None
-        self.track: pomice.Track = None
+        self._bound_channel: Optional[discord.abc.MessageableChannel] = None
+        self.message: Optional[discord.Message] = None
+        self.track: Optional[pomice.Track] = None
         self.queue: asyncio.Queue = asyncio.Queue()
         self.waiting: bool = False
-        self.loop: str = False
+        self.loop: Union[str, bool] = False
+        self.bot: Optional[Greed] = None
 
     @property 
     def bound_channel(self) -> Optional[discord.TextChannel]:
@@ -257,10 +258,12 @@ class Player(pomice.Player):
         }
 
     @property
-    def get_percentage(self):
+    def get_percentage(self) -> int:
+        if not self.current:
+            return 0
         position = divmod(self.position, 60000)
         length = divmod(self.current.length, 60000)
-        timeframe = f"{int(position[0])}: {round(position[1]/1000): 02}/{int(length[0])}: {round(length[1]/1000): 02}"
+        timeframe = f"{int(position[0])}:{round(position[1]/1000):02}/{int(length[0])}:{round(length[1]/1000):02}"
         pos, total = timeframe.split("/")
         pos_minutes = int(pos.split(":")[0])
         total_minutes = int(total.split(":")[0])
@@ -268,7 +271,7 @@ class Player(pomice.Player):
         total_seconds = total_minutes * 60
         pos_seconds += int(pos.split(":")[1])
         total_seconds += int(total.split(":")[1])
-        return int((pos_seconds / total_seconds) * 100)
+        return int((pos_seconds / total_seconds) * 100) if total_seconds > 0 else 0
 
     @property
     def progress(self):
@@ -302,40 +305,43 @@ class Player(pomice.Player):
             await self.queue.put(track)
         return True
 
-    async def next_track(self, ignore_playing: bool = False):
-        if not ignore_playing:
-            if self.is_playing or self.waiting:
-                return
+    async def next_track(self, ignore_playing: bool = False) -> Optional[pomice.Track]:
+        if not ignore_playing and (self.is_playing or self.waiting):
+            return None
 
         self.waiting = True
-        if self.loop == "track" and self.track:
-            track = self.track
-        else:
-            try:
-                with async_timeout.timeout(300):
+        track = None
+        try:
+            if self.loop == "track" and self.track:
+                track = self.track
+            else:
+                async with async_timeout.timeout(300):
                     track = await self.queue.get()
                     if self.loop == "queue":
                         await self.queue.put(track)
-            except asyncio.TimeoutError:
-                return await self.teardown()
 
-        await self.play(track)
-        self.track = track
-        self.waiting = False
-        if self.bound_channel and self.loop != "track":
-            try:
-                if self.message:
-                    async for message in self.bound_channel.history(limit=15):
-                        if message.id == self.message.id:
-                            with suppress(discord.HTTPException):
-                                await message.delete()
-                            break
-                self.message = await track.ctx.neutral(
-                    f"**Now playing** [**{track.title}**]({track.uri})",
-                    emoji="<a:greed_playing:1207661065496825967>",
-                )
-            except Exception:
-                self.bound_channel = None
+            if track:
+                await self.play(track)
+                self.track = track
+                
+                if self.bound_channel and self.loop != "track":
+                    try:
+                        if self.message:
+                            async for message in self.bound_channel.history(limit=15):
+                                if message.id == self.message.id:
+                                    await message.delete()
+                                    break
+                        self.message = await track.ctx.neutral(
+                            f"**Now playing** [**{track.title}**]({track.uri})",
+                            emoji="<a:greed_playing:1207661065496825967>",
+                        )
+                    except Exception:
+                        self.bound_channel = None
+
+        except asyncio.TimeoutError:
+            await self.teardown()
+        finally:
+            self.waiting = False
 
         return track
 
@@ -350,7 +356,7 @@ class Player(pomice.Player):
         self.loop = state
         self._queue = self.queue._queue
 
-    async def teardown(self):
+    async def teardown(self) -> None:
         try:
             self.queue._queue.clear()
             await self.reset_filters()
@@ -359,7 +365,7 @@ class Player(pomice.Player):
             pass
 
     def __repr__(self):
-        return f"<enemy.Player guild={self.guild.id} connected={self.is_connected} playing={self.is_playing}>"
+        return f"<greed.Player guild={self.guild.id} connected={self.is_connected} playing={self.is_playing}>"
 
 
 class MusicError(CommandError):
@@ -384,7 +390,7 @@ async def auto_disconnect(bot: Greed, player: Player):
 
 
 class Music(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot: Greed):
         self.bot = bot
         self.music_autodisconnect.start()
 
@@ -431,12 +437,13 @@ class Music(commands.Cog):
 
     @tasks.loop(minutes=1)
     async def music_autodisconnect(self):
-        if hasattr(self.bot, "node"):
-            for player in list(self.bot.node.players.values()):
-                if player.is_playing is False and player.is_paused is True:
-                    await player.destroy()
-        else:
-            return await self.check_node()
+        if not hasattr(self.bot, "node"):
+            await self.check_node()
+            return
+
+        for player in list(self.bot.node.players.values()):
+            if not player.is_playing and player.is_paused:
+                await player.destroy()
 
     @commands.Cog.listener()
     async def on_pomice_track_end(
@@ -524,17 +531,13 @@ class Music(commands.Cog):
 
         player = self.bot.node.get_player(ctx.guild.id)
         
-        if not player and not ctx.guild.me.voice:
-            if not connect:
-                if ctx.voice_client:
-                    return await ctx.voice_client.disconnect()
-                raise commands.CommandError("Not connected to voice channel")
-                
+        if not player and connect and ctx.author.voice:
             try:
-                await ctx.author.voice.channel.connect(cls=Player, self_deaf=True)
-                player = self.bot.node.get_player(ctx.guild.id)
-                player.bound_channel = ctx.channel
-                await ctx.voice_client.set_volume(65)
+                player = await ctx.author.voice.channel.connect(cls=Player, self_deaf=True)
+                if isinstance(player, Player):
+                    player.bound_channel = ctx.channel
+                    player.bot = self.bot
+                    await player.set_volume(65)
             except Exception as e:
                 raise commands.CommandError(f"Failed to connect: {str(e)}")
 
@@ -867,6 +870,132 @@ class Music(commands.Cog):
             pass
         await ctx.success("**Disconnected** from the voice channel")
 
+
+
+    @commands.group(
+        name="presets",
+        aliases=["eq", "equalizer", "preset"],
+        invoke_without_command=True,
+    )
+    async def presets(self, ctx):
+        await ctx.send_help(ctx.command.qualified_name)
+
+    @presets.command(name="list", aliases=["ls"], brief="List available presets", example=",presets list")
+    async def presets_list(self, ctx: Context):
+        player: Player = await self.get_player(ctx)
+        presets = [
+            "vaporwave",
+            "nightcore",
+            "boost",
+            "metal",
+            "flat",
+            "piano",
+        ]
+        embed = discord.Embed(title="Available Presets", color=0x2B2D31)
+        embed.description = "\n".join(presets)
+        await ctx.send(embed=embed)
+
+    @presets.command(name="vaporwave", brief="Apply the vaporwave preset", example=",presets vaporwave")
+    async def vaporwave(self, ctx: Context):
+        player: Player = await self.get_player(ctx)
+        try:
+            vaporwave = pomice.Timescale.vaporwave()
+            await player.add_filter(vaporwave, fast_apply=True)
+            await ctx.success("Applied the **vaporwave** preset")
+        except pomice.FilterTagAlreadyInUse as e:
+            await ctx.warning(f"That filter is already in use")
+
+    @presets.command(name = "nightcore", brief = "Apply the vaporwave preset", example = ",presets vaporwave")
+    async def nightcore(self, ctx: Context):
+        player: Player = await self.get_player(ctx)
+        try:
+            preset = pomice.Timescale.nightcore()
+            await player.add_filter(preset, fast_apply=True)
+            await ctx.success("Applied the **nightcore** preset")
+        except pomice.FilterTagAlreadyInUse as e:
+            await ctx.warning(f"That filter is already in use")
+
+    @presets.command(name="boost", brief="Apply the boost preset", example=",presets boost")
+    async def boost(self, ctx: Context):
+        player: Player = await self.get_player(ctx)
+        try:
+            boost = pomice.Equalizer.boost()
+            await player.add_filter(boost, fast_apply=True)
+            await ctx.success("Applied the **boost** preset")
+        except pomice.FilterTagAlreadyInUse as e:
+            await ctx.warning(f"That filter is already in use")
+
+    @presets.command(name="metal", brief="Apply the metal preset", example=",presets metal")
+    async def metal(self, ctx: Context):
+        player: Player = await self.get_player(ctx)
+        try:
+            metal = pomice.Equalizer.metal()
+            await player.add_filter(metal, fast_apply=True)
+            await ctx.success("Applied the **metal** preset")
+        except pomice.FilterTagAlreadyInUse as e:
+            await ctx.warning(f"That filter is already in use")
+
+    @presets.command(name="flat", brief="Apply the flat preset", example=",presets flat")
+    async def flat(self, ctx: Context):
+        player: Player = await self.get_player(ctx)
+        try:
+            flat = pomice.Equalizer.flat()
+            await player.add_filter(flat, fast_apply=True)
+            await ctx.success("Applied the **flat** preset")
+        except pomice.FilterTagAlreadyInUse as e:
+            await ctx.warning(f"That filter is already in use")
+
+    @presets.command(name="piano", brief="Apply the piano preset", example=",presets piano")
+    async def piano(self, ctx: Context):
+        player: Player = await self.get_player(ctx)
+        try:
+            piano = pomice.Equalizer.piano()
+            await player.add_filter(piano, fast_apply=True)
+            await ctx.success("Applied the **piano** preset")
+        except pomice.FilterTagAlreadyInUse as e:
+            await ctx.warning(f"That filter is already in use")
+
+    @presets.command(name="indian", brief="Apply the indian preset", example=",presets indian")
+    async def indian(self, ctx: Context):
+        player: Optional[Player] = await self.get_player(ctx)
+        if not player:
+            return await ctx.fail("No player found to apply the **indian** preset.")
+
+        try:
+            await ctx.invoke(self.boost)
+            await ctx.invoke(self.vaporwave)
+
+            if player.queue and player.queue._queue:
+                player.queue._queue.clear()
+
+            if player.is_playing:
+                await player.skip()
+
+            await ctx.invoke(self.play_command, query="light up sketchers")
+            player.loop = "track"
+ 
+            await ctx.success("Applied the **indian** preset successfully.")
+        except Exception as e:
+            await ctx.fail(f"Failed to apply the **indian** preset: {str(e)}")
+
+    @presets.command(name="remove", aliases=["off"], brief="Remove a preset from the current player", example=",presets remove vaporwave")
+    async def remove_preset(self, ctx: Context, preset: str):
+        player: Player = await self.get_player(ctx)
+        presets = [
+            "vaporwave",
+            "nightcore",
+            "boost",
+            "metal",
+            "flat",
+            "piano",
+        ]
+        if preset not in presets:
+            return await ctx.warning(f"`{preset}` is not a valid preset")
+        try:
+            await player.remove_filter(preset, fast_apply=True)
+            await ctx.success(f"Removed the **{preset}** preset")
+        except pomice.FilterTagNotInUse as e:
+            await ctx.warning(f"That filter is not in use")
 
 async def setup(bot):
     await bot.add_cog(Music(bot))

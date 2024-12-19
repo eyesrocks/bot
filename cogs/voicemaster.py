@@ -636,19 +636,16 @@ class Voicemaster(commands.Cog):
             embed = discord.Embed(
                 color=0x2B2D31,
                 title="**Voicemaster Menu**",
-                description="""
-                Welcome to the Voicemaster interface! Here you can manage your voice channels with ease. Below are the available options\n\n
-                > **Lock** - Lock your voice channel
-                > **Unlock** - Unlock your voice channel
-                > **Hide** - Hide your voice channel
-                > **Reveal** - Reveal your hidden voice channel
-                > **Rename** - Rename your voice channel
-                > **Claim** - Claim an unclaimed voice channel
-                > **Increase** - Increase the user limit of your voice channel
-                > **Decrease** - Decrease the user limit of your voice channel
-                > **Delete** - Delete your voice channel
-                > **Information** - View information on the current voice channel
-                """,
+                description="""Welcome to the Voicemaster interface! Here you can manage your voice channels with ease. Below are the available options\n\n> **Lock** - Lock your voice channel
+> **Unlock** - Unlock your voice channel
+> **Hide** - Hide your voice channel
+> **Reveal** - Reveal your hidden voice channel
+> **Rename** - Rename your voice channel
+> **Claim** - Claim an unclaimed voice channel
+> **Increase** - Increase the user limit of your voice channel
+> **Decrease** - Decrease the user limit of your voice channel
+> **Delete** - Delete your voice channel
+> **Information** - View information on the current voice channel"""
             )
             embed.set_author(name=guild_name, icon_url=guild_icon)
             embed.set_thumbnail(url=self.bot.user.avatar if ctx.guild.icon else None)

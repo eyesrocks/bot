@@ -873,19 +873,26 @@ class LastFM(commands.Cog):
             )
         ]
         for i in data:
-            i["artists"] = orjson.loads(i["artist"])
-            i["plays"] = sum(
-                [
+            try:
+                if isinstance(i["artist"], str):
+                    i["artists"] = orjson.loads(i["artist"])
+                else:
+                    i["artists"] = []
+                i["plays"] = sum(
                     artist["plays"]
                     for artist in i["artists"]
                     if artist["name"].lower() == artist_name.lower()
-                ]
-            )
+                )
+            except (orjson.JSONDecodeError, TypeError, KeyError):
+                i["artists"] = []
+                i["plays"] = 0
         data = [item for item in data if item["plays"] > 0]
         data = sorted(data, key=lambda x: x["plays"], reverse=True)
         if len(data) > 0:
             await self.bot.db.execute(
-                """INSERT INTO lastfm_crowns (guild_id, artist, user_id, plays) VALUES($1,$2,$3,$4) ON CONFLICT(guild_id, artist) DO UPDATE SET user_id = $3, plays = $4""",
+                """INSERT INTO lastfm_crowns (guild_id, artist, user_id, plays) 
+                VALUES($1,$2,$3,$4) ON CONFLICT(guild_id, artist) 
+                DO UPDATE SET user_id = $3, plays = $4""",
                 ctx.guild.id,
                 artist_name,
                 data[0]["user_id"],

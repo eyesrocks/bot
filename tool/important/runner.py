@@ -33,6 +33,9 @@ class RebootRunner:
         self.colors: bool = colors
         self.main_cluster: str = main_cluster
         self._setup_logger()
+        self._pending_changes: dict[str, Change] = {}
+        self._debounce_timer: Optional[asyncio.Task] = None
+        self._debounce_delay: float = 1.0  # Delay in seconds
 
     def _setup_logger(self) -> None:
         """Configures the logger."""
@@ -84,24 +87,55 @@ class RebootRunner:
                 file_path = Path(file_path)
                 if ".git" in str(file_path) or file_path.suffix != ".py" or "custom" in file_path.parts:
                     continue
+
+                # Store the latest change for this file
+                self._pending_changes[str(file_path)] = change_type
+
+                # Cancel existing timer if any
+                if self._debounce_timer and not self._debounce_timer.done():
+                    self._debounce_timer.cancel()
+
+                # Start new debounce timer
+                self._debounce_timer = self.loop.create_task(self._process_pending_changes())
+
+    async def _process_pending_changes(self) -> None:
+        """Process batched changes after debounce delay."""
+        try:
+            # Wait for debounce delay
+            await asyncio.sleep(self._debounce_delay)
+
+            if await self._is_git_operation():
+                self.logger.debug("Ignoring changes from git operation")
+                self._pending_changes.clear()
+                return
+
+            # Process all pending changes
+            processed_paths = set()
+            for file_path_str, change_type in self._pending_changes.items():
+                file_path = Path(file_path_str)
+                if str(file_path) in processed_paths:
+                    continue
+
                 try:
-                    if await self._is_git_operation():
-                        self.logger.debug("Ignoring changes from git operation")
-                        continue
-
-                    cog_name: str = self.get_cog_name(file_path)
-                    cog_path: str = self.get_dotted_path(file_path)
-
+                    cog_path = self.get_dotted_path(file_path)
+                    
                     if change_type == Change.deleted:
                         await self._unload_cog(cog_path)
                     elif change_type == Change.added:
                         await self._load_cog(cog_path)
                     elif change_type == Change.modified:
                         await self._reload_cog(cog_path)
+                    
+                    processed_paths.add(str(file_path))
                 except Exception as e:
-                    self.logger.error(
-                        f"Error processing change {change_type} for {file_path}: {e}"
-                    )
+                    self.logger.error(f"Error processing change {change_type} for {file_path}: {e}")
+
+            # Clear pending changes after processing
+            self._pending_changes.clear()
+
+        except Exception as e:
+            self.logger.error(f"Error in processing pending changes: {e}")
+            self._pending_changes.clear()
 
     async def _is_git_operation(self) -> bool:
         """Check if there's an ongoing git operation."""

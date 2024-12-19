@@ -790,71 +790,43 @@ class EmojiEntry:
 
 
 class PrivacyConfirmation(View):
-    def __init__(
-        self: "Confirmation",
-        bot: AutoShardedBot,
-        message: Message,
-        invoker: Member = None,
-    ) -> None:
+    def __init__(self, bot: AutoShardedBot, invoker: Member = None) -> None:
         super().__init__(timeout=60)
         self.bot = bot
-        self.value = False
-        self.message = message
+        self.value = False 
         self.invoker = invoker
+        self.default_color = 0x2D2B31
+
+    async def on_timeout(self):
+        self.value = False
+        self.stop()
 
     @button(style=ButtonStyle.green, label="Approve")
-    async def approve(self: "Confirmation", interaction: Interaction, _: None):
+    async def approve(self: "PrivacyConfirmation", interaction: Interaction, _: None):
         """
         The approve button.
-
-        Parameters:
-            interaction (Interaction): The interaction object.
-            _: Button: The unused button object.
         """
-
         await self.confirmation(interaction, True)
 
     @button(style=ButtonStyle.red, label="Decline")
-    async def decline(self: "Confirmation", interaction: Interaction, _: None):
+    async def decline(self: "PrivacyConfirmation", interaction: Interaction, _: None):
         """
         The decline button.
-
-        Parameters:
-            interaction (Interaction): The interaction object.
-            _: None: The unused button object.
         """
-
         await self.confirmation(interaction, False)
 
-    async def on_timeout(self):
-        embed = discord.Embed(
-            description=f"> you have **failed** to **accept** our [privacy policy]({self.bot.domain}/privacy) in time and as a result have been **blacklisted**, to retry use the `reset` command",
-            color=self.message.embeds[0].color,
-        )
-        with suppress(HTTPException):
-            await self.message.edit(embed=embed, view=None)
-        return None
-
     async def confirmation(
-        self: "Confirmation", interaction: Interaction, value: bool
+        self: "PrivacyConfirmation", interaction: Interaction, value: bool
     ) -> None:
         """
         Handles the confirmation of an interaction.
-
-        Parameters:
-            interaction (Interaction): The interaction object representing the user's interaction.
-            value (bool): The boolean value indicating the confirmation.
         """
-
-        await interaction.response.defer()
-
         if interaction.user.id != self.invoker.id:
             return
 
-        with suppress(HTTPException):
-            await self.message.edit(view=None)
-
         self.value = value
+        await interaction.response.defer()
+        await interaction.message.delete()
         self.stop()
 
 

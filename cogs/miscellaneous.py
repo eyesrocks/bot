@@ -23,6 +23,18 @@ from discord import PartialEmoji
 import cairosvg
 from gtts import gTTS
 from io import BytesIO
+from bs4 import BeautifulSoup
+from urllib.parse import urlparse
+import re
+import urllib.parse
+from googleapiclient.discovery import build
+from google.oauth2 import service_account
+import socket
+import dns.resolver
+from base64 import b64encode
+import json
+from loguru import logger
+
 
 
 def generate(img: bytes) -> bytes:
@@ -122,6 +134,7 @@ class Miscellaneous(Cog):
         self.queue = defaultdict(Lock)
     #     self.auto_destroy.start()
         self.check_reminds.start()
+        
 
     async def cog_load(self):
         await self.bot.db.execute(
@@ -416,7 +429,7 @@ class Miscellaneous(Cog):
                 if (
                     "discord.gg" in content.lower()
                     or "discord.com/" in content.lower()
-                    or "discordapp.com/" in content.lower()
+                    or "discordapp.com" in content.lower()
                 ):
                     return await ctx.fail("snipe had **filtered content**")
                 for keyword in self.bot.cache.filter.get(ctx.guild.id, []):
@@ -611,7 +624,7 @@ class Miscellaneous(Cog):
           # Check if the user is a donator
           try:
                is_donator = await self.bot.db.fetchrow(
-                    """SELECT * FROM donators WHERE user_id = $1""", ctx.author.id
+                    """SELECT * FROM boosters WHERE user_id = $1""", ctx.author.id
                )
           except Exception as e:
                return await ctx.send(f"An error occurred while checking donator status: {e}")
@@ -806,6 +819,132 @@ class Miscellaneous(Cog):
         
         await ctx.success("Reminder removed")
 
+    # async def analyze_image_content(self, url: str) -> bool:
+    #     # Check if URL contains NSFW content
+    #     async with aiohttp.ClientSession() as session:
+    #         async with session.post(
+    #             "htt"
+    #     return True
+
+    @commands.command(
+        name="screenshot",
+        brief="Take a screenshot of a website",
+        usage=",screenshot <url>",
+        example=",screenshot github.com"
+    )
+    @commands.cooldown(1, 10, commands.BucketType.user)
+    async def screenshot(self, ctx: Context, url: str):
+        if not url.startswith(('http://', 'https://')):
+            url = 'https://' + url
+        try:
+            # Validate URL
+            parsed = urlparse(url)
+            if not parsed.netloc:
+                return await ctx.fail("Please provide a valid URL")
+            async with ctx.typing():
+                # Use Firefox screenshot API (completely free, no key needed)
+                screenshot_url = f"https://image.thum.io/get/width/1200/crop/800/noanimate/{url}"
+                
+                async with aiohttp.ClientSession() as session:
+                    try:
+                        # First get screenshot
+                        async with session.get(screenshot_url) as img_response:
+                            if img_response.status != 200:
+                                return await ctx.fail("Failed to capture screenshot")
+                            
+                            image_data = await img_response.read()
+                            
+                            # Check if screenshot contains NSFW content
+                            if not await self.analyze_image_content(image_data):
+                                return await ctx.fail("This website contains inappropriate content")
+                            # Continue with sending the image if safe
+                            file = discord.File(io.BytesIO(image_data), filename="screenshot.png")
+                            embed = discord.Embed(
+                                title="Website Screenshot",
+                                description=f"Screenshot of {url}",
+                                color=self.bot.color
+                            )
+                            embed.set_image(url="attachment://screenshot.png")
+                            await ctx.send(file=file, embed=embed)
+
+                    except asyncio.TimeoutError:
+                        return await ctx.fail("Request timed out")
+                    except Exception as e:
+                        return await ctx.fail(f"An error occurred: {str(e)}")
+        except Exception as e:
+            return await ctx.fail(f"An error occurred: {str(e)}")
+
+    @commands.command(
+        name="copyembed",
+        aliases=["cembed"],
+        brief="Convert an embed to parser format",
+        example=",copyembed https://discord.com/channels/..."
+    )
+    async def copyembed(self, ctx: Context, message_link: Optional[str] = None):
+        if message_link:
+            try:
+                _, channel_id, message_id = message_link.split("/")[-3:]
+                channel = self.bot.get_channel(int(channel_id))
+                if not channel:
+                    return await ctx.fail("Could not find the channel")
+                message = await channel.fetch_message(int(message_id))
+            except:
+                return await ctx.fail("Invalid message link provided")
+        else:
+            ref = ctx.message.reference
+            if not ref or not ref.message_id:
+                return await ctx.fail("Please reply to a message or provide a message link")
+            message = await ctx.channel.fetch_message(ref.message_id)
+
+        if not message.embeds:
+            return await ctx.fail("This message doesn't contain any embeds")
+
+        embed = message.embeds[0]
+        parts = ["{embed}"]
+
+        content = message.content
+        if content:
+            parts.append(f"{{content: {content}}}")
+
+        if embed.title:
+            parts.append(f"{{title: {embed.title}}}")
+
+        if embed.description:
+            parts.append(f"{{description: {embed.description}}}")
+
+        if embed.color:
+            parts.append(f"{{color: #{embed.color.value:06x}}}")
+
+        if embed.author:
+            author_parts = [embed.author.name]
+            if embed.author.url:
+                author_parts.append(embed.author.url)
+            if embed.author.icon_url:
+                author_parts.append(embed.author.icon_url)
+            parts.append(f"{{author: {' && '.join(author_parts)}}}")
+
+        if embed.footer:
+            footer_parts = [embed.footer.text]
+            if embed.footer.icon_url:
+                footer_parts.append(embed.footer.icon_url)
+            parts.append(f"{{footer: {' && '.join(footer_parts)}}}")
+
+        if embed.thumbnail:
+            parts.append(f"{{thumbnail: {embed.thumbnail.url}}}")
+
+        if embed.image:
+            parts.append(f"{{image: {embed.image.url}}}")
+
+        for field in embed.fields:
+            parts.append(f"{{field: {field.name} && {field.value} && {str(field.inline)}}}")
+
+        result = "$v".join(parts)
+        
+        if len(result) > 2000:
+            file = discord.File(io.BytesIO(result.encode()), filename="embed.txt")
+            await ctx.send("The embed code is too long to send as a message.", file=file)
+        else:
+            await ctx.send(f"```{result}```")
 
 async def setup(bot: "Greed") -> None: 
     await bot.add_cog(Miscellaneous(bot))

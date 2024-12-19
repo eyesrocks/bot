@@ -4086,6 +4086,7 @@ class Servers(Cog):
         brief="Add an automatic response to given phrase",
         example=",autoresponder add com, you're a troll",
     )
+    @commands.has_permissions(manage_messages=True)
     async def autoresponder_add(self, ctx: Context, *, arg: Argument):
         # if "," not in arg: return await ctx.fail('use a comma to split the trigger and response')
 
@@ -4112,6 +4113,7 @@ class Servers(Cog):
         brief="Remove an automatic response from a given phrase",
         example=",autoresponder remove hi",
     )
+    @commands.has_permissions(manage_messages=True)
     async def autoresponder_remove(self, ctx: Context, *, trigger: str):
         if ctx.guild.id not in self.bot.cache.autoresponders:
             return await ctx.fail("**Auto-Response** has not been **setup**")
@@ -4135,6 +4137,7 @@ class Servers(Cog):
         brief="Clear all the current auto responders",
         example=",autoresponder clear",
     )
+    @commands.has_permissions(manage_messages=True)
     async def autoresponder_clear(self, ctx: Context):
         await self.bot.db.execute(
             """DELETE FROM autoresponder WHERE guild_id = $1""", ctx.guild.id
@@ -4151,6 +4154,7 @@ class Servers(Cog):
         brief="Show a list of all current auto responses",
         example=",autoresponder list",
     )
+    @commands.has_permissions(manage_messages=True)
     async def autoresponder_list(self, ctx: Context):
         rows = [
             f"`{trig}` - `{response}`"
