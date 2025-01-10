@@ -55,9 +55,9 @@ class UsernameTracker(commands.Cog):
                     timestamp = discord.utils.utcnow()
                 )
                 for channel in channel_ids:
-                    await sleep(0.01)
                     try:
-                        await self.bot.send_raw(channel, embed = embed)
+                        await self.bot.send_raw(channel, embed=embed)
+                        await sleep(0.5)
                     except Exception:
                         pass
                 return

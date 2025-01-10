@@ -271,12 +271,12 @@ class Cache:
             key (str): The key of the item to be removed.
             expiration (int): The time in seconds after which the item should be removed.
         """
+        await asyncio.create_task(self._schedule_expiration(key, expiration))
 
+    async def _schedule_expiration(self, key: str, expiration: int) -> None:
         await asyncio.sleep(expiration)
-
         if key in self._dict:
             del self._dict[key]
-
     async def set(self, key: Any, value: Any, expiration: Optional[int] = None) -> int:
         """
         Set the value of the given key in the dictionary.
@@ -300,6 +300,7 @@ class Cache:
                 self.do_expiration(key, expiration)
             )
 
+        return len(self._dict)
         return 1
 
     async def sadd(self, key: Any, *values: Any) -> int:
@@ -438,7 +439,7 @@ class Cache:
 
         return self._dict.get(key, None)
 
-    async def keys(self, pattern: Optional[str] = None) -> Tuple[Any]:
+    def keys(self, pattern: Optional[str] = None) -> Tuple[Any]:
         """
         Retrieves all keys from the dictionary that match the given pattern.
 
@@ -528,7 +529,8 @@ class Cache:
             return 0
 
         except Exception:
-            return self.ratelimited(key, amount, bucket)
+            logger.error(f"Failed to rate limit key: {key}")
+            return bucket  # Return the bucket time as a fallback
 
 
 class ParameterParser:
@@ -1036,10 +1038,11 @@ class MSG:
                     msg = await webhook.edit_message(
                         self.id,
                         content=content if content is not MISSING else None,
-                        embeds=embeds if embeds is not MISSING else None, 
+                        embeds=embeds if embeds is not MISSING else None,
                         embed=embed if embed is not MISSING else None,
                         attachments=attachments if attachments is not MISSING else None,
-                        view=view if view is not MISSING else None
+                        view=view if view is not MISSING else None,
+                        allowed_mentions=allowed_mentions if allowed_mentions is not MISSING else None
                     )
                     if delete_after:
                         await msg.delete(delay=delete_after)

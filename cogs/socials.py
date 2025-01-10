@@ -1,3 +1,7 @@
+import asyncio
+import re
+import time
+import requests
 from tool.pinterest import Pinterest  # type: ignore
 from discord.ext import commands
 from discord import Embed, app_commands, Interaction, Message, File, HTTPException
@@ -19,6 +23,7 @@ from yt_dlp import DownloadError, YoutubeDL
 from yarl import URL
 from jishaku.functools import executor_function
 import aiohttp
+from collections import deque
 from loguru import logger
 from re import search, compile
 from io import BytesIO
@@ -276,12 +281,137 @@ class RobloxUserModel:
             if user := await cls.fetch(argument):
                 return user
         raise CommandError("No **Roblox user** found with that name!")
+    
+@cache(ttl=3600)
+async def fetch_instagram_data(username):
+    """Fetch Instagram profile data using GraphQL API with fingerprinting."""
+    
+    url = f"https://www.instagram.com/api/v1/users/web_profile_info/?username={username}"
+
+    # Browser-like headers with fingerprinting
+    headers = {
+        'authority': 'www.instagram.com',
+        'accept': '*/*',
+        'accept-language': 'en-US,en;q=0.9',
+        'cookie': 'csrftoken=5o2PA4bwEeq1wdDxc_9znG; datr=p49-Z3asiKca3ndgFsFI6CBm; ig_did=A3A1170B-1845-42A7-8102-008D6C7E9642; mid=Z36PpwALAAGD0PLqzGxxxFkjkg3G; sessionid=61688220172%3AUeUQEM8RZtp0Ba%3A10%3AAYdveNJCG_h5eaNW5z_1D-KrQgCzksMGXEsnlzy26w; ds_user_id=61688220172; wd=576x945;', # Add your Instagram cookie here for authentication
+        'dpr': '2',
+        'referer': f'https://www.instagram.com/{username}/',
+        'sec-ch-prefers-color-scheme': 'dark',
+        'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120"',
+        'sec-ch-ua-full-version-list': '"Not_A Brand";v="8.0.0.0", "Chromium";v="120.0.6099.71"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-model': '""',
+        'sec-ch-ua-platform': '"Windows"',
+        'sec-ch-ua-platform-version': '"15.0.0"',
+        'sec-fetch-dest': 'empty',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-site': 'same-origin',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.71 Safari/537.36',
+        'viewport-width': '1920',
+        'x-asbd-id': '129477',
+        'x-csrftoken': '', # Add CSRF token here
+        'x-ig-app-id': '936619743392459',
+        'x-ig-www-claim': '0',
+        'x-requested-with': 'XMLHttpRequest'
+    }
+
+    try:
+        response = requests.get(url, headers=headers)
+        
+        if response.status_code == 200:
+            data = response.json()
+            if 'data' in data and 'user' in data['data']:
+                return data['data']['user'], None
+            return None, "User data not found"
+        elif response.status_code == 404:
+            return None, "Profile not found"
+        else:
+            return None, f"Error: Status code {response.status_code}"
+    
+    except requests.RequestException as e:
+        return None, f"Request failed: {str(e)}"
+    except ValueError as e:
+        return None, f"JSON parsing failed: {str(e)}"
+
+TWITTER_BEARER_TOKENS = [
+    'AAAAAAAAAAAAAAAAAAAAAFF3xQEAAAAAxq%2BVlmthJYK6LmfQT7P7arVPrRk%3DGG8roGZ2JVKlAn3dPNU4RtJ6ltjQ6r4EaA4lWCPD4495qywjxG',
+    'AAAAAAAAAAAAAAAAAAAAAKSjxwEAAAAA5hdVoyx6WEE5nu7mRd5URE1RS8Q%3DYC3CN5b2CRKZAYe51pgyjaVqDn4yQ6WFEBVC8I48fWch8SmmY5',
+    # Add more tokens here if available
+]
+
+profile_cache = {}
+CACHE_EXPIRY_TIME = 3600  # Cache expiration time in seconds (1 hour)
 
 
+
+
+class TwitterAPIClient:
+    def __init__(self):
+        self.token_index = 0
+        self.session = requests.Session()
+        self.request_queue = deque()
+
+    def get_next_token(self):
+        token = TWITTER_BEARER_TOKENS[self.token_index]
+        self.token_index = (self.token_index + 1) % len(TWITTER_BEARER_TOKENS)
+        return token
+
+    def make_request_with_queue(self, url):
+        # Queue-based rate-limit management
+        self.add_to_queue(url)
+        response = self.execute_from_queue()
+        return response
+
+    def add_to_queue(self, url):
+        self.request_queue.append(url)
+
+    def execute_from_queue(self):
+        while self.request_queue:
+            url = self.request_queue.popleft()
+            response = self.make_request_with_limit_handling(url)
+            if response:
+                return response
+        return None
+
+    def make_request_with_limit_handling(self, url):
+        headers = {"Authorization": f"Bearer {self.get_next_token()}"}
+        
+        # Make the request and handle rate limits
+        response = self.session.get(url, headers=headers)
+        
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 429:  # Rate limit hit
+            retry_after = int(response.headers.get("Retry-After", 60))  # Get retry time from header
+            print(f"Rate limit hit. Retrying in {retry_after} seconds...")
+            time.sleep(retry_after)  # Wait for the retry period
+            return self.make_request_with_limit_handling(url)  # Retry after waiting
+        else:
+            print(f"Error: {response.status_code}, {response.text}")
+            return None
+        
+    def get_twitter_profile(self, username):
+        # Check the cache first
+        if username in profile_cache and time.time() - profile_cache[username]['time'] < CACHE_EXPIRY_TIME:
+            return profile_cache[username]['data']
+        
+        url = f"https://api.twitter.com/2/users/by/username/{username}?user.fields=username,public_metrics,name,profile_image_url"
+        result = self.make_request_with_queue(url)
+        
+        if result:
+            profile_cache[username] = {'data': result['data'], 'time': time.time()}  # Cache the result
+            return result['data']
+        return None
+    
+SHZ_API_KEY = '153315b3a7msh91fdaf0f92e2df7p1abcfbjsn1a9bc21996f7'
 
 class Socials(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.api_client = TwitterAPIClient()
+        self.token_index = 0
+        self.request_queue = deque()
+        self.session = requests.Session()
         self.pinterest = Pinterest()
         self.services = {
             "youtube": compile(
@@ -328,6 +458,21 @@ class Socials(commands.Cog):
 
         if data:
             return DefaultMunch.fromDict(data)
+
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        """
+        Listener that checks for the word 'nigga' and updates the count.
+        """
+        if message.author.bot:  # Don't process messages from bots
+            return
+
+        # Use regex to check for the exact word "nigga" (case insensitive)
+        offensive_word = r'\bnigga\b'  # This matches the word 'nigga' in all case variations
+
+        # If the message contains the word 'nigga', increment the count
+        if re.search(offensive_word, message.content, re.IGNORECASE):
+            await self.increment_nword_count(message.author.id)
 
     @commands.Cog.listener("on_message")
     async def check_service(self, message: Message):
@@ -418,6 +563,12 @@ class Socials(commands.Cog):
         except Exception as e:
             logger.error(f"Error in YouTube request handler: {e}")
             await ctx.error("An error occurred while processing your request.")
+
+
+    def get_high_res_profile_image(self, profile_image_url):
+        if profile_image_url:
+            return profile_image_url.replace('_normal', '')
+        return profile_image_url
 
     @commands.Cog.listener()
     async def on_instagram_request(self, ctx: Context, url: URL) -> Message:
@@ -540,6 +691,38 @@ class Socials(commands.Cog):
             
         raise commands.CommandError("Invalid SoundCloud track format. Use 'artist/track-name' or a valid SoundCloud URL.")
 
+
+
+    async def increment_nword_count(self, user_id):
+        """
+        Increments the count of 'nigga' for a user in the database.
+        """
+        try:
+            # Check if user exists
+            result = await self.bot.db.fetchrow(
+                "SELECT count FROM offensive WHERE user_id = $1", user_id  # Pass user_id directly
+            )
+
+            if result:
+                # User exists, increment count
+                new_count = result['count'] + 1  # Increment the count
+                await self.bot.db.execute(
+                    "UPDATE offensive SET count = $1 WHERE user_id = $2",
+                    new_count, user_id  # Pass parameters correctly
+                )
+            else:
+                # User does not exist, insert new record
+                await self.bot.db.execute(
+                    "INSERT INTO offensive (user_id, count) VALUES ($1, $2)",
+                    user_id, 1  # Insert user with initial count of 1
+                )
+
+            
+        except Exception as e:
+            print(f"Error incrementing count for user {user_id}: {e}")
+
+
+
     @app_commands.command(
         name="soundcloud",
         description="Download a track from SoundCloud.",
@@ -549,8 +732,6 @@ class Socials(commands.Cog):
     @app_commands.allowed_installs(users=True, guilds=True)
     async def soundcloud_command(self, interaction: Interaction, track: str):
         """Download a track from SoundCloud."""
-        await interaction.response.defer()
-        
         try:
             username, slug = self.extract_soundcloud_url_parts(track)
             ctx = await Context.from_interaction(interaction)
@@ -572,7 +753,80 @@ class Socials(commands.Cog):
         if user:
             await self.roblox(ctx, user)
 
+
+
+
+    @commands.command(name='twitter',aliases = ['x'])
+    @commands.cooldown(1, 5, commands.BucketType.guild)
+    async def twitter(self, ctx, username: str):
+        """
+        Discord command to fetch Twitter profile details.
+        """
+        profile_data = self.api_client.get_twitter_profile(username)
+        
+        if profile_data:
+            metrics = profile_data['public_metrics']
+            high_res_image = self.get_high_res_profile_image(profile_data.get('profile_image_url'))
             
+            # Retrieve values safely, and provide defaults if missing
+            def get_profile_info(key, default="N/A"):
+                return profile_data.get(key, default)
+
+            # Extract relevant user data
+            name = get_profile_info('name')
+            username_twitter = get_profile_info('username')
+            bio = get_profile_info('description')
+            followers = metrics.get('followers_count', 0)
+            following = metrics.get('following_count', 0)
+            tweets = metrics.get('tweet_count', 0)
+            twitter_url = f"https://twitter.com/{username_twitter}"
+            
+            # Format numbers with commas
+            followers_str = f"{followers:,}"
+            following_str = f"{following:,}"
+            tweets_str = f"{tweets:,}"
+
+            # Get author info (command user)
+            author_avatar_url = ctx.author.avatar.url
+            author_name = ctx.author.name
+
+            # Construct the Embed with the same style as TikTok
+            embed = Embed(
+                description=f"**[{name} (@{username_twitter})]({twitter_url})**",
+                color=self.bot.color
+            )
+
+            # Add fields for Tweets, Following, and Followers (inline for layout like TikTok)
+            embed.add_field(name="Tweets", value=f"{tweets_str}", inline=True)
+            embed.add_field(name="Followers", value=f"{followers_str}", inline=True)
+            embed.add_field(name="Following", value=f"{following_str}", inline=True)
+
+            # Set the thumbnail for the profile picture
+            if high_res_image:
+                embed.set_thumbnail(url=high_res_image)
+
+            # Set author for the embed with the avatar
+            embed.set_author(name=author_name, icon_url=author_avatar_url)
+
+            # Set the footer with Twitter logo
+            embed.set_footer(text="Twitter", icon_url="https://abs.twimg.com/icons/apple-touch-icon-192x192.png")
+
+            # Send the embed message to the Discord channel
+            await ctx.send(embed=embed)
+
+            # Log data for debugging (optional)
+            print(f"Twitter Profile Data for {username_twitter}:\n"
+                  f"Name: {name}\n"
+                  f"Bio: {bio}\n"
+                  f"Followers: {followers_str}\n"
+                  f"Following: {following_str}\n"
+                  f"Tweets: {tweets_str}\n"
+                  f"Profile Image: {high_res_image}")
+
+        else:
+            await ctx.send("Failed to fetch Twitter profile information. Please check the username.")
+
+          
 
     @commands.command(
         name="roblox",
@@ -630,6 +884,104 @@ class Socials(commands.Cog):
         await ctx.send(embed=embed)
 
 
+#    @commands.command(name="tiktok", aliases = ["tt"])
+#    @commands.cooldown(1, 5, commands.BucketType.user)  # Apply rate limit of 5 seconds per user
+#    async def tiktok(self, ctx, username: str):
+#        """
+#        Discord command to fetch TikTok profile details.
+#        """
+#        url = "https://tiktok-api23.p.rapidapi.com/api/user/info"
+#        querystring = {"uniqueId": username}
+#        headers = {
+#            "x-rapidapi-key": "153315b3a7msh91fdaf0f92e2df7p1abcfbjsn1a9bc21996f7",  # Use your own API key here
+#            "x-rapidapi-host": "tiktok-api23.p.rapidapi.com"
+#        }
+#
+#        try:
+#            # Send the request to the TikTok API
+#            response = requests.get(url, headers=headers, params=querystring)
+#
+#            # Check if request was successful
+#            if response.status_code == 200:
+#                data = response.json()
+#
+#                # Safely extract user info and stats
+#                if "userInfo" in data and "user" in data["userInfo"]:
+#                    user = data["userInfo"]["user"]
+#                    stats = data["userInfo"]["stats"]
+#
+#                    # Retrieve values safely with a default
+#                    def get_user_info(key, default="N/A"):
+#                        return user.get(key, default)
+#
+#                    # Get user stats with a default
+#                    def get_stat_info(key, default=0):
+#                        return stats.get(key, default)
+#
+#                    # Extract relevant details from the response
+#                    username_tiktok = get_user_info("uniqueId")
+#                    full_name = get_user_info("nickname")
+#                    bio = get_user_info("signature")
+#                    followers = get_stat_info("followerCount")
+#                    following = get_stat_info("followingCount")
+#                    likes = get_stat_info("heartCount")
+#                    video_count = get_stat_info("videoCount")
+#                    profile_picture_url = get_user_info("avatarLarger")
+#                    tiktok_url = f"https://www.tiktok.com/@{username_tiktok}"
+#
+#                    # Format numbers with commas
+#                    followers_str = f"{followers:,}"
+#                    following_str = f"{following:,}"
+#                    likes_str = f"{likes:,}"
+#
+#                    # Get author info (command user)
+#                    author_avatar_url = ctx.author.avatar.url
+#                    author_name = ctx.author.name
+#
+#                    # Create the embed
+#                    embed = Embed(
+#                        description=f"**[{full_name} (@{username_tiktok})]({tiktok_url})**\n {bio}",
+#                        color=self.bot.color
+#                    )
+#
+#                    # Add fields for Likes, Followers, and Following with formatted numbers
+#                    embed.add_field(name="Likes", value=f"{likes_str}", inline=True)
+#                    embed.add_field(name="Followers", value=f"{followers_str}", inline=True)
+#                    embed.add_field(name="Following", value=f"{following_str}", inline=True)
+#
+#                    # Set the thumbnail of the user profile
+#                    if profile_picture_url:
+#                        embed.set_thumbnail(url=profile_picture_url)
+#
+#                    # Set author for the embed with the avatar
+#                    embed.set_author(name=author_name, icon_url=author_avatar_url)
+#
+#                    # Set footer with TikTok logo
+#                    embed.set_footer(text="TikTok", icon_url="https://cdn.discordapp.com/emojis/1309200047677898763.png")
+#
+#                    # Send the embed message to the Discord channel
+#                    await ctx.send(embed=embed)
+#
+#                    # Log the data for debugging purposes
+#                    print(f"TikTok Profile Data for {username_tiktok}:\n"
+#                          f"Full Name: {full_name}\n"
+#                          f"Bio: {bio}\n"
+#                          f"Followers: {followers_str}\n"
+#                          f"Following: {following_str}\n"
+#                          f"Likes: {likes_str}\n"
+#                          f"Video Count: {video_count}\n"
+#                          f"Profile Picture URL: {profile_picture_url}")
+#                else:
+#                    await ctx.fail(f"Sorry, could not fetch data for TikTok user {username}.")
+#            else:
+#                await ctx.fail(f"Failed to fetch TikTok profile for {username}. Status Code: {response.status_code}")
+#
+#        except requests.RequestException as e:
+#            await ctx.fail(f"An error occurred while fetching the TikTok profile: {e}")
+
+
+
+
 
     @commands.command(
         name = "google",
@@ -659,5 +1011,57 @@ class Socials(commands.Cog):
                 embeds.append(embed)
         await ctx.paginate(embeds)
 
+
+    @commands.command(
+        name="instagram",
+        aliases=["ig"],
+        brief="Fetch Instagram profile details.",
+        example=",instagram username"
+    )
+    async def instagram(self, ctx: Context, username: str):
+        """Fetch Instagram profile details."""
+        url = f"https://www.instagram.com/{username}"
+        data, error = await fetch_instagram_data(username)
+        
+        if data:
+            logger.info(data)
+            # Format follower/following counts
+            followers = f"{data.get('edge_followed_by', {}).get('count', 0):,}"
+            following = f"{data.get('edge_follow', {}).get('count', 0):,}"
+            
+            # Create embed
+            # Build list of account status indicators
+            status_indicators = []
+            if data.get('is_private'):
+                status_indicators.append('🔒')
+            if data.get('is_verified'):
+                status_indicators.append('<:Verified:1302156329502375968>')
+            if data.get('is_joined_recently'):
+                status_indicators.append('<:newjoin:1326569644693127234>')
+            
+            # Join indicators with spaces and add after the hyperlink
+            status_suffix = f" {' '.join(status_indicators)}" if status_indicators else ""
+            
+            embed = Embed(
+                description=f"**[{data.get('full_name')} (@{data.get('username')})]({url})**{status_suffix}\n{data.get('biography', '')}",
+                color=self.bot.color
+            )
+            
+            # Add profile stats
+            embed.add_field(name="Posts", value=f"{data.get('edge_owner_to_timeline_media', {}).get('count', 0):,}", inline=True)
+            embed.add_field(name="Followers", value=followers, inline=True)
+            embed.add_field(name="Following", value=following, inline=True)
+            
+            # Set thumbnail
+            if profile_pic := data.get('profile_pic_url_hd'):
+                embed.set_thumbnail(url=profile_pic)
+                
+            # Set author and footer
+            embed.set_author(name=ctx.author.name, icon_url=ctx.author.avatar.url)
+            embed.set_footer(text="Instagram", icon_url="https://www.instagram.com/static/images/ico/favicon-192.png/68d99ba29cc8.png")
+            
+            await ctx.send(embed=embed)
+        else:
+            await ctx.fail(f"Could not fetch Instagram profile for {username}. Error: {error}")
 async def setup(bot):
     await bot.add_cog(Socials(bot))

@@ -81,9 +81,9 @@ class HelpModal(discord.ui.Modal, title="Help"):
             name = interaction.data["components"][0]["components"][0]["value"]
             command = find_command(self.bot, name)
             if not command:
-                await interaction.message.edit(embed=Embed(color=0x36393f, description=f"no command could be found close to `{name}`"), view=BotHelpView(self.bot, self.ctx))
+                await interaction.message.edit(embed=Embed(color=0x9eafbf, description=f"no command could be found close to `{name}`"), view=BotHelpView(self.bot, self.ctx))
                 return await interaction.response.defer()
-            embed = Embed(color=0x36393f, timestamp=datetime.datetime.now())
+            embed = Embed(color=0x9eafbf, timestamp=datetime.datetime.now())
             embed.set_author(name=self.ctx.author.display_name, icon_url=self.ctx.author.display_avatar.url)
             embed.set_image(url=f"https://greed.wtf/{command.qualified_name.replace(' ', '_')}.png?{tuuid()}")
             await interaction.message.edit(view=BotHelpView(self.bot, self.ctx), embed=embed)
@@ -191,7 +191,7 @@ class CommandSelect(discord.ui.Select):
         commands_list = self.get_commands_by_category(selected_category)
         embed = discord.Embed(
             title=f"**Commands in {selected_category}**",
-            color=0x36393f,
+            color=0x9eafbf,
             description=f"```ansi\n\u001b[35m{', '.join(commands_list)}\u001b[0m\n```" if commands_list else "No commands available in this category."
         )
         embed.set_thumbnail(url=self.view.bot.user.display_avatar.url)
@@ -218,7 +218,7 @@ class MyHelpCommand(commands.HelpCommand):
         embed = discord.Embed(
             title="Menu",
             description=f"Select a **category** to view it's commands.\n\n**Links**\n**[invite](https://discord.com/oauth2/authorize?client_id=1149535834756874250&permissions=8&integration_type=0&scope=bot)**\n**[support](https://discord.gg/pomice)**\n**[website](http://greed.wtf)**",
-            color=0x36393f,
+            color=0x9eafbf,
         )
         embed.set_author(name=self.context.bot.user.name, icon_url=self.context.bot.user.avatar)
         
@@ -237,13 +237,13 @@ class MyHelpCommand(commands.HelpCommand):
     async def send_group_help(self, group):
         if retry_after := await self.context.bot.glory_cache.ratelimited(f"rl:ghelp:{self.context.author.id}", 1, 5):
             raise commands.CommandOnCooldown(None, retry_after, None)
-        embed = Embed(color=0x36393f, timestamp=datetime.datetime.now())
+        embed = Embed(color=0x9eafbf, timestamp=datetime.datetime.now())
         ctx = self.context
         commands = [c for c in group.walk_commands()] + [group]
         commands = [c for c in commands if check_command(c)]
         embeds = {}
         for i, command in enumerate(commands, start=1):
-            embed = Embed(color=0x36393f, timestamp=datetime.datetime.now())
+            embed = Embed(color=0x9eafbf, timestamp=datetime.datetime.now())
             brief = command.brief or generate(ctx, command)
             params = ", ".join(f"{c}" for c in command.clean_params.keys()).replace("_", ", ")
             embed.add_field(name="Parameters", value=params, inline=True)
@@ -274,7 +274,7 @@ class MyHelpCommand(commands.HelpCommand):
         else:
             await self.context.send(
                 embed=Embed(
-                    color=0x36393f,
+                    color=0x9eafbf,
                     title=f'**Need help with {group.qualified_name}?**',
                     url='https://greed.wtf/Commands',
                     description=f"{EMOJIS['settings_icon']} **Usage**\n> **{group.qualified_name}** has {len([i for i in group.walk_commands()])} sub commands that can be used. To view all commands for **{group.qualified_name}**, use the help menu below or visit our [**website**](https://greed.wtf/)",
@@ -285,7 +285,7 @@ class MyHelpCommand(commands.HelpCommand):
     async def send_command_help(self, command):
         if retry_after := await self.context.bot.glory_cache.ratelimited(f"rl:chelp:{self.context.author.id}", 1, 5):
             raise commands.CommandOnCooldown(None, retry_after, None)
-        embed = Embed(color=0x36393f, timestamp=datetime.datetime.now())
+        embed = Embed(color=0x9eafbf, timestamp=datetime.datetime.now())
         aliases = ", ".join(command.aliases)
         embed.set_author(name=self.context.author.display_name, icon_url=self.context.author.display_avatar.url)
         ctx = self.context

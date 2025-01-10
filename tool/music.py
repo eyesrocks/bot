@@ -337,6 +337,10 @@ class Player(pomice.Player):
                         )
                     except Exception:
                         self.bound_channel = None
+                        self.message = await track.ctx.neutral(
+                            f"**Now playing** [**{track.title}**]({track.uri})",
+                            emoji="<a:greed_playing:1207661065496825967>",
+                        )
 
         except asyncio.TimeoutError:
             await self.teardown()

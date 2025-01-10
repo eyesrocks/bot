@@ -18,6 +18,7 @@ from color_processing import ColorInfo
 from tool.emotes import EMOJIS
 from typing import List, Dict, Set, Optional
 from random import choice
+from tool.managers.bing import BingService
 from dataclasses import dataclass, field
 from tool.worker import offloaded
 # from greed.tool import aliases
@@ -113,7 +114,6 @@ def do_caption(para: list, image_bytes: bytes, message_data: dict):
 
 GOOGLE_API_KEY = "AIzaSyCgPL4hAT14sdyylXxY_R-hXJN4XMo7zZo"
 SEARCH_ENGINE_ID = "8691350b6083348ae"
-
 class TicTacToeButton(discord.ui.Button):
     """
     Represents a button on the Tic Tac Toe board.
@@ -131,17 +131,12 @@ class TicTacToeButton(discord.ui.Button):
         """
         assert self.view is not None
         view: 'TicTacToe' = self.view
-        state = view.board[self.y][self.x]
-
-        if state in (view.X, view.O):
+        if view.board[self.y][self.x] in (view.X, view.O):
             return
 
         # Check if it's the correct player's turn
-        if (view.current_player == view.X and interaction.user.id != self.player1.id) or \
-           (view.current_player == view.O and interaction.user.id != self.player2.id):
-            return await interaction.response.send_message(
-                "It's not your turn.", ephemeral=True
-            )
+        if (view.current_player == view.X and interaction.user.id != self.player1.id) or (view.current_player == view.O and interaction.user.id != self.player2.id):
+            return await interaction.response.send_message("It's not your turn!", ephemeral=True)
 
         self.style = discord.ButtonStyle.danger if view.current_player == view.X else discord.ButtonStyle.success
         self.label = 'X' if view.current_player == view.X else 'O'
@@ -149,7 +144,7 @@ class TicTacToeButton(discord.ui.Button):
         view.board[self.y][self.x] = view.current_player
 
         # Switch the turn
-        view.current_player *= -1
+        view.switch_player()
 
         # Check for a winner
         winner = view.check_board_winner()
@@ -160,7 +155,8 @@ class TicTacToeButton(discord.ui.Button):
             )
             # Disable all buttons and stop the view
             for child in view.children:
-                child.disabled = True
+                if isinstance(child, discord.ui.Button):
+                    child.disabled = True
             view.stop()
         else:
             content = f"It's **{self.player1.mention if view.current_player == view.X else self.player2.mention}**'s turn."
@@ -216,6 +212,12 @@ class TicTacToe(discord.ui.View):
             return self.Tie
 
         return None
+
+    def switch_player(self):
+        """
+        Switches the current player.
+        """
+        self.current_player = self.O if self.current_player == self.X else self.X
 
     async def on_timeout(self):
         """
@@ -384,6 +386,7 @@ class Fun(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.blacktea = BlackTea(self.bot)
+        self.bing = BingService(self.bot.redis, None)
         self.flavors = [
             "Strawberry",
             "Mango",
@@ -404,6 +407,7 @@ class Fun(commands.Cog):
             "Cherry",
             "Raspberry",
         ]
+
 
 
     async def get_caption(
@@ -1144,7 +1148,96 @@ class Fun(commands.Cog):
         )
         await ctx.send(embed=embed)
 
+    @commands.command(name="nword", help="Shows how many times you've said the n-word")
+    async def nword_count(self, ctx):
+        """
+        Show how many times the user has said 'nigga'.
+        """
+        try:
+            user_id = ctx.author.id
+            result = await self.bot.db.fetchrow(
+                "SELECT count FROM offensive WHERE user_id = $1", user_id  # Pass user_id directly, not as a tuple
+            )
 
+            if result:
+                count = result['count']  # Use the key 'count' to access the result
+
+                # Create an embed with the response
+                embed = Embed(
+                    description=f"{ctx.author.name} You've said it **{count}** times...",
+                    color=self.bot.color
+                )
+
+                # Send the embed to the channel
+                await ctx.send(embed=embed)
+
+        except Exception as e:
+            await ctx.send(f"Error fetching your count: {e}")
+            print(f"Error fetching count for {ctx.author.id}: {e}")
+
+
+
+    @commands.command(name="nwordlb", help="Shows the top 10 users who said the n-word.")
+    async def nword_leaderboard(self, ctx):
+        """
+        Displays the top 10 users who have said the 'n-word' the most.
+        """
+        try:
+            # Fetch the top 10 users based on the 'nigga' count, descending order
+            rows = await self.bot.db.fetch(
+                "SELECT user_id, count FROM offensive ORDER BY count DESC LIMIT 10"
+            )
+
+            # If no data is available
+            if not rows:
+                await ctx.send("No data available in the leaderboard.")
+                return
+
+            # Create a list to hold user leaderboard entries
+            leaderboard_entries = []
+
+            # Loop through the results and get user data from the database
+            for row in rows:
+                user_id = row['user_id']
+                count = row['count']
+
+                # Try to fetch the user from the guild (fall back to user_id if not found)
+                user = ctx.guild.get_member(user_id)
+
+                # If user not found in the guild, attempt to fetch globally
+                if not user:
+                    try:
+                        user = await self.bot.fetch_user(user_id)
+                    except discord.NotFound:
+                        user = None  # If not found globally, set user to None
+
+                # If user exists, mention the user with a clickable link; else fallback to "Unknown User"
+                if user:
+                    username = f"[{user.name}](https://discord.com/users/{user.id})"  # Username linked to profile
+                else:
+                    username = "Unknown User"  # Use "Unknown User" if not found
+
+                leaderboard_entries.append(f"**{username}: {count} times**")
+
+            # Split leaderboard entries into pages (10 entries per page)
+            page_size = 10
+            pages = [leaderboard_entries[i:i + page_size] for i in range(0, len(leaderboard_entries), page_size)]
+
+            # Handle pagination
+            for page_num, page in enumerate(pages, 1):
+                # Create the embed for the page
+                embed = discord.Embed(
+                    title="Top 10 idiots",
+                    description="\n".join(page),
+                    color=self.bot.color
+                )
+                embed.set_footer(text=f"ong yall racist -nox")
+                
+                # Send the embed for the current page
+                await ctx.send(embed=embed)
+
+        except Exception as e:
+            await ctx.send(f"An error occurred: {e}")
 
     @commands.command(
         name="tictactoe",
@@ -1159,12 +1252,53 @@ class Fun(commands.Cog):
             return await ctx.fail("You can't play against yourself!")
         
         view = TicTacToe(ctx.author, opponent)
-        await ctx.success(f"{opponent.mention}, you have been challenged to a game of Tic Tac Toe! {ctx.author.mention} goes first.", view=view)
+        await ctx.send(
+            f"Tic Tac Toe: {ctx.author.mention} vs {opponent.mention}",
+            view=view
+        )
 
 
-    @commands.command(name="image")
+
+    @commands.command(name="image", aliases=["img"])
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def image(self, ctx, *, query: str):
+        """Search for images using Google's Custom Search JSON API with button-based navigation."""
+
+        # Check if the user is a donator
+        try:
+            is_donator = await self.bot.db.fetchrow(
+                """SELECT * FROM boosters WHERE user_id = $1""", ctx.author.id
+            )
+        except Exception as e:
+            return await ctx.fail(f"An error occurred while checking donator status: {e}")
+
+        # If not a donator, limit access to the image search
+        if not is_donator and not ctx.author.id in self.bot.owner_ids:
+            return await ctx.fail(
+                "You are not boosting [/pomice](https://discord.gg/pomice). Boost this server to use this command."
+            )
+        try:
+            results = await self.bing.image_search(query = query, safe = True if not ctx.channel.is_nsfw() else False, pages = 2)
+            embeds = []
+            for i, result in enumerate(results.results, start = 1):
+                embed = discord.Embed(
+                    title = f"Image Results for {query}",
+                    color = self.bot.color
+                )
+                embed.set_image(url = result.image or result.thumbnail)
+                embed.set_footer(text = f"Page {i}/{len(results.results)}")
+                embeds.append(embed)
+            return await ctx.alternative_paginate(embeds)
+        except Exception as e:
+            if ctx.author.name == "aiohttp":
+                raise e
+            return await ctx.fail(f"No results found for query `{query[:50]}`")
+
+
+          
+    # @commands.command(name="image")
+    # @commands.cooldown(1, 5, commands.BucketType.user)
+    async def old_image(self, ctx, *, query: str):
           """Search for images using Google's Custom Search JSON API with button-based navigation."""
 
           # Check if the user is a donator
@@ -1210,7 +1344,6 @@ class Fun(commands.Cog):
                     for index, item in enumerate(items, start=items_collected + 1):
                          image_url = item.get("link")
                          embed = discord.Embed(
-                              description=f"<:Google:1315861928538800189> **Search results for: {query}**\nPage {index}/{items_collected + len(items)}",
                               color=self.bot.color
                          )
                          embed.set_image(url=image_url)
@@ -1240,6 +1373,58 @@ class Fun(commands.Cog):
           except Exception as e:
                await ctx.send(f"An error occurred: {e}")
 
+    @commands.command(name="poll", brief="Create a poll with multiple options")
+    async def poll(self, ctx, time: str, *, question: str):
+        """Create a poll with multiple options."""
+        from humanfriendly import parse_timespan
+
+        t = parse_timespan(time)
+        if t is None:
+            return await ctx.send("Invalid time format. Example: `1h`, `30m`, `1d`")
+
+        embed = discord.Embed(
+            title=f"{ctx.author} asked",
+            description=question, 
+            color=self.bot.color,
+        )
+        embed.set_footer(text=f"Poll created by {ctx.author}")
+        message = await ctx.send(embed=embed)
+        
+        # Add reactions
+        emojis = ["👍", "👎"]
+        await asyncio.gather(*[message.add_reaction(emoji) for emoji in emojis])
+
+        # Track votes
+        votes = {}
+        def check(reaction, user):
+            return user != self.bot.user and reaction.message.id == message.id and user != user.bot
+
+        try:
+            while True:
+                reaction, user = await self.bot.wait_for('reaction_add', timeout=t, check=check)
+                if user.id not in votes:
+                    votes[user.id] = reaction.emoji
+                else:
+                    # Remove subsequent reactions if user already voted
+                    await reaction.remove(user)
+                
+        except asyncio.TimeoutError:
+            # Time's up, tally the results
+            message = await ctx.channel.fetch_message(message.id)
+            if not message:
+                return
+
+            final_counts = {emoji: 0 for emoji in emojis}
+            for user_id, emoji in votes.items():
+                final_counts[emoji] += 1
+
+            embed = discord.Embed(
+                title=f"Poll Results: {question}",
+                color=self.bot.color,
+            )
+            for emoji, count in final_counts.items():
+                embed.add_field(name=emoji, value=count)
+            await message.reply(embed=embed)
 
 class ImagePaginationView(discord.ui.View):
     def __init__(self, user: discord.Member, embeds: list[discord.Embed]):
@@ -1276,7 +1461,6 @@ class ImagePaginationView(discord.ui.View):
         """Enable or disable buttons based on the current page."""
         self.previous_button.disabled = self.current_page == 0
         self.next_button.disabled = self.current_page == len(self.embeds) - 1
-
 
 
 

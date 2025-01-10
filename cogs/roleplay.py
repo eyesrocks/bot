@@ -1,4 +1,4 @@
-from discord import Embed, Member, ButtonStyle, Interaction
+from discord import Embed, Member, ButtonStyle, Interaction, app_commands
 from discord.ext.commands import Cog, command, Context
 from discord.ui import Button, View, button
 import aiohttp
@@ -6,6 +6,7 @@ from discord import File, Embed
 import os
 from random import choice
 from tool.greed import Greed
+
 
 class MarryView(View):
     def __init__(self, bot: Greed, ctx: Context, proposer: Member, proposee: Member):
@@ -95,6 +96,68 @@ class Roleplay(Cog):
 
         await ctx.send(embed=embed)
 
+    @app_commands.command(
+        name="kiss",
+        description="Kiss another user.",
+    )
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+    @app_commands.allowed_installs(users=True, guilds=True)
+    async def kiss_userapp(self, interaction: Interaction, user: Member) -> None:
+        ctx = await Context.from_interaction(interaction)
+        await self.kiss(ctx, user)
+
+    @app_commands.command(
+        name="hug",
+        description="Hug another user.",
+    )
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+    @app_commands.allowed_installs(users=True, guilds=True)
+    async def hug_userapp(self, interaction: Interaction, user: Member) -> None:
+        ctx = await Context.from_interaction(interaction)
+        await self.hug(ctx, user)
+
+    @app_commands.command(
+        name="smile",
+        description="Smile at another user.",
+    )
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+    @app_commands.allowed_installs(users=True, guilds=True)
+    async def smile_userapp(self, interaction: Interaction, user: Member) -> None:
+        ctx = await Context.from_interaction(interaction)
+        await self.smile(ctx, user)
+
+    @app_commands.command(
+        name="pat",
+        description="Pat another user.",
+    )
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+    @app_commands.allowed_installs(users=True, guilds=True)
+    async def pat_userapp(self, interaction: Interaction, user: Member) -> None:
+        ctx = await Context.from_interaction(interaction)
+        await self.pat(ctx, user)
+
+    @app_commands.command(
+        name="pout",
+        description="Pout at another user.",
+    )
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+    @app_commands.allowed_installs(users=True, guilds=True)
+    async def pout_userapp(self, interaction: Interaction, user: Member) -> None:
+        ctx = await Context.from_interaction(interaction)
+        await self.pout(ctx, user)
+
+    @app_commands.command(
+        name="nod",
+        description="Nod at another user.",
+    )
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+    @app_commands.allowed_installs(users=True, guilds=True)
+    async def nod_userapp(self, interaction: Interaction, user: Member) -> None:
+        ctx = await Context.from_interaction(interaction)
+        await self.nod(ctx, user)
+        
+
+
     @command(
         name="propose",
         aliases=["marry"],
@@ -154,6 +217,8 @@ class Roleplay(Cog):
 
         spouse_id = res['user1_id'] if res['user2_id'] == ctx.author.id else res['user2_id']
         spouse = ctx.guild.get_member(spouse_id)
+        if spouse is None:
+            return await ctx.fail("Your spouse is not in this server.")
         await ctx.normal(f"You are married to {spouse.mention}!")
 
     @command(
@@ -292,7 +357,7 @@ class Roleplay(Cog):
         await self.send(ctx, ctx.author, member, "slap", "slaps")
 
 
-    @command()
+    @command(name="fuck", brief="fuck another user (nsfw)",)
     async def fuck(self, ctx, *, member: Member) -> None:
         """NSFW command to send a random NSFW gif from a local folder."""
 

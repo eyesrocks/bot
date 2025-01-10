@@ -169,7 +169,7 @@ class ai(commands.Cog):
         self.ai = AI()
 
     async def is_premium_user(self, user_id: int) -> bool:
-        query = "SELECT user_id FROM premium_users WHERE user_id = $1"
+        query = "SELECT user_id FROM donators WHERE user_id = $1"
         return await self.bot.db.fetchrow(query, user_id) is not None
 
     def split_text(self, text: str, chunk_size: int = 1999):

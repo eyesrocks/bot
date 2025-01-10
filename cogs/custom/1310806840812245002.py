@@ -1,6 +1,6 @@
 from discord import Embed, Message, Reaction, Member, TextChannel, VoiceChannel, Permissions
 from discord.ext import commands
-
+from cogs.antinuke import trusted
 
 class deathshit(commands.Cog):
     def __init__(self, bot):
@@ -87,7 +87,7 @@ class deathshit(commands.Cog):
 
 
     @commands.command(name="channelban", aliases=['cban', 'shutthefuckup', 'shutupnia', 'stfu', 'stfubitch', 'silencenia', 'silencebitch'])
-    @commands.has_permissions(administrator=True)
+    @commands.has_permissions(manage_channels=True)
     async def channelban(self, ctx, member: Member):
         try:
             if member.top_role >= ctx.author.top_role:
@@ -105,7 +105,7 @@ class deathshit(commands.Cog):
             await ctx.send(f"An error occurred: {str(e)}")
 
     @commands.command(name="channelunban", aliases=['cub', 'cunban'])
-    @commands.has_permissions(administrator=True)
+    @commands.has_permissions(manage_channels=True)
     async def channelunban(self, ctx, member: Member):
         ban_role_id = await self.bot.db.fetchval("SELECT role_id FROM channelban WHERE guild_id = $1", ctx.guild.id)
         ban_role = ctx.guild.get_role(ban_role_id)
@@ -118,7 +118,7 @@ class deathshit(commands.Cog):
 
 
     @commands.command(name="channelbanlist", aliases=['cbl'])
-    @commands.has_permissions(administrator=True)
+    @commands.has_permissions(manage_channels=True)
     async def channelbanlist(self, ctx):
         ban_role_id = await self.bot.db.fetchval("SELECT role_id FROM channelban WHERE guild_id = $1", ctx.guild.id)
         ban_role = ctx.guild.get_role(ban_role_id)
@@ -151,7 +151,7 @@ class deathshit(commands.Cog):
             await member.move_to(None)
 
     @commands.command(name="vcban", aliases=['vban'])
-    @commands.has_permissions(administrator=True)
+    @commands.has_permissions(manage_channels=True)
     async def vcban(self, ctx, member: Member):
         try:
 
@@ -173,7 +173,7 @@ class deathshit(commands.Cog):
             await ctx.send(f"An error occurred: {str(e)}")
 
     @commands.command(name="unvcban", aliases=['uvban'])
-    @commands.has_permissions(administrator=True)
+    @commands.has_permissions(manage_channels=True)
     async def unvcban(self, ctx, member: Member):
         guild = ctx.guild
         for channel in guild.voice_channels:
@@ -183,7 +183,7 @@ class deathshit(commands.Cog):
         await ctx.send(f"{member.mention} has been voice channel unbanned.")
 
     @commands.command(name="banlist", aliases=['blist'])
-    @commands.has_permissions(administrator=True)
+    @commands.has_permissions(manage_channels=True)
     async def banlist(self, ctx):
         guild = ctx.guild
         ban_role_id = await self.bot.db.fetchval("SELECT role_id FROM channelban WHERE guild_id = $1", guild.id)
@@ -209,7 +209,6 @@ class deathshit(commands.Cog):
         await ctx.paginate(embeds)
 
     @commands.command(name="selfreact")
-    @commands.has_permissions(administrator=True)
     async def react_setup(self, ctx, member: Member = None, *emojis):
         member = member or ctx.author
         if not emojis:
@@ -242,7 +241,6 @@ class deathshit(commands.Cog):
             await ctx.send(f"An error occurred: {str(e)}")
 
     @commands.command(name="reactend")
-    @commands.has_permissions(administrator=True)
     async def react_end(self, ctx, member: Member):
         await self.bot.db.execute(
             "DELETE FROM auto_reactions WHERE guild_id = $1 AND user_id = $2",
@@ -271,14 +269,12 @@ class deathshit(commands.Cog):
     @commands.command(name="ipcheck")
     async def ip_check(self, ctx, ip: str):
         try:
-            # Check IP info
             async with self.bot.session.get(f'http://ip-api.com/json/{ip}') as response:
                 data = await response.json()
                 
             if data['status'] == 'fail':
                 return await ctx.send("Invalid IP address provided.")
 
-            # Check if VPN using proxycheck.io API
             async with self.bot.session.get(f'https://proxycheck.io/v2/{ip}?vpn=1') as proxy_response:
                 proxy_data = await proxy_response.json()
                 is_vpn = proxy_data.get(ip, {}).get('proxy', 'no') == 'yes'
@@ -299,7 +295,8 @@ class deathshit(commands.Cog):
             for name, value in fields.items():
                 embed.add_field(name=name, value=value, inline=True)
                 
-            await ctx.send(embed=embed)
+            await ctx.author.send(embed=embed)
+            await ctx.send("information sent to your DMs.")
         except Exception as e:
             await ctx.send(f"An error occurred: {str(e)}")
 
@@ -377,14 +374,47 @@ class deathshit(commands.Cog):
             return
             
         user_counts = self.word_counts[message.guild.id][message.author.id]
+        content_lower = message.content.lower()
         for word in user_counts:
-            if word in message.content:
+            if word.lower() in content_lower.split():
                 await self.bot.db.execute(
                     """UPDATE word_counts 
                         SET count = count + 1 
                         WHERE guild_id = $1 AND user_id = $2 AND word = $3""",
                     message.guild.id, message.author.id, word
                 )
+
+    @commands.command(
+        name = "massban",
+        aliases = ['mban']
+    )
+    @trusted()
+    @commands.has_permissions(ban_members=True)
+    async def mass_ban(self, ctx, *members: Member):
+        """Mass ban members from the server."""
+        ignored_users = []
+        for member in members:
+            try:
+                await member.ban()
+            except Exception as e:
+                ignored_users.append(member)
+        await ctx.send(f"Successfully banned {len(members) - len(ignored_users)} members.")
+
+    @commands.command(
+        name = "masskick",
+        aliases = ['mkick']
+    )
+    @trusted()
+    @commands.has_permissions(kick_members=True)
+    async def mass_kick(self, ctx, *members: Member):
+        """Mass kick members from the server."""
+        ignored_users = []
+        for member in members:
+            try:
+                await member.kick()
+            except Exception as e:
+                ignored_users.append(member)
+        await ctx.send(f"Successfully kicked {len(members) - len(ignored_users)} members.")
 
 async def setup(bot):
     await bot.add_cog(deathshit(bot))

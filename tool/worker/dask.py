@@ -42,7 +42,7 @@ async def start_dask(bot, address: str) -> distributed.Client:
                 asynchronous=True,
                 processes=True,
                 threads_per_worker=1,
-                n_workers=os.cpu_count(),
+                n_workers=5,
             ),
             direct_to_workers=True,
             asynchronous=True,

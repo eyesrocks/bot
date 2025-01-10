@@ -26,7 +26,7 @@ def generate_pie_chart(member_name: str, time_data: dict, avatar_b64: str) -> di
 
     # Pie chart data
     data = [seconds or 1, minutes or 1, hours or 1]
-    colors = ['#3C0061', '#E2B3FF', '#9D00FF']
+    colors = ['#7BB662', '#D61F1F', '#FFD301']
     labels = [f"{hours}h", f"{minutes}m", f"{seconds}s"]
 
     # Decode avatar from base64

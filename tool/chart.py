@@ -6,7 +6,7 @@ from typing import List, Union, Optional
 from discord import File, Embed  # type: ignore
 from datetime import datetime
 from tool.worker import offloaded
-
+from tool.greed import Greed
 
 def format_large(num: Union[int, float]) -> str:
     if str(num).startswith("-"):
@@ -85,7 +85,7 @@ def format_large(num: Union[int, float]) -> str:
 
 
 class EconomyCharts:
-    def __init__(self, bot):
+    def __init__(self, bot: Greed):
         self.bot = bot
 
     def format_large_number(self, number_str: Union[float, str, int]):

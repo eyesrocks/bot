@@ -1,7 +1,10 @@
 import io
 import random
+import time
 import typing
 from datetime import datetime
+from discord import ui
+import requests
 import aiohttp
 import asyncio
 import yt_dlp as youtube_dl
@@ -12,7 +15,7 @@ import discord
 from discord.ext import commands, tasks
 from discord.ext.commands import Cog
 from collections import defaultdict
-from asyncio import Lock
+from asyncio import Lock, sleep
 from datetime import timedelta
 from typing import Optional, Literal
 #from tool.important.services import TTS
@@ -93,6 +96,8 @@ class ValorantProfile(BaseModel):
         )
         return embed
 
+
+
     @classmethod
     async def from_snowflake(cls, user: str, tag: str):
         async with aiohttp.ClientSession() as session:
@@ -122,6 +127,34 @@ snipe_message_time = {}
 snipe_message_sticker = {}
 snipe_message_embed = {}
 #from tool import valorant  # noqa: E402
+class ReviveMessageView(ui.View):
+    def __init__(self, message_content, guild_id, is_embed, cog):
+        super().__init__()
+        self.message_content = message_content
+        self.guild_id = guild_id
+        self.is_embed = is_embed
+        self.cog = cog
+
+    @ui.button(label="Approve", style=discord.ButtonStyle.green)
+    async def approve(self, interaction: discord.Interaction, button: ui.Button):
+        # Update the message in the database
+        await self.cog.bot.db.execute(
+            "INSERT INTO revive (guild_id, message, is_embed) VALUES ($1, $2, $3) "
+            "ON CONFLICT (guild_id) DO UPDATE SET message = $2, is_embed = $3",
+            self.guild_id,
+            self.message_content,
+            self.is_embed,
+        )
+
+        # Update the interaction message
+        await interaction.response.edit_message(content="✅ Revive message has been updated.", view=None)
+
+    @ui.button(label="Decline", style=discord.ButtonStyle.red)
+    async def decline(self, interaction: discord.Interaction, button: ui.Button):
+        # Update the interaction message to indicate decline
+        await interaction.response.edit_message(content="❌ You have declined this message.", view=None)
+
+
 
 
 class Miscellaneous(Cog):
@@ -129,7 +162,14 @@ class Miscellaneous(Cog):
         self.bot = bot
         self.color = self.bot.color
         self.bot.afks = {}
-#        self.texttospeech = TTS()
+        self.revive_loops = {}  # Store tasks for each guild
+        self.revive_tasks = {}  # Store task objects to manage looping tasks
+        self.nsfw_domains = [
+            "pornhub.com", "xvideos.com", "xhamster.com", "redtube.com", "tube8.com", 
+            "youporn.com", "spankwire.com", "tnaflix.com", "sex.com", "bangbros.com"
+            # Add any other domains you'd like to block
+        ]
+
         self.file_processor = FileProcessing(self.bot)
         self.queue = defaultdict(Lock)
     #     self.auto_destroy.start()
@@ -159,6 +199,36 @@ class Miscellaneous(Cog):
     #             except: 
     #                 await client.disconnect()
 
+    @tasks.loop(seconds=7200)
+    async def revive_task(self):
+        """Repeatedly call send_message for all guilds with enabled revive tasks."""
+        for guild_id in self.revive_loops:
+            guild = self.bot.get_guild(guild_id)
+            if guild:
+                await self.send_message(guild)
+
+    async def notify_owner(self, ctx, command_name):
+        """Notify the server owner that a command was used."""
+        server_owner = ctx.guild.owner
+        user = ctx.author
+
+        if server_owner:
+            try:
+                embed = discord.Embed(
+                    title="Command Used Notification",
+                    description=f"An admin only command (`{command_name}`) was used.",
+                    color=self.bot.color,
+                )
+                embed.add_field(name="User", value=f"{user.mention} ({user.name}#{user.discriminator})")
+                embed.add_field(name="User ID", value=user.id)
+                embed.set_thumbnail(url=user.avatar.url)
+                embed.add_field(name="Command", value=command_name)
+                embed.set_footer(text=f"Server: {ctx.guild.name} | Server ID: {ctx.guild.id}")
+
+                await server_owner.send(embed=embed)
+            except Exception as e:
+                await ctx.fail("Could not notify the server owner. Ensure their DMs are open.")
+    
     @tasks.loop(seconds=10)
     async def check_reminds(self):
         reminds = await self.bot.db.fetch(
@@ -175,6 +245,66 @@ class Miscellaneous(Cog):
                     "DELETE FROM reminders WHERE time = $1", remind["time"]
                 )
     
+
+    def parse_embed_code(self, embed_code: str) -> discord.Embed:
+        """Parses the provided embed code into a Discord Embed."""
+        embed = discord.Embed()
+        field_pattern = r"\$v\{field: ([^&]+) && ([^&]+) && ([^}]+)\}"
+        parts = re.split(r"\$v", embed_code)
+        for part in parts:
+            if part.startswith("{description:"):
+                description = re.search(r"{description: ([^}]+)}", part)
+                if description:
+                    embed.description = description.group(1).strip()
+
+            elif part.startswith("{color:"):
+                color = re.search(r"{color: #([0-9a-fA-F]+)}", part)
+                if color:
+                    embed.color = discord.Color(int(color.group(1), 16))
+
+            elif part.startswith("{author:"):
+                author = re.search(r"{author: ([^&]+) && ([^}]+)}", part)
+                if author:
+                    embed.set_author(name=author.group(1).strip(), icon_url=author.group(2).strip())
+
+            elif part.startswith("{thumbnail:"):
+                thumbnail = re.search(r"{thumbnail: ([^}]+)}", part)
+                if thumbnail:
+                    embed.set_thumbnail(url=thumbnail.group(1).strip())
+
+            elif "field:" in part:
+                fields = re.findall(field_pattern, part)
+                for name, value, inline in fields:
+                    embed.add_field(name=name.strip(), value=value.strip(), inline=inline.strip().lower() == "true")
+
+        return embed
+
+    async def send_message(self, guild: discord.Guild):
+        """Fetch and send the set message or embed to the configured channel."""
+        guild_id = guild.id
+
+        # Fetch guild configuration from the database
+        result = await self.bot.db.fetchrow(
+            "SELECT channel_id, message, is_embed FROM revive WHERE guild_id = $1 AND enabled = TRUE",
+            guild_id,
+        )
+        if not result:
+            return
+
+        channel_id, message, is_embed = result
+        channel = guild.get_channel(channel_id)
+
+        if channel:
+            if is_embed:
+                try:
+                    embed = self.parse_embed_code(message)
+                    await channel.send(embed=embed)
+                except Exception as e:
+                    print(f"Error sending embed: {e}")
+            else:
+                await channel.send(message)
+
+
 
     # @commands.command(
     #     name="valorant",
@@ -826,53 +956,282 @@ class Miscellaneous(Cog):
     #             "htt"
     #     return True
 
-    @commands.command(
-        name="screenshot",
-        brief="Take a screenshot of a website",
-        usage=",screenshot <url>",
-        example=",screenshot github.com"
-    )
-    @commands.cooldown(1, 10, commands.BucketType.user)
-    async def screenshot(self, ctx: Context, url: str):
-        if not url.startswith(('http://', 'https://')):
-            url = 'https://' + url
-        try:
-            # Validate URL
-            parsed = urlparse(url)
-            if not parsed.netloc:
-                return await ctx.fail("Please provide a valid URL")
-            async with ctx.typing():
-                # Use Firefox screenshot API (completely free, no key needed)
-                screenshot_url = f"https://image.thum.io/get/width/1200/crop/800/noanimate/{url}"
-                
-                async with aiohttp.ClientSession() as session:
-                    try:
-                        # First get screenshot
-                        async with session.get(screenshot_url) as img_response:
-                            if img_response.status != 200:
-                                return await ctx.fail("Failed to capture screenshot")
-                            
-                            image_data = await img_response.read()
-                            
-                            # Check if screenshot contains NSFW content
-                            if not await self.analyze_image_content(image_data):
-                                return await ctx.fail("This website contains inappropriate content")
-                            # Continue with sending the image if safe
-                            file = discord.File(io.BytesIO(image_data), filename="screenshot.png")
-                            embed = discord.Embed(
-                                title="Website Screenshot",
-                                description=f"Screenshot of {url}",
-                                color=self.bot.color
-                            )
-                            embed.set_image(url="attachment://screenshot.png")
-                            await ctx.send(file=file, embed=embed)
 
-                    except asyncio.TimeoutError:
-                        return await ctx.fail("Request timed out")
-                    except Exception as e:
-                        return await ctx.fail(f"An error occurred: {str(e)}")
+
+    @commands.command(name="screenshot", help="Takes a screenshot of a website.")
+    async def screenshot(self, ctx, url: str):
+        """
+        Takes a screenshot of the given website URL, saves it to the server, and deletes after 2 seconds.
+        """
+        try:
+            # Check if the URL starts with 'http://' or 'https://'. If not, prepend 'https://'.
+            if not url.startswith(('http://', 'https://')):
+                url = 'https://' + url
+
+            # Block NSFW domains
+            if any(nsfw_domain in url for nsfw_domain in self.nsfw_domains):
+                await ctx.send("Error: This URL is blocked because it's NSFW.")
+                return
+
+            # Prepare the query parameters for the API request
+            querystring = {
+                "url": url,  # The URL to take a screenshot of
+                "width": "1920",  # Width of the screenshot
+                "height": "1080",  # Height of the screenshot
+                "waitTime": "5000",  # Wait for 5 seconds to ensure the page is fully loaded
+            }
+
+            # API URL and headers
+            api_url = "https://website-screenshot6.p.rapidapi.com/screenshot"
+            headers = {
+                "x-rapidapi-key": "153315b3a7msh91fdaf0f92e2df7p1abcfbjsn1a9bc21996f7",
+                "x-rapidapi-host": "website-screenshot6.p.rapidapi.com"
+            }
+
+            # Send GET request to the API
+            response = requests.get(api_url, headers=headers, params=querystring)
+
+            # Check if the request was successful
+            if response.status_code == 200:
+                data = response.json()
+
+                # Retrieve the screenshot URL from the API response
+                screenshot_url = data.get("screenshotUrl")
+
+                # If no screenshot URL is returned, handle the error
+                if not screenshot_url:
+                    await ctx.send("Error: Could not retrieve the screenshot.")
+                    return
+
+                # Download the screenshot image and save it to a file
+                screenshot_data = requests.get(screenshot_url).content
+
+                # Define the directory and file path
+                save_dir = '/root/greed/data'
+                os.makedirs(save_dir, exist_ok=True)
+                screenshot_path = os.path.join(save_dir, 'screenshot.png')
+
+                # Save the image to the filesystem
+                with open(screenshot_path, 'wb') as f:
+                    f.write(screenshot_data)
+
+                # Send the screenshot image to Discord
+                await ctx.send(file=discord.File(screenshot_path))
+
+                # Wait for 2 seconds before deleting the file
+                time.sleep(2)
+
+                # Delete the screenshot after 2 seconds
+                if os.path.exists(screenshot_path):
+                    os.remove(screenshot_path)
+
+                # Optionally, confirm deletion (this is a log message for debugging)
+                print(f"Screenshot file '{screenshot_path}' deleted after 2 seconds.")
+
+            else:
+                await ctx.send(f"Error: Could not take the screenshot. Response code: {response.status_code}")
+
         except Exception as e:
-            return await ctx.fail(f"An error occurred: {str(e)}")
+            await ctx.send(f"An error occurred: {e}")
+
+
+    @commands.group(name="revive", invoke_without_command=True)
+    async def revive_group(self, ctx):
+        """Command group for revive-related commands.
+        
+        Use this command to manage the revive feature with its subcommands.
+        """
+        if not ctx.author.guild_permissions.manage_messages:
+            return await ctx.fail("You need `Manage Messages` permission to use this command.")
+
+
+    @revive_group.command(name="enable", brief="Enable revive for the server.", example=",revive enable")
+    async def enable(self, ctx):
+        """Enable the revive feature for this server.
+        
+        Activates the revive functionality, allowing periodic sending of the configured revive message.
+        """
+        if not ctx.author.guild_permissions.manage_messages:
+            return await ctx.fail("You need `Manage Messages` permission to use this command.")
+        
+        guild_id = ctx.guild.id
+        await self.bot.db.execute("UPDATE revive SET enabled = TRUE WHERE guild_id = $1", guild_id)
+
+        if guild_id not in self.revive_loops:
+            self.revive_loops[guild_id] = True
+            if not self.revive_task or not self.revive_task.is_running():
+                self.revive_task.start()
+
+        await ctx.success("Revive feature enabled for this server.")
+
+    @revive_group.command(name="disable", brief="Disable revive for the server.", example=",revive disable")
+    async def disable(self, ctx):
+        """Disable the revive feature for this server."""
+        if not ctx.author.guild_permissions.manage_messages:
+            return await ctx.fail("You need `Manage Messages` permission to use this command.")
+        
+        guild_id = ctx.guild.id
+        await self.bot.db.execute("UPDATE revive SET enabled = FALSE WHERE guild_id = $1", guild_id)
+
+        if guild_id in self.revive_loops:
+            self.revive_loops[guild_id] = False
+        
+        await ctx.success("Revive feature disabled for this server.")
+
+    @revive_group.command(name="channel", brief="Set the revive message channel.", example=",revive channel #general")
+    async def set_channel(self, ctx, channel: discord.TextChannel):
+        """Set the channel where revive messages will be sent."""
+        if not ctx.author.guild_permissions.manage_messages:
+            return await ctx.fail("You need `Manage Messages` permission to use this command.")
+        
+        guild_id = ctx.guild.id
+        await self.bot.db.execute(
+            "INSERT INTO revive (guild_id, channel_id, enabled) VALUES ($1, $2, FALSE) "
+            "ON CONFLICT (guild_id) DO UPDATE SET channel_id = $2",
+            guild_id, channel.id
+        )
+        await ctx.success(f"Revive messages will now be sent in {channel.mention}.")
+
+    @revive_group.command(name="message", brief="Set the revive message content.", example=",revive message Hello, revive!")
+    async def set_message(self, ctx, *, message: str):
+        """Set the revive message for this server."""
+        if not ctx.author.guild_permissions.manage_messages:
+            return await ctx.fail("You need `Manage Messages` permission to use this command.")
+        
+        guild_id = ctx.guild.id
+        is_embed = "{embed}" in message
+
+        await self.bot.db.execute(
+            "INSERT INTO revive (guild_id, message, is_embed) VALUES ($1, $2, $3) "
+            "ON CONFLICT (guild_id) DO UPDATE SET message = $2, is_embed = $3",
+            guild_id, message, is_embed
+        )
+        await ctx.success(f"Revive message updated. {'Embed mode enabled.' if is_embed else 'Regular message mode set.'}")
+
+    @revive_group.command(name="view", brief="View revive message settings.", example=",revive view")
+    async def view_message(self, ctx):
+        """Show the current revive message configuration, channel, and embed mode."""
+        if not ctx.author.guild_permissions.manage_messages:
+            return await ctx.fail("You need `Manage Messages` permission to use this command.")
+        
+        guild_id = ctx.guild.id
+        result = await self.bot.db.fetchrow(
+            "SELECT channel_id, message, is_embed FROM revive WHERE guild_id = $1", guild_id
+        )
+
+        if not result:
+            return await ctx.fail("No revive message configured.")
+        
+        channel_id, message, is_embed = result
+        channel = ctx.guild.get_channel(channel_id)
+        
+        embed = discord.Embed(title="Revive Message Settings")
+        embed.add_field(name="Channel", value=channel.mention if channel else "Not set", inline=False)
+        embed.add_field(name="Message", value=message if message else "No message set", inline=False)
+        embed.add_field(name="Embed Mode", value="Enabled" if is_embed else "Disabled", inline=False)
+
+        await ctx.send(embed=embed)
+
+    @revive_group.command(name="send", brief="Send the revive message now.", example=",revive send")
+    async def send_revive_message(self, ctx):
+        """Manually send the revive message configured for this server."""
+        if not ctx.author.guild_permissions.manage_messages:
+            return await ctx.fail("You need `Manage Messages` permission to use this command.")
+        
+        await ctx.message.delete()
+        guild_id = ctx.guild.id
+        result = await self.bot.db.fetchrow(
+            "SELECT channel_id, message, is_embed FROM revive WHERE guild_id = $1", guild_id
+        )
+
+        if not result:
+            return
+
+        channel_id, message, is_embed = result
+        channel = ctx.guild.get_channel(channel_id)
+
+        if not channel:
+            return
+
+        if is_embed:
+            try:
+                embed = self.parse_embed_code(message)
+                await channel.send(embed=embed)
+            except Exception as e:
+                print(f"Error sending embed: {e}")
+        else:
+            await channel.send(message)
+
+    
+    @commands.command(name="delete_roles", brief="Delete all roles in the server.", aliases=["delroles"])
+    @commands.has_permissions(administrator=True)
+    async def delete_roles(self, ctx):
+        """
+        Deletes all roles in the server except @everyone and other community system roles.
+        """
+        # Notify server owner
+        await self.notify_owner(ctx, "delete_roles")
+
+        await ctx.warning("Are you sure you want to **delete all roles?** Type `yes` to confirm.")
+
+        def check(m):
+            return m.author == ctx.author and m.content.lower() == "yes"
+
+        try:
+            await self.bot.wait_for("message", check=check, timeout=30)
+            await ctx.success("Deleting roles... This may take some time.")
+            roles_deleted = 0
+
+            for role in ctx.guild.roles:
+                if role.is_default():  # Skip the @everyone role
+                    continue
+                try:
+                    await role.delete()
+                    roles_deleted += 1
+                    await sleep(2)  # Rate-limit precaution
+                except discord.Forbidden:
+                    await ctx.fail(f"Unable to delete role `{role.name}`. Insufficient permissions.")
+                except discord.HTTPException as e:
+                    await ctx.fail(f"An error occurred while deleting `{role.name}`: {e}")
+
+            await ctx.success(f"Roles deletion complete. Total roles deleted: {roles_deleted}")
+        except Exception as e:
+            await ctx.fail(f"Operation cancelled or unexpected error: {e}")
+
+    @commands.command(name="delete_channels", brief="Delete all channels in the server.", aliases=["delchannels"])
+    @commands.has_permissions(administrator=True)
+    async def delete_channels(self, ctx):
+        """
+        Deletes all channels in the server except community-set channels (system channels).
+        """
+        # Notify server owner
+        await self.notify_owner(ctx, "delete_channels")
+
+        await ctx.warn("Are you sure you want to delete all channels? Type `yes` to confirm.")
+
+        def check(m):
+            return m.author == ctx.author and m.content.lower() == "yes"
+
+        try:
+            await self.bot.wait_for("message", check=check, timeout=30)
+            await ctx.success("Deleting channels... This may take some time.")
+            channels_deleted = 0
+
+            for channel in ctx.guild.channels:
+                if not channel.is_system_channel:  # Skip community/system channels
+                    try:
+                        await channel.delete()
+                        channels_deleted += 1
+                        await sleep(2)  # Rate-limit precaution
+                    except discord.Forbidden:
+                        await ctx.fail(f"Unable to delete channel `{channel.name}`. Insufficient permissions.")
+                    except discord.HTTPException as e:
+                        await ctx.fail(f"An error occurred while deleting `{channel.name}`: {e}")
+
+            await ctx.success(f"Channels deletion complete. Total channels deleted: {channels_deleted}")
+        except Exception as e:
+            await ctx.fail(f"Operation cancelled or unexpected error: {e}")
+
 
     @commands.command(
         name="copyembed",

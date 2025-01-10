@@ -116,11 +116,24 @@ def ticket_exists():
             "SELECT * FROM tickets WHERE guild_id = $1", ctx.guild.id
         )
         if not check:
+            # Insert complete initial ticket data
             await ctx.bot.db.execute(
-                "INSERT INTO tickets (guild_id, channel_id) VALUES ($1, $2)", ctx.guild.id, ctx.channel.id
+                """INSERT INTO tickets (
+                    guild_id, 
+                    channel_id,
+                    category_id,
+                    support_id,
+                    open_embed,
+                    message_id
+                ) VALUES ($1, $2, $3, $4, $5, $6)""", 
+                ctx.guild.id, 
+                ctx.channel.id,
+                None,  # category_id
+                None,  # support_id
+                None,  # open_embed
+                None   # message_id
             )
         return True
-
     return check(predicate)
 
 
@@ -268,13 +281,25 @@ class OpenTicket(
             "SELECT * FROM tickets WHERE guild_id = $1", interaction.guild.id
         )
         if not check:
-            return await interaction.fail("Tickets module is disabled in this server")
-        if await interaction.client.db.fetchrow(
-            "SELECT * FROM opened_tickets WHERE guild_id = $1 AND guild_id = $2",
-            interaction.guild.id,
-            interaction.user.id,
-        ):
-            return await interaction.fail("You **already** have an opened ticket")
+            await interaction.client.db.execute(
+                """INSERT INTO tickets (
+                    guild_id,
+                    channel_id,
+                    category_id,
+                    support_id,
+                    open_embed,
+                    message_id
+                ) VALUES ($1, $2, $3, $4, $5, $6)""",
+                interaction.guild.id,
+                interaction.channel.id,
+                None,
+                None,
+                None,
+                None
+            )
+            check = await interaction.client.db.fetchrow(
+                "SELECT * FROM tickets WHERE guild_id = $1", interaction.guild.id
+            )
 
         results = await interaction.client.db.fetch(
             "SELECT * FROM ticket_topics WHERE guild_id = $1", interaction.guild.id
@@ -478,7 +503,6 @@ class Tickets(Cog):
         brief="Configure the tickets setup for your server",
         example=",ticket",
     )
-    @manage_ticket()
     @commands.bot_has_permissions(manage_channels=True)
     async def ticket(self, ctx):
         if ctx.invoked_subcommand is None:
@@ -814,3 +838,4 @@ class Tickets(Cog):
 
 async def setup(bot) -> None:
     return await bot.add_cog(Tickets(bot))
+

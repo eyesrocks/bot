@@ -11,11 +11,13 @@ from contextlib import suppress
 import asyncio
 from collections import defaultdict
 
+
 class Vanity(commands.Cog):
     def __init__(self, bot: Greed):
         self.bot = bot
         self.local_addr = "23.160.168.122"
         self.locks = defaultdict(asyncio.Lock)
+        self.notification_lock = asyncio.Lock()
 
     @commands.group(
         name="vanity",
@@ -45,13 +47,11 @@ class Vanity(commands.Cog):
          example=",vanity unset"
      )
     async def vanity_unset(self, ctx):
-         # Remove the entry for this guild
          result = await self.bot.db.execute(
              """DELETE FROM vanity WHERE guild_id = $1""",
              ctx.guild.id,
          )
          
-         # Check if a row was deleted
          if result == "DELETE 0":
              return await ctx.error("There is no **Vanity channel** set for this server.")
          
@@ -93,7 +93,7 @@ class Vanity(commands.Cog):
         await self.notify(
             guilds,
             channel_ids,
-            after.vanity_url_code,
+            before.vanity_url_code,
         )
 
     async def notify(self, guilds: list, channel_ids: list, vanity: str):
@@ -102,31 +102,25 @@ class Vanity(commands.Cog):
         """
         if not vanity or vanity.lower() == "none":
             return
+        
         msg = None
-#        for guild in guilds:
- #           msg = guild.get("message")
         message = (msg or f"Vanity **{vanity}** has been dropped").replace("{vanity}", vanity)
         embed = discord.Embed(
             title="New Vanity",
             description=message,
             color=self.bot.color,
         )
-        for channel in channel_ids:
-            await asyncio.sleep(0.01)
+
+        for channel_id in channel_ids:
             try:
-                await self.bot.send_raw(channel, embed = embed)
+                await self.bot.send_raw(channel_id, embed=embed)
+                await asyncio.sleep(0.5)
             except Exception:
                 pass
-        return
 
         try:
             data = {"method": "vanity_change", "vanity": vanity}
             return await self.bot.connection.inform(data, destinations=self.bot.ipc.sources)
-            await self.bot.ipc.roundtrip(
-                "send_message",
-                channel_id=channel_ids,
-                embed=embed.to_dict(),
-            )
         except Exception as e:
             logger.error(f"Failed to send vanity notification: {e}")
 

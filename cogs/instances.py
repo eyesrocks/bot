@@ -15,6 +15,7 @@ from loguru import logger
 from tool.greed import Greed
 
 
+
 class Instance(Greed):
     def __init__(self, config: dict, *args: Any, **kwargs: Any):
         super().__init__(config, *args, **kwargs)
@@ -31,41 +32,19 @@ class Instance(Greed):
         return await guild.leave()
 
     async def on_ready(self):
+        await self.setup_emojis()
         for guild in self.guilds:
             await self.on_guild_join(guild)
         return await super().on_ready()
 
     async def setup_hook(self) -> None:
-        try:
-            await self.setup_emojis()
-            
-            if data := await self.db.fetchrow(
-                """SELECT status_type, status_text FROM instances WHERE bot_id = $1""", 
-                self.user.id
-            ):
-                presence_kwargs = {"status": Status.idle} if data.status_type == 1 else {}
-                await self.change_presence(
-                    activity=Activity(
-                        name=data.status_text,
-                        type=data.status_type,
-                        url="https://twitch.tv/clock"
-                    ),
-                    **presence_kwargs
-                )
-            
-            await super().setup_connection(False)
+        if data := await self.db.fetchrow("""SELECT status_type, status_text FROM instances WHERE bot_id = $1""", self.user.id):
+            kwargs = {"status": Status.idle} if data.status_type == 1 else {}
+            await self.change_presence(activity = Activity(name=data.status_text, type=data.status_type, url="https://twitch.tv/clock"), **kwargs)
+        await super().setup_connection(False)
 
-            custom_cog_path = f"/root/greed/cogs/custom/{self.user.id}.py"
-            if os.path.exists(custom_cog_path):
-                try:
-                    await self.load_extension(f"cogs.custom.{self.user.id}")
-                    logger.info(f"Loaded custom cog for bot {self.user.id}")
-                except Exception as e:
-                    logger.error(f"Failed to load custom cog for bot {self.user.id}: {e}")
-
-        except Exception as e:
-            logger.error(f"Error in setup_hook for bot {self.user.id}: {e}")
-            raise
+        if os.path.exists(f"/root/greed/cogs/custom/{self.user.id}.py"):
+            await self.load_extension(f"cogs.custom.{self.user.id}")
 
     async def start(self, token: str, reconnect: bool = True) -> None:
         await super().login(token)
@@ -77,6 +56,7 @@ async def setup_connection(bot: Greed, instance: Instance) -> bool:
     instance.redis = bot.redis
     instance.cache = bot.cache
     return True
+
 
 @dataclass
 class TokenResponse:

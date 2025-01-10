@@ -66,6 +66,28 @@ class Owner(commands.Cog):
             """
         )
 
+        await self.bot.db.execute("""
+        CREATE TABLE IF NOT EXISTS antisr_guilds (
+            guild_id BIGINT PRIMARY KEY
+        );
+        """)
+
+        await self.bot.db.execute("""
+        CREATE TABLE IF NOT EXISTS antisr_users (
+            guild_id BIGINT,
+            user_id BIGINT,
+            PRIMARY KEY (guild_id, user_id)
+        );
+        """)
+
+        await self.bot.db.execute("""
+        CREATE TABLE IF NOT EXISTS antisr_ignores (
+            guild_id BIGINT,
+            target_id BIGINT,
+            is_role BOOLEAN,
+            PRIMARY KEY (guild_id, target_id)
+        );
+        """)
 
     def cog_unload(self):
         self.check_subs.cancel()
@@ -122,10 +144,11 @@ class Owner(commands.Cog):
         try:
             if not (guild := self.bot.get_guild(self.guild_id)):
                 return
-
-            basic = guild.get_role(1302817218110820352)
-            prime = guild.get_role(1310104324197580850)
-            if not (basic and prime): 
+            premium = guild.get_role(1305842894111768587)
+            basic = guild.get_role(1326913774686441543)
+            prime = guild.get_role(1326916553475883018)
+            plus = guild.get_role(1310104324197580850)
+            if not (basic and prime and premium and plus): 
                 logger.warning("Could not find subscription roles")
                 return
 
@@ -138,7 +161,7 @@ class Owner(commands.Cog):
                 [(owner,) for owner in self.bot.owner_ids]
             )
 
-            role_members = set(m.id for m in basic.members + prime.members)
+            role_members = set(m.id for m in basic.members + prime.members + premium.members + plus.members)
             await self.bot.db.executemany(
                 """
                 INSERT INTO donators (user_id, ts)
@@ -472,21 +495,6 @@ class Owner(commands.Cog):
         embed.add_field(name="Context", value=f"`{data.content}`", inline=False)
         return await ctx.send(embed=embed)
 
-    @commands.command(name="reset", description="reset term agreement process")
-    async def reset(self, ctx: Context, *, member: discord.Member = None):
-        if member:
-            if ctx.author.id not in self.bot.owner_ids:
-                return
-            await self.bot.db.execute(
-                """DELETE FROM terms_agreement WHERE user_id = $1""", member.id
-            )
-            return await ctx.success(
-                f" {member.mention}'s **Agreement policy** has been **reset**"
-            )
-        await self.bot.db.execute(
-            "DELETE FROM terms_agreement WHERE user_id = $1", ctx.author.id
-        )
-        return await ctx.success("**Agreement policy** has been **reset**")
 
     @commands.command(name="restart", hidden=True)
     @commands.is_owner()
@@ -1017,6 +1025,17 @@ class Owner(commands.Cog):
 
         except TimeoutError:
             await ctx.warning("You took too long to respond. Please try the command again.")
+
+    @commands.command(name="sync", hidden=True)
+    @commands.is_owner()
+    async def sync(self, ctx):
+        await self.check_subs()
+        await self.check_boosts()
+        await self.bot.sync_all()
+        await ctx.success("Synced boosters, donators, and all servers to their shards")
+
+
+ 
 
 async def setup(bot):
     await bot.add_cog(Owner(bot))

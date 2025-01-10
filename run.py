@@ -24,8 +24,8 @@ if __name__ == "__main__":
     ips = ["23.160.168.122", "23.160.168.124", "23.160.168.125"]
 #    response = requests.get('https://discord.com/api/v10/gateway/bot', headers=headers)
   #  data = response.json()
-    shard_count = 20
-    per_cluster = 7
+    shard_count = 26
+    per_cluster = 9
     shards = [i for i in range(shard_count)]
     shard_chunks = chunk_list(shards, per_cluster)
     shard_array = shard_chunks[cluster_id - 1 if cluster_id > 0 else 0]

@@ -12,7 +12,7 @@ import humanfriendly
 from discord.ext import commands
 from discord.ext.commands import Cog, CommandError
 from contextlib import suppress
-from discord import NotFound, Thread
+from discord import Member, Embed, NotFound, Thread, User
 from collections import defaultdict
 from typing import Union, List, Type, Optional, Callable, List, Dict, Any
 from tool.important import Context  # type: ignore
@@ -36,7 +36,7 @@ from enum import Enum, auto
 from pydantic import BaseModel
 import uuid
 from asyncpg import exceptions
-
+from tool.important.subclasses.parser import EmbedConverter
 
 class ModerationStatistics(BaseModel):
     bans: Optional[int] = 0
@@ -211,6 +211,15 @@ class Moderation(Cog):
             )"""
         )
 
+    async def invoke_msg(self, ctx: Context, member: Union[User, Member], message: Optional[discord.Message] = None):
+        """Send a custom invoke message if configured, return True if sent, False otherwise"""
+        if not (msg := await self.bot.db.fetchval("""SELECT message FROM invoke WHERE guild_id = $1 AND cmd = $2""", ctx.guild.id, ctx.command.qualified_name.lower())):
+            return False
+        
+        kw = {"message": message} if message else {}
+        await self.bot.send_embed(ctx.channel, msg, user=member, **kw)
+        return True
+
     async def get_int(self, string: str):
         t = ""
         for s in string:
@@ -308,6 +317,7 @@ class Moderation(Cog):
                             description=f"Progress: {processed}/{len(members)} members processed...",
                         )
                     )
+                
 
             await message.edit(
                 embed=discord.Embed(
@@ -397,6 +407,22 @@ class Moderation(Cog):
         return await ctx.success(
             f"Users will now have to wait **{seconds} seconds** to **send messages** {f'for **{tf}**' if timeframe else ''}"
         )
+
+    @commands.command(name = "invoke", brief = "set or clear an invoke message for a command", example = ",invoke ban {embed}{description: bye {user.mention}}\n,invoke ban clear")
+    @commands.has_permissions(manage_guild = True)
+    async def invoke(self, ctx: Context, command: str, *, option: str):
+        if not (command := self.bot.get_command(command)):
+            raise commands.CommandError("command not found")
+        command = command.qualified_name.lower()
+        if command.lower() not in ("ban", "unban", "kick", "timeout", "untimeout", "jail", "unjail"):
+            raise commands.CommandError("that is not a valid moderation command")
+        if option.lower() in ("remove", "clear", "cl", "reset", "delete", "del"):
+            await self.bot.db.execute("""DELETE FROM invoke WHERE guild_id = $1 AND cmd = $2""", ctx.guild.id, command)
+            return await ctx.success(f"successfully cleared the invoke message for {command}")
+        else:
+            await EmbedConverter().convert(ctx, option)
+            await self.bot.db.execute("""INSERT INTO invoke (guild_id, cmd, message) VALUES($1, $2, $3) ON CONFLICT(guild_id, cmd) DO UPDATE SET message = excluded.message""", ctx.guild.id, command, option)
+            return await ctx.success(f"successfully set the invoke message for {command}")
 
     async def setup_mute_roles(self, ctx: Context):
         rmute = discord.PermissionOverwrite(
@@ -1377,6 +1403,9 @@ class Moderation(Cog):
     ):
         if not (r := await self.bot.hierarchy(ctx, user)):
             return r
+        user_ids = await self.bot.db.fetchval("""SELECT user_ids FROM protected WHERE guild_id = $1""", ctx.guild.id) or []
+        if user.id in user_ids:
+            raise CommandError(f"You cannot **ban** {user.mention} as they are **protected**")
         if isinstance(user, discord.Member):
             if user.premium_since:
                 message = await ctx.send(
@@ -1401,22 +1430,25 @@ class Moderation(Cog):
                     await ctx.guild.ban(user, reason=reason)
                     await self.moderator_logs(ctx, f"banned **{user.name}**")
                     await self.store_statistics(ctx, ctx.author)
-                    return await message.edit(
-                        embed=discord.Embed(
+                    
+                    if not await self.invoke_msg(ctx, user, message):
+                        await message.edit(embed=discord.Embed(
                             description=f"{ctx.author.mention}: {user.mention} has been **Banned**",
                             color=self.bot.color,
-                        )
-                    )
+                        ))
+                    return
         try:
             await ctx.guild.ban(user, reason=f"{reason} | {ctx.author.id}")
             await self.store_statistics(ctx, ctx.author, True)
-            await ctx.success(f"{user.mention} has been **Banned**")
+            
+            if not await self.invoke_msg(ctx, user):
+                await ctx.success(f"{user.mention} has been **Banned**")
+            return
         except discord.Forbidden:
             return await ctx.warning(
                 "I don't have the **necessary permissions** to ban that member."
             )
         except discord.NotFound:
-            await ctx.fail(f"{user.name} is already **banned** from the server.")
             return await ctx.fail(f"{user.name} is already **banned** from the server.")
 
     async def do_unban(self, ctx, u: Union[discord.Member, discord.User, str]):
@@ -1436,37 +1468,53 @@ class Moderation(Cog):
     @commands.command(name="unban", brief="Unban a banned user from the guild")
     @commands.has_permissions(ban_members=True)
     @commands.bot_has_permissions(ban_members=True)
-    async def unban_member(self, ctx, user_id: Union[int, str]):
-        guild = ctx.guild
+    async def unban_member(self, ctx, *, user: Union[discord.User, int, str]):
         try:
-            if isinstance(user_id, int):
-                banned_entry = await guild.fetch_ban(discord.Object(id=user_id))
-                if banned_entry:
-                    await guild.unban(banned_entry.user)
+            # Handle user mention or ID string
+            if isinstance(user, str):
+                if user.isdigit():
+                    user = int(user)
+                elif '<@' in user:
+                    user = int(user.replace('<@', '').replace('>', '').replace('!', ''))
+
+            # Get list of banned users
+            banned_users = [ban.user async for ban in ctx.guild.bans()]
+
+            if isinstance(user, int):
+                # Search by ID
+                banned_user = discord.utils.get(banned_users, id=user)
+                if banned_user:
+                    await ctx.guild.unban(banned_user)
                     await self.store_statistics(ctx, ctx.author)
-                    await ctx.success(
-                        f"{banned_entry.user.mention} has been **unbanned**"
-                    )
-                else:
-                    return await ctx.fail("That User is **not banned**")
+                    if not await self.invoke_msg(ctx, banned_user):
+                        return await ctx.success(f"{banned_user.mention} has been **unbanned**")
+                    return
+            elif isinstance(user, discord.User):
+                # Direct user object
+                if user in banned_users:
+                    await ctx.guild.unban(user)
+                    await self.store_statistics(ctx, ctx.author)
+                    if not await self.invoke_msg(ctx, user):
+                        return await ctx.success(f"{user.mention} has been **unbanned**")
+                    return
             else:
-                banned_entry = await self.do_unban(ctx, user_id)
-                await self.store_statistics(ctx, ctx.author)
-                await ctx.success(f"`{user_id}` **user** has been **unbanned**")
+                # Search by username
+                banned_user = discord.utils.get(banned_users, name=user)
+                if banned_user:
+                    await ctx.guild.unban(banned_user)
+                    await self.store_statistics(ctx, ctx.author)
+                    if not await self.invoke_msg(ctx, banned_user):
+                        return await ctx.success(f"{banned_user.mention} has been **unbanned**")
+                    return
+
+            return await ctx.fail("That user is not banned")
+
         except discord.Forbidden:
-            return await ctx.warning(
-                "I don't have the **necessary permissions** to **unban** members."
-            )
-            raise InvalidError()
+            return await ctx.fail("I don't have the **necessary permissions** to unban")
         except discord.NotFound:
-            return await ctx.fail("That User is **not banned**")
-        try:
-            await self.store_statistics(ctx, ctx.author)
-            return await self.moderator_logs(
-                ctx, f"unbanned **{banned_entry.user.name}**"
-            )
-        except Exception:
-            pass
+            return await ctx.fail("That user was not found")
+        except Exception as e:
+            return await ctx.fail(f"An error occurred: {str(e)}")
 
     @commands.command(
         name="kick", aliases=["deport"], brief="Kick a user from the guild"
@@ -1476,7 +1524,9 @@ class Moderation(Cog):
     async def kick_member(self, ctx, user: discord.Member):
         if not (r := await self.bot.hierarchy(ctx, user)):
             return r
-
+        user_ids = await self.bot.db.fetchval("""SELECT user_ids FROM protected WHERE guild_id = $1""", ctx.guild.id) or []
+        if user.id in user_ids:
+            raise CommandError(f"You cannot **kick** {user.mention} as they are **protected**")
         if user.premium_since:
             message = await ctx.send(
                 embed=discord.Embed(
@@ -1502,16 +1552,20 @@ class Moderation(Cog):
                 )
                 await self.moderator_logs(ctx, f"kicked **{user.name}**")
                 await self.store_statistics(ctx, ctx.author)
-                return await message.edit(
-                    embed=discord.Embed(
+                
+                if not await self.invoke_msg(ctx, user):
+                    await message.edit(embed=discord.Embed(
                         description=f"{ctx.author.mention}: **kicked** {user.mention}",
                         color=self.bot.color,
-                    )
-                )
+                    ))
+                return
         try:
             await ctx.guild.kick(user, reason=f"invoked by author | {ctx.author.id}")
             await self.store_statistics(ctx, ctx.author)
-            await ctx.success(f"**kicked** {user.mention}")
+            
+            if not await self.invoke_msg(ctx, user):
+                await ctx.success(f"**kicked** {user.mention}")
+            return
         except discord.Forbidden:
             await ctx.warning(
                 "I don't have the **necessary permissions** to kick that member."
@@ -1588,6 +1642,9 @@ class Moderation(Cog):
     @commands.bot_has_permissions(moderate_members=True)
     @commands.has_permissions(manage_roles=True)
     async def timeout(self, ctx, member: discord.Member, *, time: str = "20m"):
+        user_ids = await self.bot.db.fetchval("""SELECT user_ids FROM protected WHERE guild_id = $1""", ctx.guild.id) or []
+        if user.id in user_ids:
+            raise CommandError(f"You cannot **mute** {member.mention} as they are **protected**")
         if not (r := await self.bot.hierarchy(ctx, member)):
             return r
         else:
@@ -1611,6 +1668,7 @@ class Moderation(Cog):
             )
             await self.store_statistics(ctx, ctx.author)
             datetime.datetime.now() + datetime.timedelta(seconds=converted)  # type: ignore
+            if kwargs := await self.invoke_msg(ctx, member): return
             await ctx.success(f"{member.mention} has been **muted** for **{tf}**")
 
     async def do_jail(self, ctx: Context, member: discord.Member):
@@ -1796,7 +1854,9 @@ class Moderation(Cog):
     async def jail(self, ctx: Context, *, member: Member):
         if not (r := await self.bot.hierarchy(ctx, member)):
             return r
-
+        user_ids = await self.bot.db.fetchval("""SELECT user_ids FROM protected WHERE guild_id = $1""", ctx.guild.id) or []
+        if member.id in user_ids:
+            raise CommandError(f"You cannot **jail** {member.mention} as they are **protected**")
         jail_data = await self.bot.db.fetchrow(
             """SELECT role_id FROM jail_config WHERE guild_id = $1""", ctx.guild.id
         )
@@ -1816,6 +1876,7 @@ class Moderation(Cog):
             return await ctx.fail(f"{member.mention} is already **jailed**")
         await self.do_jail(ctx, member)
         await self.store_statistics(ctx, ctx.author)
+        if kwargs := await self.invoke_msg(ctx, member): return
         await ctx.success(f"{member.mention} has been **jailed**")
         return
 
@@ -1994,6 +2055,28 @@ class Moderation(Cog):
             await channel.delete(reason=f"Moderation Reset by {ctx.author.name}")
         return await ctx.success("**Jail and logs** setup has been **reset**")
 
+    @commands.group(name = "protect", aliases = ["protected"], brief = "protect a user from being punished using the bot", invoke_without_command = True)
+    @commands.has_permissions(administrator = True)
+    async def protect(self, ctx: Context, *, user: Union[User, Member]):
+        user_ids = await self.bot.db.fetchval("""SELECT user_ids FROM protected WHERE guild_id = $1""", ctx.guild.id) or []
+        if user.id in user_ids:
+            user_ids.remove(user.id)
+            message = f"Removed **{str(user)}** from the protected list"
+        else:
+            user_ids.append(user.id)
+            message = f"Added **{str(user)}** to the protected list"
+        await self.bot.db.execute("""INSERT INTO protected (guild_id, user_ids) VALUES($1, $2) ON CONFLICT(guild_id) DO UPDATE SET user_ids = excluded.user_ids""", ctx.guild.id, user_ids)
+        return await ctx.success(message)
+    
+    @protect.command(name = "list", brief = "view the protected users")
+    @commands.has_permissions(administrator = True)
+    async def protect_list(self, ctx: Context):
+        if not (user_ids := await self.bot.db.fetchval("""SELECT user_ids FROM protected WHERE guild_id = $1""", ctx.guild.id)):
+            raise CommandError("No users have been **protected**")
+        rows = [f"`{i}` <@!{user_id}" for i, user_id in enumerate(user_ids, start = 1)]
+        return await self.bot.dummy_paginator(ctx, discord.Embed(title="protected members", color=self.bot.color), rows, type="members")
+
+
     @commands.command(name="jailed", brief="show jailed members", example=",jailed")
     @commands.has_permissions(moderate_members=True)
     @commands.bot_has_permissions(moderate_members=True)
@@ -2030,6 +2113,7 @@ class Moderation(Cog):
     async def unjail(self, ctx: Context, *, member: Member):
         await self.do_unjail(ctx, member)
         await self.store_statistics(ctx, ctx.author)
+        if kwargs := await self.invoke_msg(ctx, member): return
         return await ctx.success(f"unjailed {member.mention}")
 
     @unjail.command(
@@ -2069,6 +2153,7 @@ class Moderation(Cog):
             return
         await member.edit(timed_out_until=None)
         await self.store_statistics(ctx, ctx.author)
+        if kwargs := await self.invoke_msg(ctx, member): return
         await ctx.success(f"{member.mention} has been **unmuted**.")
         await self.moderator_logs(ctx, f"unmuted **{member.name}**")
 
@@ -2307,11 +2392,14 @@ class Moderation(Cog):
     @commands.command(
         name="strip",
         aliases=["stripstaff"],
-        brief="Remove all roles from a user in a guild",
+        brief="Remove moderation roles from a user in a guild",
     )
     @commands.has_permissions(manage_roles=True)
     @commands.bot_has_permissions(administrator=True)
     async def strip(self, ctx: Context, *, member: discord.Member):
+        user_ids = await self.bot.db.fetchval("""SELECT user_ids FROM protected WHERE guild_id = $1""", ctx.guild.id) or []
+        if member.id in user_ids:
+            raise CommandError(f"You cannot **strip** {member.mention} as they are **protected**")
         if (
             member.top_role > ctx.author.top_role
             and ctx.author.id != ctx.guild.owner_id
@@ -2322,38 +2410,52 @@ class Moderation(Cog):
             and not ctx.author.top_role > member.top_role
         ):
             return await ctx.fail(f"you couldn't strip {member.mention}")
-        if len(member.roles) > 0:
-            roles = [
-                role
-                for role in member.roles
-                if role != ctx.guild.premium_subscriber_role
-                and role != ctx.guild.default_role
-            ]
-            roles = [
-                r.id
-                for r in roles
-                if r < ctx.author.top_role and r != ctx.author.top_role
-            ]
-            if len(roles) == 0:
-                return await ctx.fail(f"you couldn't strip {member.mention}")
-            await self.bot.redis.set(
-                f"r-{ctx.guild.id}-{member.id}", orjson.dumps(roles), ex=9000
+
+        # Get roles with mod permissions
+        mod_roles = [
+            role for role in member.roles
+            if role != ctx.guild.premium_subscriber_role 
+            and role != ctx.guild.default_role
+            and (
+                role.permissions.kick_members 
+                or role.permissions.ban_members
+                or role.permissions.manage_messages
+                or role.permissions.manage_roles
+                or role.permissions.administrator
+                or role.permissions.manage_guild
+                or role.permissions.manage_channels
+                or role.permissions.manage_webhooks
+                or role.permissions.manage_threads
+                or role.permissions.manage_events
+                or role.permissions.manage_nicknames
+                or role.permissions.manage_roles
+                or role.permissions.view_audit_log
+                or role.permissions.manage_emojis
             )
-            await member.remove_roles(
-                *[
-                    r
-                    for r in member.roles
-                    if r != ctx.guild.premium_subscriber_role
-                    and r != ctx.guild.default_role
-                ],
-                atomic=False,
-                reason=f"invoked by author | {ctx.author.id}",
-            )
-            return await ctx.success(
-                f"**Stripped** `{len(roles)}` roles from {member.mention}"
-            )
-        else:
-            return await ctx.fail(f"{member.mention} has **no roles**")
+            and role < ctx.author.top_role
+        ]
+
+        if not mod_roles:
+            return await ctx.fail(f"{member.mention} has no moderation roles")
+
+        # Store roles for potential restoration
+        role_ids = [r.id for r in mod_roles]
+        await self.bot.redis.set(
+            f"r-{ctx.guild.id}-{member.id}", 
+            orjson.dumps(role_ids), 
+            ex=9000
+        )
+
+        # Remove the roles
+        await member.remove_roles(
+            *mod_roles,
+            atomic=False,
+            reason=f"mod roles stripped by {ctx.author}"
+        )
+
+        return await ctx.success(
+            f"**Stripped** `{len(mod_roles)}` moderation roles from {member.mention}"
+        )
 
     @commands.group(
         name="command", brief="Group for command management", example=",command"
@@ -2387,7 +2489,7 @@ class Moderation(Cog):
                 )
                 or "[]"
             )
-            if channel := await ctx.parameters.get("channel"):
+            if channel := ctx.parameters.get("channel"):
                 data.append(channel.id)
             await self.bot.db.execute(
                 """INSERT INTO disabled_commands (guild_id, command, channels) VALUES($1,$2,$3) ON CONFLICT(guild_id, command) DO UPDATE SET channels = excluded.channels""",

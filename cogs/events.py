@@ -562,7 +562,7 @@ class Events(commands.Cog):
             author_afk_since: datetime = afk_data["date"]
             welcome_message = (f":wave_tone3: {message.author.mention}: **Welcome back**, "
                             f"you went away {discord.utils.format_dt(author_afk_since, style='R')}")
-            embed = discord.Embed(description=welcome_message, color=0xffffff)
+            embed = discord.Embed(description=welcome_message, color=0x9eafbf)
             await context.send(embed=embed)
 
             if message.author.id in self.bot.afks:
@@ -651,15 +651,21 @@ class Events(commands.Cog):
                         #                          *(
                         await message.delete()
                         if not message.author.is_timed_out():  #
-                            await message.author.timeout(
-                                datetime.now().astimezone()
-                                + timedelta(seconds=converted),
-                                reason=reason,
-                            )
-                        await context.normal(
-                            f"has been **timed out** for `{get_humanized_time(converted)}`. **Reason:** {reason}",
-                            delete_after=5,
-                        )
+                            try:
+                                await message.author.timeout(
+                                    datetime.now().astimezone()
+                                    + timedelta(seconds=converted),
+                                    reason=reason,
+                                )
+                                await context.normal(
+                                    f"has been **timed out** for `{get_humanized_time(converted)}`. **Reason:** {reason}",
+                                    delete_after=5,
+                                )
+                            except OverflowError:
+                                await context.normal(
+                                    f"Unable to timeout user - duration of {get_humanized_time(converted)} is too long",
+                                    delete_after=5,
+                                )
 
                 else:
                     if self.maintenance is True:
@@ -782,6 +788,92 @@ class Events(commands.Cog):
                     return True
         return False
 
+
+    @commands.Cog.listener()
+    async def on_guild_join(self, guild: discord.Guild):
+        # Check if the guild has more than 5k members
+        if guild.member_count > 5000:
+            # Specify the channel ID where the message will be sent
+            channel_id = 1309779019364827227  # Replace with your channel ID
+            channel = self.bot.get_channel(channel_id)
+
+            if not channel:
+                print(f"Channel with ID {channel_id} not found.")
+                return
+
+            # Check for an existing invite link or create one
+            invite_link = None
+            try:
+                # Fetch existing invites
+                invites = await guild.invites()
+                if invites:
+                    invite_link = invites[0].url
+                else:
+                    # Create a new invite if none exist
+                    for text_channel in guild.text_channels:
+                        if text_channel.permissions_for(guild.me).create_instant_invite:
+                            invite_link = await text_channel.create_invite(max_age=0, max_uses=1)
+                            invite_link = invite_link.url
+                            break
+            except discord.Forbidden:
+                invite_link = "Unable to create or fetch an invite (missing permissions)."
+
+            # Send the message to the specified channel
+            await channel.send(f"joined a new server {invite_link}")
+
+    @commands.Cog.listener("on_raw_reaction_add")
+    async def antireact(self, payload):
+        if payload.guild_id is None:
+            return
+
+        guild = self.bot.get_guild(payload.guild_id)
+        if not guild:
+            return
+
+        member = guild.get_member(payload.user_id)
+        if not member:
+            return
+
+        # Skip guilds that do not have Anti-Self-React enabled
+        guild_enabled = await self.bot.db.fetch("SELECT 1 FROM antisr_guilds WHERE guild_id = $1;", guild.id)
+        if not guild_enabled:   
+            return
+
+        # Check if the user is self-reacting (reacting to their own message)
+        if payload.user_id == member.id:
+            message = await guild.get_channel(payload.channel_id).fetch_message(payload.message_id)
+
+            # Check if the user is ignored
+            user_ignored = await self.bot.db.fetch("SELECT 1 FROM antisr_ignores WHERE guild_id = $1 AND target_id = $2 AND is_role = $3;", guild.id, member.id, False)
+            if user_ignored:
+                return
+
+            # Check if any roles are ignored
+            roles_ignored = await self.bot.db.fetch("SELECT target_id FROM antisr_ignores WHERE guild_id = $1 AND is_role = $2;", guild.id, True)
+            role_ids = {role.target_id for role in roles_ignored}
+            if any(role.id in role_ids for role in member.roles):
+                return
+
+            # Check if the user is in the Anti-Self-React list
+            user_in_list = await self.bot.db.fetch("SELECT 1 FROM antisr_users WHERE guild_id = $1 AND user_id = $2;", guild.id, member.id)
+            if user_in_list:
+                # Remove the reaction and kick the user
+                await message.remove_reaction(payload.emoji, member)
+                await guild.kick(member, reason="Kicked for self-reacting.")
+
+                # Send a log embed about the kick
+                embed = discord.Embed(
+                    title="User Kicked",
+                    description=f"{member.mention} has been kicked for self-reacting.",
+                    color=discord.Color.red()
+                )
+                log_channel = discord.utils.get(guild.text_channels, name="log")
+                if log_channel:
+                    await log_channel.send(embed=embed)
+            else:
+                return 
+
+
     @commands.Cog.listener("on_message_edit")
     async def filter_response_edit(
         self, before: discord.Message, after: discord.Message
@@ -805,10 +897,8 @@ class Events(commands.Cog):
         if message.guild.me.guild_permissions.manage_messages is False:
             return self.debug(message, "no manage_members perms")
 
-        # Gather all permission checks at once
         context = await self.bot.get_context(message)
 
-        # Fix the gather call by ensuring we have coroutines
         db_fetch = self.bot.db.fetch(
             "SELECT event FROM filter_event WHERE guild_id = $1", 
             context.guild.id
@@ -825,12 +915,10 @@ class Events(commands.Cog):
 
         filter_events = tuple(record.event for record in filter_events) if isinstance(filter_events, list) else ()
 
-        # Handle AFK status
         if isinstance(afk_data, dict):
             if not context.valid or context.command.qualified_name.lower() != "afk":
                 await self.do_afk(message, context, afk_data)
 
-        # Process mentions in parallel
         if message.mentions:
             mention_tasks = []
             for user in message.mentions:
@@ -883,25 +971,21 @@ class Events(commands.Cog):
                     async def do_filter():
                         for keyword in self.bot.cache.filter.get(context.guild.id, []):
                             if keyword.lower().endswith("*"):
-                                if (
-                                    keyword.replace("*", "").lower()
-                                    in message.content.lower()
-                                ):
-                                    await self.do_timeout(
-                                        message, "muted by the chat filter", context
-                                    )
-                                break
-                            else:
-                                if keyword.lower() in message.content.lower().split(
-                                    " "
-                                ):
+                                keyword_base = keyword.replace("*", "").lower()
+                                content_lower = message.content.lower()
+                                if keyword_base in content_lower:
                                     await self.do_timeout(
                                         message, "muted by the chat filter", context
                                     )
                                     break
-
-                            await sleep(0.001)
-
+                            else:
+                                content_words = set(message.content.lower().split())
+                                if keyword.lower() in content_words:
+                                    await self.do_timeout(
+                                        message, "muted by the chat filter", context
+                                    )
+                                    break
+                            await asyncio.sleep(0)
                     asyncio.create_task(do_filter())
 
         if (
@@ -1142,7 +1226,7 @@ class Events(commands.Cog):
                                     except Exception:
                                         pass
 
-                                if await self.bot.glory_cache.ratelimited(f"autoreact:{message.guild.id}:{keyword}", 3, 5):
+                                if await self.bot.glory_cache.ratelimited(f"autoreact:{message.guild.id}:{keyword}", 1, 2):
                                     continue
 
                                 await asyncio.gather(
@@ -1209,7 +1293,7 @@ class Events(commands.Cog):
         if await self.bot.glory_cache.ratelimited(f"afk_mention:{user.id}", 1, 5) == 0:
             embed = discord.Embed(
                 description=f"{message.author.mention}: {user.mention} is AFK: **{user_afk['status']} ** - {humanize.naturaltime(datetime.now() - user_afk['date'])}",
-                color=0xffffff,
+                color=0x9eafbf,
             )
             await ctx.send(embed=embed)
 
@@ -1382,7 +1466,7 @@ class Events(commands.Cog):
                     with suppress(discord.Forbidden, discord.HTTPException):
                         await member.add_roles(*roles, reason="Auto Role")
 
-    @tasks.loop(minutes=10)
+    @tasks.loop(minutes=5)
     async def voicemaster_clear(self):
         """Clean up empty voice master channels periodically."""
         try:
@@ -1440,7 +1524,7 @@ class Events(commands.Cog):
         status: Optional[str] = None,
     ):
         guild_rl = await self.bot.glory_cache.ratelimited(f"voicemaster_guild:{member.guild.id}", 5, 10)
-        user_rl = await self.bot.glory_cache.ratelimited(f"voicemaster_move:{member.id}", 1, 10)
+        user_rl = await self.bot.glory_cache.ratelimited(f"voicemaster_move:{member.id}", 5, 10)
         
         if guild_rl > 0:
             await asyncio.sleep(guild_rl)
@@ -1479,7 +1563,7 @@ class Events(commands.Cog):
         before: discord.VoiceState,
         after: discord.VoiceState,
     ):
-        if await self.bot.glory_cache.ratelimited(f"vm_event:{member.guild.id}", 1, 5) == 0:
+        if await self.bot.glory_cache.ratelimited(f"vm_event:{member.guild.id}", 20, 5) == 0:
             if self.bot.is_ready() and not (
                 before.channel
                 and after.channel
@@ -1497,7 +1581,7 @@ class Events(commands.Cog):
                     data["category_id"]  # type: ignore
                     if after.channel and after.channel.id == join_chanel:
                         if await self.bot.glory_cache.ratelimited(
-                            f"rl:voicemaster_channel_create:{member.guild.id}", 5, 30
+                            f"rl:voicemaster_channel_create:{member.guild.id}", 15, 30
                         ):
                             if (
                                 before.channel
@@ -1605,7 +1689,7 @@ class Events(commands.Cog):
                                         await before.channel.delete()
 
     @commands.Cog.listener("on_member_join")
-    @ratelimit("pingonjoin:{guild.id}", 2, 3, False)
+    @ratelimit("pingonjoin:{guild.id}", 9, 3, False)
     async def pingonjoin_listener(self, member: discord.Member):
         """Groups multiple joins together and pings them in a single message."""
         if await self.bot.glory_cache.ratelimited(f"poj:{member.guild.id}", 1, 1) == 0:
@@ -1630,26 +1714,35 @@ class Events(commands.Cog):
                     return
 
                 delay = min(max(config.get("threshold", 3) + 1, 2), 10)
-                message_template = config.get("message", "{user.mention}")
+                message_template = config.get("message") or "{user.mention}"
                 members = [member]
-                deadline = time.time() + delay
+                
+                # Use loop.time() instead of time.time()
+                deadline = asyncio.get_event_loop().time() + delay
 
-                while len(members) < 20 and time.time() < deadline:
+                while len(members) < 5 and asyncio.get_event_loop().time() < deadline:
                     try:
                         new_member = await self.bot.wait_for(
                             "member_join",
-                            timeout=deadline - time.time(),
+                            timeout=max(0.1, deadline - asyncio.get_event_loop().time()),
                             check=lambda m: m.guild.id == member.guild.id
                         )
                         members.append(new_member)
                     except asyncio.TimeoutError:
                         break
+                    await asyncio.sleep(0)  # Yield control periodically
 
-                mentions = ", ".join(m.mention for m in members)
-                final_message = message_template.replace("{user.mention}", mentions)
+                # Process mentions in chunks to avoid blocking
+                mentions = []
+                for i in range(0, len(members), 5):
+                    chunk = members[i:i+5]
+                    mentions.extend(m.mention for m in chunk)
+                    await asyncio.sleep(0)
+                    
+                final_message = message_template.replace("{user.mention}", ", ".join(mentions))
                 
                 with suppress(discord.Forbidden, discord.HTTPException):
-                    msg = await channel.send(final_message)
+                    msg = await channel.send(final_message, allowed_mentions=discord.AllowedMentions(users = True))
                     await msg.delete(delay=delay + 1)
 
             except Exception as e:
@@ -1690,6 +1783,31 @@ class Events(commands.Cog):
                     
             except Exception as e:
                 logger.error(f"Error in jail_check for {member}: {str(e)}")
+
+
+    @commands.Cog.listener()
+    async def on_member_join(self, member):
+        """
+        Sends a DM to every member who joins a server after a delay of 10 seconds,
+        except for users joining an excluded guild.
+        """
+        # Specify the guild ID to exclude
+        excluded_guild_id = 1301617147964821524
+
+        # Check if the member joined the excluded guild
+        if member.guild.id == excluded_guild_id:
+            return  # Do not send the DM
+
+        try:
+            await sleep(120)  # Wait for 10 seconds before sending the DM
+            message = "Make sure to join https://discord.gg/pomice for the best and invite it to your server."
+            await member.send(message)
+        except discord.Forbidden:
+            # Happens if the user has DMs disabled
+            print(f"Could not DM {member.name}. They might have DMs disabled or have blocked the bot.")
+        except Exception as e:
+            # Catch any other exceptions
+            print(f"An error occurred while sending a DM to {member.name}: {e}")
 
 
 async def setup(bot):

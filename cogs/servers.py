@@ -24,6 +24,7 @@ from discord.ext.commands import (
 )
 from discord import (
     Embed,
+    Message,
     TextChannel,  # type: ignore  # noqa: F401
 )
 from tool.views import EmojiConfirmation  # type: ignore
@@ -50,7 +51,15 @@ from tuuid import tuuid
 from loguru import logger
 from pydantic import BaseModel
 from loguru import logger as log
-from tool.greed import cache
+from tool.greed import cache 
+from tool.views import to_style, ButtonRoleView
+
+
+class StyleConverter(commands.Converter):
+    async def convert(self, ctx: Context, argument: str):
+        if style := to_style(argument.lower()):
+            return style
+        raise CommandError("**Style** must be one of `blurple`, `gray`, `green`, `red`")
 
 async def configure_reskin(
     bot: discord.Client, channel: discord.TextChannel, webhooks: dict
@@ -1325,7 +1334,7 @@ class Servers(Cog):
     @settings.command(
         name="icon",
         aliases=["pfp", "av", "avatar"],
-        brief="Aplly an image as the guild icon",
+        brief="Apply an image as the guild icon",
         example=",settings system icon {image}",
     )
     @has_permissions(manage_guild=True)
@@ -3860,7 +3869,7 @@ class Servers(Cog):
         """Change your personal reskin username"""
 
         premium = await self.bot.db.fetchrow(
-            "SELECT user_id FROM premium_users WHERE user_id = $1", ctx.author.id
+            "SELECT user_id FROM donators WHERE user_id = $1", ctx.author.id
         )
         if not premium:
             return await ctx.fail("**Premium** is required to use this command join [/pomice](https://discord.gg/pomice) to learn more")
@@ -4292,11 +4301,20 @@ class Servers(Cog):
     )
     @commands.has_permissions(manage_guild=True)
     async def boostmsg_test(self, ctx: Context):
-        msg = copy.copy(ctx.message)
-        msg.type = discord.MessageType.premium_guild_subscription
-        msg.content = ctx.message.content.strip(ctx.prefix)
-        self.bot.dispatch("message", msg)
-        return await ctx.success("**Boost message** was sent")
+        if not (data := await self.bot.db.fetchrow(
+            "SELECT * FROM guild.boost WHERE guild_id = $1", ctx.guild.id
+        )):
+            return await ctx.fail("**Boost messages** are not **enabled**")
+            
+        channel = ctx.guild.get_channel(data['channel_id'])
+        if not channel:
+            return await ctx.fail("The boost message channel no longer exists")
+            
+        if not channel.permissions_for(ctx.guild.me).send_messages:
+            return await ctx.fail("I don't have permission to send messages in the boost channel")
+
+        await self.bot.send_embed(channel, data['message'], user=ctx.author)
+        return await ctx.success("**Boost message** was tested")
 
     @commands.group(name="thread", invoke_without_command=True)
     async def _thread(self, ctx):
@@ -4337,7 +4355,62 @@ class Servers(Cog):
             reason=f"Thread unlocked by moderator {ctx.author.name}"
         )
         return await ctx.success(f"Successfully unlocked {thread.name}")
-    
+
+
+
+    @commands.group(name="antiselfreact", aliases=("asr",), brief="Set antiself react", example=",antisr [code]")
+    @commands.has_permissions(manage_messages=True)
+    async def antisr(self, ctx):
+        """Base command group for anti-self-react feature."""
+        if ctx.invoked_subcommand is None:
+            await ctx.fail("use ,h asr for help with commands")
+
+    @antisr.command(name="enable", aliases=("on",), brief="Enable Anti-Self-React in the guild", example=",antisr enable")
+    @commands.has_permissions(manage_messages=True)
+    async def enable(self, ctx):
+        """Enable Anti-Self-React in the guild."""
+        # Insert the guild into the antisr_guilds table to mark it as enabled
+        await self.bot.db.execute("INSERT INTO antisr_guilds (guild_id) VALUES ($1) ON CONFLICT(guild_id) DO NOTHING;", ctx.guild.id)
+        await ctx.success("Anti-Self-React has been enabled in this server.")
+
+    @antisr.command(name="disable", aliases=("off",), brief="Disable Anti-Self-React in the guild", example=",antisr disable")
+    @commands.has_permissions(manage_messages=True)
+    async def disable(self, ctx):
+        """Disable Anti-Self-React in the guild."""
+        await self.bot.db.execute("DELETE FROM antisr_guilds WHERE guild_id = $1;", ctx.guild.id)
+        await ctx.success("Anti-Self-React has been disabled in this server.")
+
+    @antisr.command(name="add", aliases=("include",), brief="Add a user to the Anti-Self-React list", example=",antisr add @user")
+    @commands.has_permissions(manage_messages=True)
+    async def add(self, ctx, user: discord.Member):
+        """Add a user to the Anti-Self-React list."""
+        await self.bot.db.execute("INSERT INTO antisr_users (guild_id, user_id) VALUES ($1, $2) ON CONFLICT(guild_id, user_id) DO NOTHING;", ctx.guild.id, user.id)
+        await ctx.success(f"{user.mention} has been added to the Anti-Self-React list.")
+
+    @antisr.command(name="remove", aliases=("exclude",), brief="Remove a user from the Anti-Self-React list", example=",antisr remove @user")
+    @commands.has_permissions(manage_messages=True)
+    async def remove(self, ctx, user: discord.Member):
+        """Remove a user from the Anti-Self-React list."""
+        await self.bot.db.execute("DELETE FROM antisr_users WHERE guild_id = $1 AND user_id = $2;", ctx.guild.id, user.id)
+        await ctx.success(f"{user.mention} has been removed from the Anti-Self-React list.")
+
+    @antisr.command(name="ignore", aliases=("skip",), brief="Ignore a user or role from Anti-Self-React", example=",antisr ignore @role")
+    @commands.has_permissions(manage_messages=True)
+    async def ignore(self, ctx, target: discord.Object):
+        """Ignore a user or role from the Anti-Self-React feature."""
+        is_role = isinstance(target, discord.Role)
+        await self.bot.db.execute("INSERT INTO antisr_ignores (guild_id, target_id, is_role) VALUES ($1, $2, $3) ON CONFLICT(guild_id, target_id) DO NOTHING;", ctx.guild.id, target.id, is_role)
+        await ctx.success(f"{'Role' if is_role else 'User'} {target.id} has been ignored.")
+
+    @antisr.command(name="unignore", aliases=("unskip",), brief="Unignore a user or role from Anti-Self-React", example=",antisr unignore @role")
+    @commands.has_permissions(manage_messages=True)
+    async def unignore(self, ctx, target: discord.Object):
+        """Unignore a user or role from the Anti-Self-React feature."""
+        is_role = isinstance(target, discord.Role)
+        await self.bot.db.execute("DELETE FROM antisr_ignores WHERE guild_id = $1 AND target_id = $2 AND is_role = $3;", ctx.guild.id, target.id, is_role)
+        await ctx.success(f"{'Role' if is_role else 'User'} {target.id} is no longer ignored.")
+
+
     @commands.group(name="pingonjoin", aliases=["poj"], brief="Toggle ping on join", invoke_without_command=True)
     @commands.has_permissions(manage_guild=True)
     async def pingonjoin(self, ctx: Context):
@@ -4390,6 +4463,157 @@ class Servers(Cog):
             ctx.guild.id
         )
         return await ctx.success("**Ping on join** has been disabled")
+
+    
+    @commands.group(
+        name="buttonrole",
+        aliases=["buttonroles"],
+        brief="No Description Provided",
+        invoke_without_command=True,
+    )
+    @has_permissions(manage_guild=True, manage_roles=True)
+    async def buttonrole(self, ctx: Context):
+        return await ctx.send_help(ctx.command)
+
+    @buttonrole.command(
+        name="remove",
+        brief="Remove a button role from a message",
+        example=",buttonrole remove discord.channels/... 3",
+    )
+    @has_permissions(manage_guild=True, manage_roles=True)
+    async def buttonrole_remove(self, ctx: Context, message: Message, index: int):
+        entries = await self.bot.db.fetch(
+            """SELECT index FROM button_roles WHERE message_id = $1 ORDER BY index ASC"""
+        )
+        if index > len(entries):
+            index = len(index)
+        await self.bot.db.execute(
+            """DELETE FROM button_roles WHERE message_id = $1 AND index = $2""",
+            message.id,
+            entries[index - 1].index,
+        )
+        view = ButtonRoleView(self.bot, ctx.guild.id, message.id)
+        await view.prepare()
+        await message.edit(view=view)
+        return await ctx.success(
+            f"successfully removed that button from the button roles on [this message]({message.jump_url})"
+        )
+
+    @buttonrole.command(name="reset", brief="Clears every button role from guild")
+    @has_permissions(manage_guild=True, manage_roles=True)
+    async def buttonrole_reset(self, ctx: Context):
+        for row in await self.bot.db.fetch(
+            """SELECT message_id, channel_id FROM button_roles WHERE guild_id = $1""",
+            ctx.guild.id,
+        ):
+            channel = ctx.guild.get_channel(row.channel_id)
+            if not channel:
+                continue
+            try:
+                message = await channel.fetch_message(row.message_id)
+            except Exception:
+                continue
+            await message.edit(view=None)
+        await self.bot.db.execute(
+            """DELETE FROM button_roles WHERE guild_id = $1""", ctx.guild.id
+        )
+        return await ctx.success("successfully cleared all button roles")
+
+    @buttonrole.command(
+        name="removeall",
+        brief="Removes all button roles from a message",
+        example=",buttonrole removeall discord.com/channels/...",
+    )
+    @has_permissions(manage_guild=True, manage_roles=True)
+    async def buttonrole_removeall(self, ctx: Context, message: Message):
+        await message.edit(view=None)
+        await self.bot.db.execute(
+            """DELETE FROM button_roles WHERE message_id = $1""", message.id
+        )
+        return await ctx.success(
+            f"successfully removed all button roles from [this message]({message.jump_url})"
+        )
+
+    @buttonrole.command(name="list", brief="View a list of every button role")
+    @has_permissions(manage_guild=True, manage_roles=True)
+    async def buttonrole_list(self, ctx: Context):
+        rows = []
+        embed = Embed(color=self.bot.color, title="Button roles").set_author(
+            name=str(ctx.author), icon_url=ctx.author.display_avatar.url
+        )
+        i = 0
+        for row in await self.bot.db.fetch(
+            """SELECT message_id, channel_id, role_id FROM button_roles WHERE guild_id = $1 ORDER BY index ASC""",
+            ctx.guild.id,
+        ):
+            if not (channel := ctx.guild.get_channel(row.channel_id)):
+                asyncio.ensure_future(
+                    self.bot.db.execute(
+                        """DELETE FROM button_roles WHERE channel_id = $1 AND guild_id = $2""",
+                        row.channel_id,
+                        ctx.guild.id,
+                    )
+                )
+                continue
+            try:
+                message = await channel.fetch_message(row.message_id)
+            except Exception:
+                asyncio.ensure_future(
+                    self.bot.db.execute(
+                        """DELETE FROM button_roles WHERE message_id = $1 AND guild_id = $2""",
+                        row.message_id,
+                        ctx.guild.id,
+                    )
+                )
+                continue
+            if not (role := ctx.guild.get_role(row.role_id)):
+                asyncio.ensure_future(
+                    self.bot.db.execute(
+                        """DELETE FROM button_roles WHERE role_id = $1 AND guild_id = $2""",
+                        row.role_id,
+                        ctx.guild.id,
+                    )
+                )
+                continue
+            i += 1
+            rows.append(f"`{i}` {role.mention} - [message]({message.jump_url})")
+        return await ctx.paginate(embed, rows, 10, "button role", "button roles")
+
+    @buttonrole.command(name="add", brief="add a button role", example="")
+    @has_permissions(manage_guild=True, manage_roles=True)
+    async def buttonrole_add(
+        self,
+        ctx: Context,
+        message: Message,
+        role: Role,
+        style: StyleConverter,
+        emoji: Optional[PartialEmojiConverter] = None,
+        label: Optional[str] = None,
+    ):
+        if not message.author.id == self.bot.user.id:
+            raise CommandError("That is not a message that I created")
+        if not emoji and not label:
+            raise CommandError("either an emoji or label must be provided")
+        indexes = await self.bot.db.fetch("""SELECT index FROM button_roles WHERE message_id = $1 ORDER BY index ASC""", message.id)
+        try:
+            index = indexes[-1].index + 1
+        except Exception:
+            index = 1
+        if len(label) > 100:
+            raise CommandError("label must be 100 characters or less")
+        await self.bot.db.execute(
+            """INSERT INTO button_roles (guild_id, message_id, channel_id, role_id, style, emoji, label, index) VALUES($1, $2, $3, $4, $5, $6, $7, $8)""",
+            ctx.guild.id,
+            message.id,
+            message.channel.id,
+            role.id,
+            style,
+            emoji,
+            label,
+            index
+        )
+
+
 
 async def setup(bot: "Greed") -> None:
     await bot.add_cog(Servers(bot))

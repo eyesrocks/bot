@@ -1,0 +1,682 @@
+#import log
+
+#log.make_dask_sink("rival")
+
+import discord_ios  # type: ignore # noqa: F401
+import traceback
+import os
+import discord
+import datetime
+import orjson
+import aiohttp
+from tool.important.levels import Level
+import json
+from tool.worker import start_dask, offloaded  # type: ignore
+import asyncio  # type: ignore
+import tuuid
+from tool.views import VoicemasterInterface  # type: ignore
+from loguru import logger
+from tool.important.services.Webhook import Webhook as Webhooks
+# from logging import getLogger
+# logger = getLogger(__name__)
+from typing import Any, Dict, Optional, Union, Callable, Sequence
+from psutil import Process
+from aiohttp import ClientSession
+from discord.utils import MISSING
+from discord.http import handle_message_parameters
+from discord.types.snowflake import SnowflakeList
+from discord import Message, Guild, AuditLogEntry, TextChannel, Embed, File, GuildSticker, StickerItem, AllowedMentions, MessageReference, PartialMessage
+from discord.ui import View
+from discord.ext import commands
+from discord.ext.commands import (
+    AutoShardedBot as Bot,
+    when_mentioned_or,
+    BotMissingPermissions,
+)
+from tool.aliases import fill_commands  # type: ignore
+from tool.modlogs import Handler  # type: ignore
+from cashews import cache
+from .emotes import EMOJIS
+# from cogs.tickets import TicketView
+from tool.processing import Transformers  # type: ignore # noqa: E402
+from tool.managers.ipc import IPC
+from cogs.voicemaster import VmButtons
+from tool.important import Cache, Context, Database, MyHelpCommand, Red  # type: ignore
+from tool.important.subclasses.parser import Script  # type: ignore
+from tool.important.subclasses.context import NonRetardedCache, MSG, reskin  # type: ignore
+from tool.important.runner import RebootRunner  # type: ignore
+from tool.snipe import Snipe  # type: ignore
+from tool.views import GiveawayView, PrivacyConfirmation  # type: ignore
+from tool.important.subclasses.interaction import GreedInteraction  # type: ignore # noqa: F401
+# from tool import MemberConverter
+from rival_tools import ratelimit, lock  # type: ignore
+from tool.rival import RivalAPI, get_statistics as get_stats, Statistics  # type: ignore
+from tool.paginate import Paginate  # type: ignore
+from sys import stdout
+from .emotes import EMOJIS
+import time
+from contextlib import suppress
+discord.Interaction.success = GreedInteraction.success
+discord.Interaction.fail = GreedInteraction.fail
+discord.Interaction.warning = GreedInteraction.warning
+discord.Interaction.normal = GreedInteraction.normal
+discord.Interaction.voice_client = GreedInteraction.voice_client
+# discord.message.Message.edit = edit
+get_changes = Union[
+    Guild,
+    AuditLogEntry,
+]
+
+Message.edit = MSG.edit
+
+@offloaded
+def read_file(filepath: str, mode: str = "rb"):
+    with open(filepath, mode) as file:
+        data = file.read()
+    return data
+
+loguru = False
+cache.setup("mem://")
+
+if loguru:
+    logger.remove()
+    logger.add(
+        stdout,
+        level="INFO",
+        colorize=True,
+        enqueue=True,
+        backtrace=True,
+        format="(<magenta>greed:{function}</magenta>) <yellow>@</yellow> <fg #BBAAEE>{message}</fg #BBAAEE>",
+    )
+else:
+    logger.add(
+        stdout,
+        level="INFO",
+        colorize=True,
+        enqueue=True,
+        backtrace=True,
+        format="(<magenta>greed:{function}</magenta>) <yellow>@</yellow> <fg #BBAAEE>{message}</fg #BBAAEE>",
+    )
+
+class iteration(object):
+    def __init__(self, data: Any):
+        self.data = data
+        self.index = -1
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        self.index += 1
+        if self.index > len(self.data) - 1:
+            self.index = 0
+        return self.data[self.index]
+
+
+log = logger
+user_pass = "http://envjafpk:bltpo5w914k6@"
+ips = [
+    "38.154.227.167:5868",
+    "185.199.229.156:7492",
+    "185.199.228.220:7300",
+    "185.199.231.45:8382",
+]
+for i in ips:
+    ips[ips.index(i)] = f"{user_pass}{i}"
+
+
+class Greed(Bot):
+    def __init__(self, config: Dict[str, Any], *args, **kwargs) -> None:
+        super().__init__(
+            command_prefix=self.get_prefix,
+            allowed_mentions=discord.AllowedMentions(
+                users=True, roles=False, everyone=False
+            ),
+            activity=discord.Activity(
+                type=discord.ActivityType.streaming,
+                    name="🔗 discord.gg/pomice",
+                    url="https://twitch.tv/pomice",
+            ),
+            strip_after_prefix=True,
+            intents=config["intents"],
+            case_insensitive=True,
+            owner_ids=config["owners"],
+            anti_cloudflare_ban=True,
+            chunk_guilds_at_startup=False,
+            auto_update=True,
+            delay_ready=True,
+            help_command=MyHelpCommand(),
+            #            proxy=f"{user_pass}{ips[1]}",
+            *args,
+            **kwargs,
+        )
+        self.proxies = ips
+        self.lim = [977036206179233862]
+        self.dev = [744806691396124673, 863914425445908490, 352190010998390796]
+        self.modlogs = Handler(self)
+        self.config = config
+        self.webhook = Webhooks(self)
+        self.paginators = Paginate(self)
+        self.domain = self.config["domain"]
+        self.startup_time = datetime.datetime.now()
+        self.http.proxy = ""
+        self.glory_cache = Cache(self)
+        self.rival = RivalAPI(self)
+        self.snipes = Snipe(self)
+        self.avatar_limit = 50
+        self.color = 0x36393f
+        self.afks = {}
+        self.command_dict = None
+        self._closing_task = None
+        self.transformers = Transformers(self)
+        self.process = Process(os.getpid())
+        self.domain = "https://greed.wtf"
+        self.support_server = "https://discord.gg/pomice"
+        self.author_only_message = "**only the `author` can use this**"
+        self.cache = NonRetardedCache(self)
+        self.http.iterate_local_addresses = False
+        self.loaded = False
+        self.guilds_maxed = True
+        self.to_send = []
+        self.authentication = [
+            self.config["token"],
+            "MTE4ODg1OTEwNzcwMTE2NjE2MQ.G22nb2.219btG_P7Y5MN0JlyU7OJHvIkdQ8dM9N6ybIJA",
+        ]
+        self.command_count = len(
+            [
+                cmd
+                for cmd in list(self.walk_commands())
+                if cmd.cog_name not in ("Jishaku", "events", "Owner")
+            ]
+        )
+        self._cd = commands.CooldownMapping.from_cooldown(
+            1.0, 3.0, commands.BucketType.user
+        )
+        self.__cd = commands.CooldownMapping.from_cooldown(
+            1.0, 4.0, commands.BucketType.user
+        )
+        self.eros = "52ab341c-58c0-42f2-83ba-bde19f15facc"
+        self.check(self.command_check)
+        self.before_invoke(self.before_all_commands)
+
+    async def send_raw(self, channel_id: int, content: Optional[str] = None,
+        *,
+        tts: bool = False,
+        embed: Optional[Embed] = None,
+        embeds: Optional[Sequence[Embed]] = None,
+        file: Optional[File] = None,
+        files: Optional[Sequence[File]] = None,
+        stickers: Optional[Sequence[Union[GuildSticker, StickerItem]]] = None,
+        delete_after: Optional[float] = None,
+        nonce: Optional[Union[str, int]] = None,
+        allowed_mentions: Optional[AllowedMentions] = None,
+        reference: Optional[Union[Message, MessageReference, PartialMessage]] = None,
+        mention_author: Optional[bool] = None,
+        view: Optional[View] = None,
+        suppress_embeds: bool = False,
+        silent: bool = False,
+        **kwargs
+    ) -> Message:
+        """|coro|
+
+        Sends a message to the destination with the content given.
+
+        The content must be a type that can convert to a string through ``str(content)``.
+        If the content is set to ``None`` (the default), then the ``embed`` parameter must
+        be provided.
+
+        To upload a single file, the ``file`` parameter should be used with a
+        single :class:`~discord.File` object. To upload multiple files, the ``files``
+        parameter should be used with a :class:`list` of :class:`~discord.File` objects.
+        **Specifying both parameters will lead to an exception**.
+
+        To upload a single embed, the ``embed`` parameter should be used with a
+        single :class:`~discord.Embed` object. To upload multiple embeds, the ``embeds``
+        parameter should be used with a :class:`list` of :class:`~discord.Embed` objects.
+        **Specifying both parameters will lead to an exception**.
+
+        .. versionchanged:: 2.0
+            This function will now raise :exc:`TypeError` or
+            :exc:`ValueError` instead of ``InvalidArgument``.
+
+        Parameters
+        ------------
+        content: Optional[:class:`str`]
+            The content of the message to send.
+        tts: :class:`bool`
+            Indicates if the message should be sent using text-to-speech.
+        embed: :class:`~discord.Embed`
+            The rich embed for the content.
+        embeds: List[:class:`~discord.Embed`]
+            A list of embeds to upload. Must be a maximum of 10.
+
+            .. versionadded:: 2.0
+        file: :class:`~discord.File`
+            The file to upload.
+        files: List[:class:`~discord.File`]
+            A list of files to upload. Must be a maximum of 10.
+        nonce: :class:`int`
+            The nonce to use for sending this message. If the message was successfully sent,
+            then the message will have a nonce with this value.
+        delete_after: :class:`float`
+            If provided, the number of seconds to wait in the background
+            before deleting the message we just sent. If the deletion fails,
+            then it is silently ignored.
+        allowed_mentions: :class:`~discord.AllowedMentions`
+            Controls the mentions being processed in this message. If this is
+            passed, then the object is merged with :attr:`~discord.Client.allowed_mentions`.
+            The merging behaviour only overrides attributes that have been explicitly passed
+            to the object, otherwise it uses the attributes set in :attr:`~discord.Client.allowed_mentions`.
+            If no object is passed at all then the defaults given by :attr:`~discord.Client.allowed_mentions`
+            are used instead.
+
+            .. versionadded:: 1.4
+
+        reference: Union[:class:`~discord.Message`, :class:`~discord.MessageReference`, :class:`~discord.PartialMessage`]
+            A reference to the :class:`~discord.Message` to which you are replying, this can be created using
+            :meth:`~discord.Message.to_reference` or passed directly as a :class:`~discord.Message`. You can control
+            whether this mentions the author of the referenced message using the :attr:`~discord.AllowedMentions.replied_user`
+            attribute of ``allowed_mentions`` or by setting ``mention_author``.
+
+            .. versionadded:: 1.6
+
+        mention_author: Optional[:class:`bool`]
+            If set, overrides the :attr:`~discord.AllowedMentions.replied_user` attribute of ``allowed_mentions``.
+
+            .. versionadded:: 1.6
+        view: :class:`discord.ui.View`
+            A Discord UI View to add to the message.
+
+            .. versionadded:: 2.0
+        stickers: Sequence[Union[:class:`~discord.GuildSticker`, :class:`~discord.StickerItem`]]
+            A list of stickers to upload. Must be a maximum of 3.
+
+            .. versionadded:: 2.0
+        suppress_embeds: :class:`bool`
+            Whether to suppress embeds for the message. This sends the message without any embeds if set to ``True``.
+
+            .. versionadded:: 2.0
+        silent: :class:`bool`
+            Whether to suppress push and desktop notifications for the message. This will increment the mention counter
+            in the UI, but will not actually send a notification.
+
+            .. versionadded:: 2.2
+
+        Raises
+        --------
+        ~discord.HTTPException
+            Sending the message failed.
+        ~discord.Forbidden
+            You do not have the proper permissions to send the message.
+        ValueError
+            The ``files`` or ``embeds`` list is not of the appropriate size.
+        TypeError
+            You specified both ``file`` and ``files``,
+            or you specified both ``embed`` and ``embeds``,
+            or the ``reference`` object is not a :class:`~discord.Message`,
+            :class:`~discord.MessageReference` or :class:`~discord.PartialMessage`.
+
+        Returns
+        ---------
+        :class:`~discord.Message`
+            The message that was sent.
+        """
+
+        state = self._connection
+        content = str(content) if content is not None else None
+        previous_allowed_mention = state.allowed_mentions
+
+        if stickers is not None:
+            sticker_ids: SnowflakeList = [sticker.id for sticker in stickers]
+        else:
+            sticker_ids = MISSING
+
+        if reference is not None:
+            try:
+                reference_dict = reference.to_message_reference_dict()
+            except AttributeError:
+                raise TypeError('reference parameter must be Message, MessageReference, or PartialMessage') from None
+        else:
+            reference_dict = MISSING
+
+        if view and not hasattr(view, '__discord_ui_view__'):
+            raise TypeError(f'view parameter must be View not {view.__class__.__name__}')
+
+        if suppress_embeds or silent:
+            from discord.message import MessageFlags  # circular import
+
+            flags = MessageFlags._from_value(0)
+            flags.suppress_embeds = suppress_embeds
+            flags.suppress_notifications = silent
+        else:
+            flags = MISSING
+
+        with handle_message_parameters(
+            content=content,
+            tts=tts,
+            file=file if file is not None else MISSING,
+            files=files if files is not None else MISSING,
+            embed=embed if embed is not None else MISSING,
+            embeds=embeds if embeds is not None else MISSING,
+            nonce=nonce,
+            allowed_mentions=allowed_mentions,
+            message_reference=reference_dict,
+            previous_allowed_mentions=previous_allowed_mention,
+            mention_author=mention_author,
+            stickers=sticker_ids,
+            view=view,
+            flags=flags,
+        ) as params:
+            data = await state.http.send_message(channel_id, params=params, **kwargs)
+
+        ret = state.create_message(channel=channel, data=data)
+        if view and not view.is_finished():
+            state.store_view(view, ret.id)
+
+        if delete_after is not None:
+            await ret.delete(delay=delete_after)
+        return ret
+
+    async def on_rival_information(self, data: Any, id: str):
+        method = data["method"]
+        logger.info(f"received information with the method {method}")
+        if method == "send_message":
+            embed = data["kwargs"].get("embed")
+            content = data["kwargs"].get("content")
+            channel_id = data["kwargs"]["channel_id"]
+            if channel := self.get_channel(int(channel_id)):
+                kwargs = {}
+                if embed:
+                    embed = discord.Embed.from_dict(embed)
+                    kwargs["embed"] = embed
+                if content:
+                    kwargs["content"] = content
+                await channel.send(**kwargs)
+        elif method == "username_change":
+            self.dispatch("username_change", data["username"])
+        elif method == "vanity_change":
+            self.dispatch("vanity_change", data["vanity"])
+
+    def get_timestamp(self, dt: Optional[datetime.datetime] = None, style: str = "R"):
+        if dt is None:
+            dt = datetime.datetime.now()
+        return discord.utils.format_dt(dt, style=style)
+
+    async def execute_function(self, func: Callable, *args, **kwargs) -> Optional[Any]:
+        with logger.catch(reraise=True):
+            if asyncio.iscoroutinefunction(func):
+                return await func(*args, **kwargs)
+            else:
+                return func(*args, **kwargs)
+
+    @staticmethod
+    def ordinal(n: int) -> str:
+        """Convert an integer into its ordinal representation, e.g., 1 -> 1st"""
+        n = int(n)
+        return "%d%s" % (n, "tsnrhtdd"[(n // 10 % 10 != 1) * (n % 10 < 4) * n % 10::4])
+
+    def handle_ready(self):
+        self.connected.set()
+
+    def get_command_dict(self) -> list:
+        if self.command_dict:
+            return self.command_dict
+        def get_command_invocations(command, prefix=''):
+            invocations = []
+
+            base_command = prefix + command.name
+            invocations.append(base_command)
+
+            for alias in command.aliases:
+                invocations.append(prefix + alias)
+
+            if isinstance(command, commands.Group):
+                for subcommand in command.commands:
+                    sub_invocations = get_command_invocations(subcommand, prefix=base_command + ' ')
+                    for alias in command.aliases:
+                        sub_invocations.extend(get_command_invocations(subcommand, prefix=prefix + alias + ' '))
+                        invocations.extend(sub_invocations)
+
+            return invocations
+        self.command_dict = []
+        for command in self.walk_commands():
+            for invocation in get_command_invocations(command): 
+                self.command_dict.append(invocation)
+        return self.command_dict
+
+    async def get_reference(self, message: discord.Message):
+        if message.reference:
+            if msg := message.reference.cached_message:
+                return msg
+            else:
+                g = self.get_guild(message.reference.guild_id)
+                if not g:
+                    return None
+                c = g.get_channel(message.reference.channel_id)
+                if not c:
+                    return None
+                return await c.fetch_message(message.reference.message_id)
+        return None
+
+    async def do_webhooks(
+        self, channel: TextChannel, webhooks: Optional[str] = None, **kwargs
+    ):
+        if not kwargs.get("name"):
+            kwargs["name"] = f"{self.user.name} Webhook"
+        async with aiohttp.ClientSession() as session:
+            if webhooks:
+                wh = json.loads(webhooks)
+                for w in wh:
+                    try:
+                        _ = discord.Webhook.from_url(w[2], session=session)
+                        await _.edit(**kwargs)
+                    except Exception:
+                        try:
+                            sh = (
+                                await channel.guild.get_channel(w[0]).create_webhook(
+                                    **kwargs
+                                )
+                            ).url
+                            wh[wh.index(w)] = [w[0], w[1], sh]
+                        except Exception:
+                            wh.remove(w)
+                return json.dumps(wh)
+            else:
+                wh = []
+                for chl in channel.guild.text_channels:
+                    wh.append([chl.id, chl.name, (await chl.create_webhook(**kwargs)).url])
+                return json.dumps(wh)
+
+    async def before_all_commands(self, ctx: Context):
+        rs = await reskin(self, ctx.channel, author=ctx.author)
+        if not rs:
+            if ctx.command is not None:
+                if "purge" not in ctx.command.qualified_name:
+                    if ctx.guild and ctx.channel:
+                        if (
+                            ctx.channel.permissions_for(ctx.guild.me).send_messages
+                            and ctx.channel.permissions_for(ctx.guild.me).embed_links
+                            and ctx.channel.permissions_for(ctx.guild.me).attach_files
+                        ):
+                            try:
+                                await ctx.typing()
+                            except Exception:
+                                pass
+
+    async def get_image(self, ctx: Context, *args):
+        if len(ctx.message.attachments) > 0:
+            return ctx.message.attachments[0].url
+        elif ctx.message.reference:
+            if msg := await self.get_message(
+                ctx.channel, ctx.message.reference.message_id
+            ):
+                if len(msg.attachments) > 0:
+                    return msg.attachments[0].url
+                else:
+                    logger.info(
+                        f"there are no attachments for {msg} : {msg.attachments}"
+                    )
+            else:
+                logger.info("could not get message")
+        else:
+            for i in args:
+                if i.startswith("http"):
+                    return i
+        return None
+
+    async def on_command_completion(self, ctx: Context):
+        await self.db.execute(
+            """
+            INSERT INTO command_usage (guild_id, user_id, command_name, command_type)
+                VALUES ($1,$2,$3,$4)
+            ON CONFLICT (guild_id, user_id, command_name) DO UPDATE SET
+    uses = command_usage.uses + 1;
+            """,
+            ctx.guild.id,
+            ctx.author.id,
+            ctx.command.qualified_name,
+            "internal",
+        )
+        logger.info(f"{ctx.guild.id} > {ctx.author.name}: {ctx.message.content}")
+
+    def is_touchable(self, obj: Union[discord.Role, discord.Member]) -> bool:
+        def touchable(role: discord.Role) -> bool:
+            guild = role.guild
+            list(guild.roles)
+            if role >= guild.me.top_role:
+                return False
+            return True
+
+        if isinstance(obj, discord.Member):
+            return touchable(obj.top_role)
+        else:
+            return touchable(obj)
+
+    async def get_message(self, channel: discord.TextChannel, message_id: int):
+        logger.info(f"getting message {message_id} in {channel.name}")
+        if message := discord.utils.get(self.cached_messages, id=message_id):
+            logger.info(f"getting it returned type {type(message)}")
+            return message
+        else:
+            if m := await channel.fetch_message(message_id):
+                logger.info(f"fetched message {m.id} in {channel.name}")
+                return m
+        return None
+
+    def check_bot_hierarchy(self, guild: discord.Guild) -> bool:
+        roles = sorted(guild.roles, key=lambda x: x.position, reverse=True)
+        roles = roles[:5]
+        if guild.me.top_role not in roles:
+            del roles
+            return False
+        return True
+
+
+    async def guild_count(self) -> int:
+        if self.user.name != "greed":
+            return len(self.guilds)
+        return sum(await self.ipc.roundtrip("get_guild_count"))
+
+    async def user_count(self) -> int:
+        if self.user.name != "greed":
+            return sum(i for i in self.get_all_members())
+        return sum(await self.ipc.roundtrip("get_user_count"))
+
+    async def role_count(self) -> int:
+        if self.user.name != "greed":
+            return sum(len(guild.roles) for guild in self.guilds)
+        return sum(await self.ipc.roundtrip("get_role_count"))
+
+    async def channel_count(self) -> int:
+        if self.user.name != "greed":
+            return sum(len(guild.channels) for guild in self.guilds)
+        return sum(await self.ipc.roundtrip("get_channel_count"))
+
+
+    async def get_channels(self, channel_id: int) -> list[discord.TextChannel]:
+        """Get channels from all clusters via IPC and return valid TextChannel objects"""
+        channels = []
+        try:
+            responses = await self.ipc.roundtrip("get_channel", channel_id=channel_id)
+            if not responses:
+                return channels
+
+            for channel_data in responses:
+                if not channel_data:
+                    continue
+
+                if isinstance(channel_data, dict):
+                    guild = self.get_guild(channel_data.get('guild_id'))
+                    if guild:
+                        channel = guild.get_channel(channel_data.get('id'))
+                        if isinstance(channel, discord.TextChannel):
+                            channels.append(channel)
+                elif isinstance(channel_data, discord.TextChannel):
+                    channels.append(channel_data)
+
+        except Exception as e:
+            logger.error(f"Failed to get channels from IPC: {e}")
+
+        return channels
+
+    @property
+    def invite_url(self, client_id: Optional[int] = None) -> str:
+        if self.user.id == 1188859107701166161 and self.guilds_maxed is True:
+            if len(self.guilds) <= 99:
+                return discord.utils.oauth_url(
+                    self.bot2.user.id,
+                    scopes=["bot", "applications.commands"],
+                    permissions=discord.Permissions(8),
+                )
+        return discord.utils.oauth_url(
+            client_id or self.user.id,
+            scopes=["bot", "applications.commands"],
+            permissions=discord.Permissions(8),
+        )
+
+    async def limit_avatarhistory(self, user_id: int):
+        data = await self.db.fetch(
+            """SELECT * FROM avatars WHERE user_id = $1 ORDER BY time ASC""", user_id
+        )
+        if len(data) > self.avatar_limit:
+            avatars_to_delete = [
+                d["avatar"] for d in data[: len(data) - self.avatar_limit]
+            ]
+            await self.db.execute(
+                """DELETE FROM avatars WHERE avatar = ANY($1::text[])""",
+                avatars_to_delete,
+            )
+        return True
+
+    async def get_changes(self, before: get_changes, after: get_changes):
+        return
+
+    async def process_commands(self, message: Message):
+        if not message.guild:
+            return
+
+        bucket = commands.CooldownMapping.from_cooldown(3, 8, commands.BucketType.user)
+        retry_after = bucket.get_bucket(message).update_rate_limit()
+        if retry_after:
+            return
+
+        # check = await self.db.fetchrow(
+        #     """
+        #     SELECT * FROM blacklisted
+        #     WHERE (object_id = $1 AND object_type = $2)
+        #     OR (object_id = $3 AND object_type = $4)
+        # """,
+        #     message.author.id,
+        #     "user_id",
+        #     message.guild.id,
+        #     "guild_id",
+        # )
+        # if check:
+        #     return
+        if not self.is_ready():
+            return
+
+        return await super().process_commands(message)
+
+    async def log_command(self, ctx: Context):
+        log.info(

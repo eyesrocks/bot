@@ -1126,6 +1126,27 @@ memory: ** {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB**\n ㅤ­ "
             await ctx.warning("User has **no banner set**")
 
     @commands.command(
+        name="serverbanner",
+        brief="View the server banner of a user",
+        example=",serverbanner @lim",
+        aliases=["sb"],
+    )
+    async def serverbanner(self, ctx, *, user: Member = None):
+        user = user or ctx.author
+        banner_url = user.guild_banner
+        if banner_url is None:
+            return await ctx.fail(f"{user.mention} **has no server banner**")
+        e = discord.Embed(
+            title=f"{user.name}'s server banner", url=banner_url, color=self.bot.color
+        )
+        e.set_author(
+            name=f"{ctx.author.display_name}", icon_url=ctx.author.display_avatar
+        )
+        
+    
+
+
+    @commands.command(
         name="guildicon",
         brief="View the icon of a server",
         example=",guildicon",
@@ -1146,9 +1167,9 @@ memory: ** {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB**\n ㅤ­ "
         name="guildbanner",
         brief="View the banner of a server",
         example=",guildbanner",
-        aliases=["sb", "serverbanner"],
+        aliases=["gb"],
     )
-    async def serverbanner(self, ctx, *, guild: discord.Guild = None):
+    async def guildbanner(self, ctx, *, guild: discord.Guild = None):
         guild = ctx.guild if guild is None else guild
         e = discord.Embed(
             title=f"{guild.name}'s banner", url=guild.banner, color=self.bot.color
@@ -1808,6 +1829,48 @@ memory: ** {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB**\n ㅤ­ "
             return await ctx.reply(embed=embed, view=view)
 
 
+    @commands.command(name="perks", brief="Show subscription perks.")
+    async def perks(self, ctx):
+        """
+        Sends an embed showcasing subscription perks for Tier 1 and Tier 2.
+        """
+        try:
+            embed = discord.Embed(
+                title="Perks",
+                description="Check out the amazing perks for our **[subscription](https://discord.gg/pomice)** tiers!",
+                color=self.bot.color,
+            )
+            embed.set_image(url="https://i.imgur.com/9EVxHyi.png")  # Replace with your image URL
+
+            embed.add_field(
+                name="**Tier 1 - $2.99**",
+                value=(
+                    "✔️ Access to exclusive channels\n"
+                    "✔️ Custom role\n"
+                    "✔️ Access to premium commands"
+                ),
+                inline=False,
+            )
+
+            embed.add_field(
+                name="**Tier 2 - $4.99**",
+                value=(
+                    "✔️ All perks from Tier 1\n"
+                    "✔️ Priority support\n"
+                    "✔️ Access to wrath bot"
+                ),
+                inline=False,
+            )
+
+            embed.set_footer(text="Subscribe today and enjoy these exclusive perks!")
+
+            # Send the embed
+            await ctx.send(embed=embed)
+
+        except Exception as e:
+            await ctx.send(f"An error occurred while generating the perks embed: {e}")
+
+
     @commands.command()
     async def wrath(self, ctx):
         """Send an embed with purchase options and buttons."""
@@ -1872,25 +1935,6 @@ memory: ** {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB**\n ㅤ­ "
             data = await response.json()
             verse = data["data"]["text"]
             await ctx.send(verse)
-
-
-    @commands.command()
-    async def perks(self, ctx):
-        """Sends an embed with donator perks."""
-        embed = discord.Embed(
-            title="Donator Perks",
-            description="Donator perks are now done **[exclusively](https://discord.gg/pomice)** using the integrated server subscription feature, of which there are two tiers.",
-            color=self.bot.color
-        )
-
-        embed.add_field(name="> Tier 1", value="> $4.99 per month", inline=False)
-        embed.add_field(name="> Tier 2", value="> $9.99 per month", inline=False)
-        embed.set_image(url="https://cdn.discordapp.com/attachments/1301628329111326755/1317350684382990357/ea0c12e2acc4c390abb75c0430f72040.png?ex=675e5dee&is=675d0c6e&hm=5c6891dec920afa9017065f05a6b75532f4da5f8f82427de8ec529080e0631b8&")
-        embed.set_footer(text="Subscriptions are monthly payments. Your perks will last as long as your subscription does.")
-
-        await ctx.send(embed=embed)
-
-
 
 
 

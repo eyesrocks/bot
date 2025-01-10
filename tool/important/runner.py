@@ -19,8 +19,7 @@ class RebootRunner:
         default_logger: bool = True,
         preload: bool = False,
         auto_commit: bool = False,
-        colors: bool = True,
-        main_cluster: str = "cluster1"
+        colors: bool = True
     ) -> None:
         self.client: commands.Bot = client
         self.path: Path = Path(path).resolve()  # Ensure absolute path
@@ -31,7 +30,6 @@ class RebootRunner:
         self.auto_commit: bool = auto_commit
         self.started: bool = False
         self.colors: bool = colors
-        self.main_cluster: str = main_cluster
         self._setup_logger()
         self._pending_changes: dict[str, Change] = {}
         self._debounce_timer: Optional[asyncio.Task] = None
@@ -216,12 +214,9 @@ class RebootRunner:
             self.logger.error(f"Failed to reload cog {cog_path}: {e}")
 
     async def _auto_commit_changes(self) -> None:
-        """Automatically commits changes using git. Only runs on the main cluster."""
+        """Automatically commits changes using git."""
         try:
-            if not hasattr(self.client, 'connection') or self.client.connection.local_name != self.main_cluster:
-                return self.logger.debug(f"Skipping git commit on non-main cluster: {getattr(self.client.connection, 'local_name', 'unknown')}")
-
-            self.logger.info("Performing git commit on main cluster")
+            self.logger.info("Performing git commit")
             
             commands = [
                 ('git', 'add', '.'),

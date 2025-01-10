@@ -15,6 +15,7 @@ from .dask import get_dask, start_dask
 if TYPE_CHECKING:
     from tool.greed import Greed
 
+
 P = ParamSpec("P")
 T = TypeVar("T")
 
@@ -63,14 +64,36 @@ def offloaded(f: Callable[P, T]) -> Callable[P, Awaitable[T]]:
     async def offloaded_task(*a, **ka):
         loop = asyncio.get_running_loop()
         cf_future = loop.create_future()
-        dask = get_dask()
-        if dask.status == "closed":
-            greed = Greed
-            await start_dask(greed, "127.0.0.1:8787")
-        meth = partial(f, *a, **ka)
-        cf_future.dask_future = dask.submit(meth, pure=False)
-        cf_future.dask_future.add_done_callback(cf_callback)
-        cascade_future(cf_future.dask_future, cf_future)
-        return await cf_future
+        from tool.greed import Greed
+        
+        bot = a[0] if a and isinstance(a[0], Greed) else None
+        
+        retries = 3
+
+        for attempt in range(retries):
+            dask = get_dask()
+            if dask is None or dask.status == "closed":
+                if bot:
+                    try:
+                        dask = await start_dask(bot, "127.0.0.1:8787")
+                    except Exception as e:
+                        if attempt == retries - 1:
+                            raise RuntimeError(f"Failed to restart Dask after {retries} attempts: {e}")
+                        await asyncio.sleep(1)
+                        continue
+                else:
+                    raise RuntimeError("Dask is not available and bot instance not found to restart it")
+            
+            try:
+                meth = partial(f, *a, **ka)
+                cf_future.dask_future = dask.submit(meth, pure=False)
+                cf_future.dask_future.add_done_callback(cf_callback)
+                cascade_future(cf_future.dask_future, cf_future)
+                return await cf_future
+            except (distributed.client.TimeoutError, distributed.client.CancelledError):
+                if attempt == retries - 1:
+                    raise
+                await asyncio.sleep(1)
+                continue
 
     return offloaded_task

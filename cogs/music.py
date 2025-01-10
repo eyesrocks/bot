@@ -14,7 +14,7 @@ from discord.ext import tasks, commands
 from discord.ext.commands import Context
 from tuuid import tuuid
 from loguru import logger
-
+from contextlib import suppress
 # Emojis
 play_emoji = "<:greed_play:1207661064096063599>"
 skip_emoji = "<:greed_skip:1207661069938589716>"
@@ -215,9 +215,8 @@ class MusicInterface(discord.ui.View):
         if not player.queue._queue:
             return await interaction.response.send_message("Queue is empty", ephemeral=True)
 
-        # Format the queue with more details
         queue_list = []
-        for idx, track in enumerate(player.queue._queue[:10], 1):
+        for idx, track in enumerate(list(player.queue._queue)[:10], 1):
             duration = format_duration(track.length)
             queue_list.append(f"`{idx}.` [{track.title}]({track.uri}) - `{duration}`")
         
@@ -279,7 +278,7 @@ class Player(pomice.Player):
         self.waiting: bool = False
         self.loop: Union[str, bool] = False
         self.last_track: Optional[pomice.Track] = None
-        self.track_history: list[pomice.Track] = []  # Add track history list
+        self.track_history: list[pomice.Track] = []
 
     def _format_socket_track(self, track: pomice.Track):
         return {
@@ -380,20 +379,32 @@ class Player(pomice.Player):
                     track = await self.queue.get()
                     if self.loop == "queue":
                         await self.queue.put(track)
-            except asyncio.TimeoutError:
-                await self.teardown()
-                return
-        self.track_history.append(track)
-        logger.info(f"Added {track} to track history")
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                self.waiting = False
+                return await self.teardown()
+                
+        
+        if not track:
+            self.waiting = False
+            return await self.teardown()
+            
+
         self.track = track
-        # Only add to history when actually starting to play
-        if track and not track in self.track_history:
+        if track and track not in self.track_history:
             self.track_history.append(track)
-            # Keep only last 10 tracks in history
             if len(self.track_history) > 10:
                 self.track_history.pop(0)
             logger.info(f"Added {track.title} to track history from next_track")
-        await self.play(track)
+        
+        try:
+            await self.play(track)
+        except Exception as e:
+            logger.error(f"Error playing track: {e}")
+            self.waiting = False
+            with suppress(KeyError):
+                return await self.teardown()
+            
+
         self.waiting = False
         if self.bound_channel:
             try:
@@ -401,7 +412,7 @@ class Player(pomice.Player):
                     await self.message.delete()
                 embed = discord.Embed(description=f"> **Now playing** [**{track.title}**]({track.uri})")
                 embed.set_image(url=track.thumbnail) if track.track_type == pomice.TrackType.YOUTUBE else embed.set_thumbnail(url=track.thumbnail)
-                self.message = await self.bound_channel.send(embed=embed)
+                self.message = await self.bound_channel.send(embed=embed, view=MusicInterface(self.bot))
             except Exception:
                 self.bound_channel = None
         return track
@@ -417,18 +428,27 @@ class Player(pomice.Player):
     async def set_loop(self, state: Union[str, bool]):
         self.loop = state
 
+
     async def teardown(self):
-        self.queue._queue.clear()
-        await self.reset_filters()
-        await self.destroy()
+        """Safely cleanup the player"""
+        try:
+            self.queue._queue.clear()
+            await self.reset_filters()
+            try:
+                if self.guild.id in self._node._players:
+                    await self.destroy()
+            except (KeyError, AttributeError):
+                pass
+        except Exception as e:
+            logger.error(f"Error during player teardown: {e}")
 
     async def get_previous_track(self) -> Optional[pomice.Track]:
         """Get the previous track from history"""
         if self.track_history:
-            previous = self.track_history.pop() # Remove the current track
+            previous = self.track_history.pop()
             if self.track_history:
-                return self.track_history[-1] # Get the actual previous track
-            self.track_history.append(previous) # Put it back if there's no history
+                return self.track_history[-1]
+            self.track_history.append(previous)
         return None
 
     def __repr__(self):

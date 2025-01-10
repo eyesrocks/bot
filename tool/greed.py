@@ -133,9 +133,9 @@ class Greed(Bot):
                 users=True, roles=False, everyone=False
             ),
             activity=discord.Activity(
-                type=discord.ActivityType.streaming,
-                    name="🔗 discord.gg/pomice",
-                    url="https://twitch.tv/pomice",
+                type=discord.ActivityType.custom,
+                    name=" ",
+                    state="🔗greed.wtf",
             ),
             strip_after_prefix=True,
             intents=config["intents"],
@@ -143,6 +143,7 @@ class Greed(Bot):
             owner_ids=config["owners"],
             anti_cloudflare_ban=True,
             chunk_guilds_at_startup=False,
+            enable_debug_events=False,
             auto_update=True,
             delay_ready=True,
             help_command=MyHelpCommand(),
@@ -164,7 +165,7 @@ class Greed(Bot):
         self.rival = RivalAPI(self)
         self.snipes = Snipe(self)
         self.avatar_limit = 50
-        self.color = 0x36393f
+        self.color = 0x9eafbf
         self.afks = {}
         self.command_dict = None
         self._closing_task = None
@@ -190,10 +191,10 @@ class Greed(Bot):
             ]
         )
         self._cd = commands.CooldownMapping.from_cooldown(
-            1.0, 3.0, commands.BucketType.user
+            3.0, 6.0, commands.BucketType.user
         )
         self.__cd = commands.CooldownMapping.from_cooldown(
-            1.0, 4.0, commands.BucketType.user
+            1.0, 3.0, commands.BucketType.user
         )
         self.eros = "52ab341c-58c0-42f2-83ba-bde19f15facc"
         self.check(self.command_check)
@@ -655,11 +656,6 @@ class Greed(Bot):
         if not message.guild:
             return
 
-        bucket = commands.CooldownMapping.from_cooldown(3, 8, commands.BucketType.user)
-        retry_after = bucket.get_bucket(message).update_rate_limit()
-        if retry_after:
-            return
-
         # check = await self.db.fetchrow(
         #     """
         #     SELECT * FROM blacklisted
@@ -713,28 +709,11 @@ class Greed(Bot):
         )
 
     async def command_check(self, ctx):
-        bucket = self._cd.get_bucket(ctx.message)
-        retry_after = bucket.update_rate_limit()
-        if retry_after:
-            raise commands.CommandOnCooldown(None, retry_after, commands.BucketType.user)
-            
-        channel_bucket = commands.CooldownMapping.from_cooldown(10, 15, commands.BucketType.channel)
-        retry_after = channel_bucket.get_bucket(ctx.message).update_rate_limit()
-        if retry_after:
-            raise commands.CommandOnCooldown(None, retry_after, commands.BucketType.channel)
-
         if not await self.is_owner(ctx.author):
-            # Add per-channel ratelimit
-            channel_bucket = commands.CooldownMapping.from_cooldown(5, 5, commands.BucketType.channel)
-            retry_after = channel_bucket.get_bucket(ctx.message).update_rate_limit()
-            if retry_after:
-                raise commands.CommandOnCooldown(None, retry_after, commands.BucketType.channel)
-
-            # Check cascading guild ratelimits
             is_ratelimited, retry_after = await self.check_guild_ratelimit(ctx.guild.id)
             if is_ratelimited:
                 raise commands.CommandOnCooldown(None, retry_after, commands.BucketType.guild)
-
+                
         if not hasattr(self, "command_list"):
             await fill_commands(ctx)
         if await ctx.bot.is_owner(ctx.author):
@@ -790,40 +769,51 @@ class Greed(Bot):
         if not await self.db.fetchval(
             """SELECT state FROM terms_agreement WHERE user_id = $1""", ctx.author.id
         ):
-            if retry_after := await ctx.bot.glory_cache.ratelimited(
-                f"rl:user_commands{ctx.author.id}", 1, 10
-            ):
-                return False
-
-            view = PrivacyConfirmation(self, ctx.author)
-            message = await ctx.send(
-                embed=discord.Embed(
-                    description=f"{self.user.name} bot will store your data (user ids / guild ids to work correctly) **By continuing to use our services**, you agree to our **[policy]({self.domain}/tos)**"
-                ),
-                view=view
-            )
-            
-            await view.wait()
-            state = bool(view.value)
-            
-            await self.db.execute(
-                """INSERT INTO terms_agreement (user_id, state) VALUES ($1, $2) 
-                   ON CONFLICT (user_id) DO UPDATE SET state = $2;""",
-                ctx.author.id,
-                state,
-            )
-
-            if not state:
-                decline_embed = discord.Embed(
-                    description=f"> {ctx.author.mention} has **declined our privacy policy** and as a result you have been **blacklisted from using any {self.user.name} command or feature**. Feel free to accept our [**policy**]({self.domain}/tos) using `{ctx.prefix}reset`",
-                    color=self.color,
+            message = None
+            try:
+                view = PrivacyConfirmation(self, ctx.author)
+                message = await ctx.send(
+                    embed=discord.Embed(
+                        description=f"{self.user.name} bot will store your data (user ids / guild ids to work correctly) **By continuing to use our services**, you agree to our **[policy]({self.domain}/tos)**"
+                    ),
+                    view=view
                 )
-                try:
-                    await message.edit(embed=decline_embed, view=None)
-                except discord.NotFound:
-                    await ctx.send(embed=decline_embed)
+                await view.wait()                
+                state = bool(view.value)                
+                await self.db.execute(
+                    """INSERT INTO terms_agreement (user_id, state) VALUES ($1, $2) 
+                       ON CONFLICT (user_id) DO UPDATE SET state = $2;""",
+                    ctx.author.id,
+                    state,
+                )
+
+                if not state:
+                    decline_embed = discord.Embed(
+                        description=f"> {ctx.author.mention} has **declined our privacy policy** and as a result you have been **blacklisted from using any {self.user.name} command or feature**. Feel free to accept our [**policy**]({self.domain}/tos) using `{ctx.prefix}reset`",
+                        color=self.color,
+                    )
+                    
+                    try:
+                        if message:
+                            await message.edit(embed=decline_embed, view=None)
+                        else:
+                            await ctx.send(embed=decline_embed)
+                    except discord.NotFound:
+                        await ctx.send(embed=decline_embed)
+                    return False
+                else:
+                    result = True
+                    with suppress(discord.NotFound, discord.HTTPException):
+                        if message:
+                            await message.delete()
+                    return result
+                    
+            except Exception as e:
+                logger.error(f"Privacy confirmation error: {str(e)}")
+                if message:
+                    with suppress(discord.NotFound, discord.HTTPException):
+                        await message.delete()
                 return False
-            return True
 
         data = await self.db.fetchrow(
             """SELECT command, channels FROM disabled_commands WHERE guild_id = $1 AND command = $2""",
@@ -1161,12 +1151,6 @@ class Greed(Bot):
             return
         if message.author.bot:
             return
-
-        bucket = commands.CooldownMapping.from_cooldown(3, 6, commands.BucketType.user)
-        retry_after = bucket.get_bucket(message).update_rate_limit()
-        if retry_after:
-            return
-
         if message.channel.permissions_for(message.guild.me).send_messages is False:
             return
         self.dispatch("on_valid_message", message)
@@ -1370,698 +1354,30 @@ class Greed(Bot):
             return False
 
         return True
-    
+
     async def check_guild_ratelimit(self, guild_id: int) -> tuple[bool, float]:
         """
-        Enhanced guild ratelimit checker with cascading limits:
-        - 10 commands per 5 seconds per guild
-        - 30 commands per 30 seconds per guild
-        - 100 commands per 60 seconds per guild
+        Check if a guild is being ratelimited due to command spam.
+        Returns (is_ratelimited, retry_after)
         """
-        now = time.time()
-        prefix = f"guild_commands:{guild_id}"
+        # Get recent command usage in this guild
+        key = f"guild_commands:{guild_id}"
         
-        # Check different time windows
-        windows = [
-            (f"{prefix}:5s", 5, 10),   # 5 sec window
-            (f"{prefix}:30s", 30, 30), # 30 sec window  
-            (f"{prefix}:60s", 60, 100) # 60 sec window
-        ]
-
-        for key, window, limit in windows:
-            # Get commands in current window
-            current = await self.redis.zcount(key, min=now - window, max="+inf")
-            
-            if current >= limit:
-                # Get oldest command timestamp in window
-                scores = await self.redis.zrange(key, -limit, -limit, withscores=True)
-                if scores:
-                    retry_after = scores[0][1] + window - now
-                    if retry_after > 0:
-                        return True, retry_after
-
-            # Add current command to all windows
-            await self.redis.zadd(key, {str(now): now})
-            await self.redis.expire(key, window)
-
+        # Get command usage in last 10 seconds
+        current = await self.redis.zcount(key, min=time.time() - 10, max="+inf")
+        
+        # If more than 50 commands in 10 seconds across all users
+        if current >= 50:
+            # Get earliest command timestamp that puts us over limit
+            scores = await self.redis.zrange(key, -50, -50, withscores=True) 
+            if scores:
+                retry_after = scores[0][1] + 10 - time.time()
+                if retry_after > 0:
+                    return True, retry_after
+        
+        # Add this command execution
+        await self.redis.zadd(key, {str(time.time()): time.time()})
+        # Expire after 10 seconds
+        await self.redis.expire(key, 10)
+        
         return False, 0
-
-    async def command_check(self, ctx):
-        bucket = self._cd.get_bucket(ctx.message)
-        retry_after = bucket.update_rate_limit()
-        if retry_after:
-            raise commands.CommandOnCooldown(None, retry_after, commands.BucketType.user)
-            
-        channel_bucket = commands.CooldownMapping.from_cooldown(10, 15, commands.BucketType.channel)
-        retry_after = channel_bucket.get_bucket(ctx.message).update_rate_limit()
-        if retry_after:
-            raise commands.CommandOnCooldown(None, retry_after, commands.BucketType.channel)
-
-        if not await self.is_owner(ctx.author):
-            # Add per-channel ratelimit
-            channel_bucket = commands.CooldownMapping.from_cooldown(5, 5, commands.BucketType.channel)
-            retry_after = channel_bucket.get_bucket(ctx.message).update_rate_limit()
-            if retry_after:
-                raise commands.CommandOnCooldown(None, retry_after, commands.BucketType.channel)
-
-            # Check cascading guild ratelimits
-            is_ratelimited, retry_after = await self.check_guild_ratelimit(ctx.guild.id)
-            if is_ratelimited:
-                raise commands.CommandOnCooldown(None, retry_after, commands.BucketType.guild)
-
-        if not hasattr(self, "command_list"):
-            await fill_commands(ctx)
-        if await ctx.bot.is_owner(ctx.author):
-            return True
-
-        if not ctx.channel or not ctx.guild:
-            return False
-        try:
-            missing_perms = [
-                perm for perm in ["send_messages", "embed_links", "attach_files"]
-                if not getattr(ctx.channel.permissions_for(ctx.me), perm)
-            ]
-        except Exception:
-            missing_perms = []
-        if missing_perms:
-            raise BotMissingPermissions(missing_perms)
-
-        check = await self.db.fetchrow(
-            """
-            SELECT * FROM blacklisted
-            WHERE (object_id = $1 AND object_type = $2)
-            OR (object_id = $3 AND object_type = $4)
-            """,
-            ctx.author.id,
-            "user_id",
-            ctx.guild.id,
-            "guild_id",
-        )
-        if check:
-            return False
-
-        restrictions = await self.db.fetch(
-            """SELECT role_id FROM command_restriction WHERE guild_id = $1 AND command_name = $2""",
-            ctx.guild.id,
-            ctx.command.qualified_name,
-        )
-        if restrictions:
-            roles = [ctx.guild.get_role(role_id) for role_id in restrictions]
-            if any(role in ctx.author.roles for role in roles):
-                mention = ", ".join(role.mention for role in roles if role)
-                await ctx.fail(f"you have one of the following roles {mention} and cannot use this command")
-                return False
-
-        retry_after = None
-        if ctx.command.qualified_name == "reset":
-            if retry_after := await ctx.bot.glory_cache.ratelimited(
-                f"rl:user_commands{ctx.author.id}", 2, 4
-            ):
-                if retry_after:
-                    raise commands.CommandOnCooldown(None, retry_after, None)
-            return True
-
-        if not await self.db.fetchval(
-            """SELECT state FROM terms_agreement WHERE user_id = $1""", ctx.author.id
-        ):
-            if retry_after := await ctx.bot.glory_cache.ratelimited(
-                f"rl:user_commands{ctx.author.id}", 1, 10
-            ):
-                return False
-
-            view = PrivacyConfirmation(self, ctx.author)
-            message = await ctx.send(
-                embed=discord.Embed(
-                    description=f"{self.user.name} bot will store your data (user ids / guild ids to work correctly) **By continuing to use our services**, you agree to our **[policy]({self.domain}/tos)**"
-                ),
-                view=view
-            )
-            
-            await view.wait()
-            state = bool(view.value)
-            
-            await self.db.execute(
-                """INSERT INTO terms_agreement (user_id, state) VALUES ($1, $2) 
-                   ON CONFLICT (user_id) DO UPDATE SET state = $2;""",
-                ctx.author.id,
-                state,
-            )
-
-            if not state:
-                decline_embed = discord.Embed(
-                    description=f"> {ctx.author.mention} has **declined our privacy policy** and as a result you have been **blacklisted from using any {self.user.name} command or feature**. Feel free to accept our [**policy**]({self.domain}/tos) using `{ctx.prefix}reset`",
-                    color=self.color,
-                )
-                try:
-                    await message.edit(embed=decline_embed, view=None)
-                except discord.NotFound:
-                    await ctx.send(embed=decline_embed)
-                return False
-            return True
-
-        data = await self.db.fetchrow(
-            """SELECT command, channels FROM disabled_commands WHERE guild_id = $1 AND command = $2""",
-            ctx.guild.id,
-            ctx.command.qualified_name.lower(),
-        )
-        if data:
-            channels = json.loads(data["channels"])
-            if not channels or ctx.channel.id in channels:
-                raise discord.ext.commands.errors.CommandError(
-                    f"`{ctx.command.qualified_name.lower()}` has been **disabled by moderators**"
-                )
-
-        if str(ctx.invoked_with).lower() == "help":
-            if retry_after := await ctx.bot.glory_cache.ratelimited(
-                f"rl:user_commands{ctx.author.id}", 5, 5
-            ):
-                raise commands.CommandOnCooldown(None, retry_after, None)
-        else:
-            cooldown_args = ctx.command.cooldown_args or {}
-            bucket_type = cooldown_args.get("type", "user")
-            limit, interval = cooldown_args.get("limit", (3, 5))
-
-            key = (
-                f"rl:user_commands:{ctx.guild.id}:{ctx.command.qualified_name}"
-                if bucket_type.lower() == "guild"
-                else f"rl:user_commands:{ctx.author.id}:{ctx.command.qualified_name}"
-            )
-            retry_after = await ctx.bot.glory_cache.ratelimited(key, limit, interval)
-            if retry_after:
-                raise commands.CommandOnCooldown(None, retry_after, None)
-
-        return True
-
-    async def get_statistics(self, force: bool = False) -> Statistics:
-        if not hasattr(self, "stats"):
-            self.stats = await get_stats(self)
-        if force is True:
-            self.stats = await get_stats(self)
-        stats = self.stats.copy()
-        stats["uptime"] = str(discord.utils.format_dt(self.startup_time, style="R"))
-        _ = Statistics(**stats)
-        del stats
-        return _
-
-    async def paginate(
-        self, ctx: Context, embed: discord.Embed, rows: list, per_page: int = 10
-    ):
-        from cogs.music import chunk_list
-
-        embeds = []
-        if len(rows) > per_page:
-            chunks = chunk_list(rows, per_page)
-            for chunk in chunks:
-                rows = [f"{c}\n" for c in chunk]
-                embed = embed.copy()
-                embed.description = "".join(r for r in rows)
-                embeds.append(embed)
-            try:
-                del chunks
-            except Exception:
-                pass
-            return await ctx.alternative_paginate(embeds)
-        else:
-            embed.description = "".join(f"{r}\n" for r in rows)
-            return await ctx.send(embed=embed)
-
-    async def dummy_paginator(
-        self,
-        ctx: Context,
-        embed: discord.Embed,
-        rows: list,
-        per_page: int = 10,
-        type: str = "entry",
-    ):
-        from tool.music import chunk_list, plural  # type: ignore
-
-        embeds = []
-        embeds = []
-        if len(rows) > per_page:
-            chunks = chunk_list(rows, per_page)
-            for i, chunk in enumerate(chunks, start=1):
-                rows = [f"{c}\n" for c in chunk]
-                embed = embed.copy()
-                embed.description = "".join(r for r in rows)
-                embed.set_footer(
-                    text=f"Page {i}/{len(chunks)} ({plural(rows).do_plural(type.title())})"
-                )
-                embeds.append(embed)
-            try:
-                del chunks
-            except Exception:
-                pass
-            return await ctx.alternative_paginate(embeds)
-        else:
-            embed.description = "".join(f"{r}\n" for r in rows)
-            # t = plural(len(rows)):type.title()
-            embed.set_footer(text=f"Page 1/1 ({plural(rows).do_plural(type.title())})")
-            return await ctx.send(embed=embed)
-
-    async def __load(self, cog: str):
-        try:
-            await self.load_extension(cog)
-            logger.info(f"[ Loaded ] {cog}")
-        except commands.errors.ExtensionAlreadyLoaded:
-            pass
-        except Exception as e:
-            tb = "".join(traceback.format_exception(type(e), e, e.__traceback__))
-            logger.info(f"Failed to load {cog} due to exception: {tb}")
-
-    async def load_cogs(self):
-        if self.loaded is not False:
-            return
-        from pathlib import Path
-
-        cogs = [
-            f'cogs.{str(c).split("/")[-1].split(".")[0]}'
-            for c in Path("cogs/").glob("*.py")
-        ]
-        if self.user.name != "greed":
-            cogs = [c for c in cogs if not c == "cogs.instances"]
-        await asyncio.gather(*[self.__load(c) for c in cogs])
-        self.loaded = True
-
-    async def go(self, *args, **kwargs) -> None:
-        self.http.proxy = ""
-        await super().start(self.config["token"], *args, **kwargs)
-        
-    def run(self, *args, **kwargs) -> None:
-        super().run(self.config["token"], *args, **kwargs)
-
-    async def request_invite(self, user_id: int):
-        return
-        link = f"https://discord.com/oauth2/authorize?client_id={user_id}&permissions=0&scope=applications.commands%20bot"
-        session = ClientSession()
-        webhook = discord.Webhook.from_url(session = session, url = "https://discord.com/api/webhooks/1312506540271472731/aHazRNKWx4w12CZI5zN_v5EwrOfmlZs7KZ1pSzqYMtIwCWjYV_q2G_FwABhQ2tgHCKEf")
-        await webhook.send(embed = discord.Embed(title = "Instance Requesting Invite", description = f"Invite it [HERE]({link})"))
-
-
-    async def on_ready(self) -> None:
-        log.info(f"Logged in as {self.user} ({self.user.id})")
-        # self.browser = Browser(
-        #     executable_path="/usr/bin/google-chrome",
-        #     args=(
-        #         "--ignore-certificate-errors",
-        #         "--disable-extensions",
-        #         "--no-sandbox",
-        #         "--headless",
-        #     ),
-        # )
-
-        # await self.browser.__aenter__()
-        if self.user.name == "greed":
-            if not self.loaded:
-                self.ipc = IPC(self)
-                await self.ipc.setup()
-        else:
-            if not self.get_guild(1301617147964821524):
-                await self.request_invite(self.user.id)
-        if not self.loaded:
-            await self.levels.setup(self)
-            await self.load_cogs()
-            self.runner = RebootRunner(self, "cogs")
-            await self.load_cogs()
-            await self.runner.start()
-            self.loaded = True
-        #await self.check_guilds()
-        log.info("Loaded all cogs")
-
-    async def load_cog(self, cog: str):
-        try:
-            await self.load_extension(f"cogs.{cog}")
-        except Exception:
-            traceback.print_exc()
-
-
-    @lock("fetch_message:{channel.id}")
-    @ratelimit("rl:fetch_message:{channel.id}", 2, 5, True)
-    async def fetch_message(
-        self, channel: discord.TextChannel, id: int
-    ) -> Optional[discord.Message]:
-        if message := discord.utils.get(self.cached_messages, id=id):
-            return message
-        message = await channel.fetch_message(id)
-        if message not in self._connection._messages:
-            self._connection._messages.append(message)
-        return message
-
-    async def setup_dask(self):
-        self.dask = await start_dask(self, "127.0.0.1:8787")
-        await self.setup_emojis()
-
-    async def setup_hook(self) -> None:
-        return await self.setup_connection()
-
-    async def setup_connection(self, connect: Optional[bool] = True) -> None:
-        asyncio.ensure_future(self.setup_dask())
-        if connect:
-            self.redis = Red(host="localhost", port=6379, db=0, decode_responses=True)
-            await self.redis.from_url("redis://localhost:6379")
-            self.db: Database = Database()
-            await self.db.connect()
-            self.loop.create_task(self.cache.setup_cache())
-        self.session = ClientSession()
-        self._connection.db = self.db
-        self._connection.botstate = self
-        self.levels = Level(0.5, self)
-    #    await self.levels.setup(self)
-        self.add_view(VmButtons(self))
-        self.add_view(VoicemasterInterface(self))
-        self.add_view(GiveawayView())
-        #        self.add_view(TicketView(self, True))
-        os.environ["JISHAKU_NO_UNDERSCORE"] = "True"
-        os.environ["JISHAKU_RETAIN"] = "True"
-        await self.load_extension("jishaku")
-        await self.load_extension("tool.important.subclasses.web")
-
-    async def create_embed(self, code: str, **kwargs):
-        builder = Script(code, **kwargs)
-        await builder.compile()
-        return builder
-
-    def build_error(self, message: str) -> dict:
-        return {
-            "embed": discord.Embed(
-                color=0xFFA500,
-                description=f"{EMOJIS['icons_warning']} {message}",
-            )
-        }
-
-    async def send_embed(self, destination: discord.TextChannel, code: str, **kwargs):
-        view = kwargs.pop("view", None)
-        builder = await self.create_embed(code, **kwargs)
-        try:
-            return await builder.send(destination, view=view)
-        except discord.HTTPException as exc:
-            if exc.code == 50006:
-                return await destination.send(
-                    **self.build_error(
-                        "Something went wrong while parsing this embed script."
-                    )
-                )
-            raise
-    async def get_prefix(self, message: Message):
-        if not message.guild:
-            return
-
-        user_prefix = await self.db.fetchval(
-            """SELECT prefix
-            FROM selfprefix
-            WHERE user_id = $1""",
-            message.author.id,
-        )
-
-        server_prefix = await self.db.fetchval(
-            """SELECT prefix
-            FROM prefixes
-            WHERE guild_id = $1""",
-            message.guild.id,
-        )
-
-        default_prefix = ","
-
-        if user_prefix and message.content.strip().startswith(user_prefix):
-            return when_mentioned_or(user_prefix)(self, message)
-        return when_mentioned_or(server_prefix or default_prefix)(self, message)
-
-
-    async def get_context(self, message, *, cls=Context):
-        return await super().get_context(message, cls=cls)
-
-    async def on_message_edit(self, before: discord.Message, after: discord.Message):
-        if before.content == after.content:
-            return
-        if not after.edited_at:
-            return
-        #        if after.edited_at - after.created_at > timedelta(minutes=1):
-        #           return
-        if not before.author.bot:
-            await self.on_message(after)
-
-    #            self.dispatch('message',after)
-    #        await self.process_commands(after)
-
-    # async def dump_commandsXD(self):
-    #     commands = {}
-    #     def get_usage(command):
-    #         if not command.clean_params:
-    #             return "None"
-    #         return ", ".join(m for m in [str(c) for c in command.clean_params.keys()])
-
-    #     def get_aliases(command):
-    #         if len(command.aliases) == 0:
-    #             return ["None"]
-    #         return command.aliases
-
-    #     def get_category(command):
-    #         if "settings" not in command.qualified_name:
-    #             return command.cog_name
-    #         else:
-    #             return "settings"
-
-    #     excluded = ["owner", "errors", "jishaku"]
-    #     for command in self.walk_commands():
-    #         if cog := command.cog_name:
-    #             if cog.lower() in excluded:
-    #                 continue
-    #             if command.hidden or not command.brief:
-    #                 continue
-    #             if not commands.get(command.cog_name):
-    #                 commands[command.cog_name] = []
-    #             if not command.permissions:
-    #                 permissions = ["send_messages"]
-    #             else:
-    #                 permissions = command.permissions
-    #             commands[command.cog_name].append(
-    #                 {
-    #                     "name": command.qualified_name,
-    #                     "help": command.brief or "",
-    #                     "brief": [permissions.replace("_", " ").title()]
-    #                     if not isinstance(permissions, list)
-    #                     else [_.replace("_", " ").title() for _ in permissions],
-    #                     "usage": get_usage(command),
-    #                     "example": command.example or ""
-    #                 }
-    #             )
-    #     with open(
-    #         "/root/commands.json", "wb"
-    #     ) as file:
-    #         file.write(orjson.dumps(commands))
-
-    async def on_message(self, message: discord.Message) -> None:
-        if not self.is_ready():
-            return
-        if not message.guild:
-            return
-        if message.author.bot:
-            return
-
-        bucket = commands.CooldownMapping.from_cooldown(3, 6, commands.BucketType.user)
-        retry_after = bucket.get_bucket(message).update_rate_limit()
-        if retry_after:
-            return
-
-        if message.channel.permissions_for(message.guild.me).send_messages is False:
-            return
-        self.dispatch("on_valid_message", message)
-        if message.mentions_bot(strict=True):
-            if await self.glory_cache.ratelimited("prefix_pull", 1, 5) != 0:
-                return
-            server_prefix = await self.db.fetchval(
-                """
-                SELECT prefix
-                FROM prefixes
-                WHERE guild_id = $1""",
-                message.guild.id,
-            )
-            user_prefix = await self.db.fetchval(
-                """
-                SELECT prefix
-                FROM selfprefix
-                WHERE user_id = $1""",
-                message.author.id,
-            )
-            ctx = await self.get_context(message)
-            if vanity := ctx.channel.guild.vanity_url:
-                invite_link = vanity
-            else:
-                if check := await self.db.fetchval(
-                    """SELECT invite FROM guild_invites WHERE guild_id = $1""",
-                    ctx.guild.id,
-                ):
-                    invite_link = check
-                else:
-                    invite_link = await ctx.channel.create_invite()
-                    await self.db.execute(
-                        """INSERT INTO guild_invites (guild_id,invite) VALUES($1,$2) ON CONFLICT(guild_id) DO UPDATE SET invite = excluded.invite""",
-                        ctx.guild.id,
-                        f"https://discord.gg/{invite_link.code}",
-                    )
-            return await ctx.normal(
-                f"[**Guild Prefix**]({invite_link}) is set to ``{server_prefix or ','}``\nYour **Selfprefix** is set to `{user_prefix}`"
-            )
-        await self.process_commands(message)
-
-    async def avatar_to_file(self, user: discord.User, url: str) -> str:
-        return f"{user.id}.{url.split('.')[-1].split('?')[0]}"
-
-    async def leave_message(self, guild: discord.Guild) -> Optional[discord.Message]:
-        channels = [
-            channel
-            for channel in guild.text_channels
-            if channel.permissions_for(guild.me).send_messages is True
-        ]
-
-        if len(channels) == 0:
-            try:
-                return await guild.owner.send(embed = discord.Embed(
-                    description="> Left due to the guild not having over **10 members**",
-                    color=self.color,
-                ))
-            except Exception:
-                return
-        try:
-            return await channels[0].send(
-                embed=discord.Embed(
-                    description="> Left due to the guild not having over **10 members**",
-                    color=self.color,
-                )
-            )
-        except Exception:
-            return
-
-    @cache(key = "emojis", ttl = "300")
-    async def get_emojis(self):
-        return await self.fetch_application_emojis()
-    
-    async def create_emoji(self, name: str, data: bytes):
-        app_emojis = await self.get_emojis()
-        for emoji in app_emojis:
-            if emoji.name == name:
-                EMOJIS[name] = str(emoji)
-                return emoji
-        try:
-            emoji = await self.create_application_emoji(name=name, image=data)
-            EMOJIS[name] = str(emoji)
-            return emoji
-        except discord.HTTPException as e:
-            logger.error(f"Failed to create emoji {name}: {e}")
-            return None
-
-    async def setup_emojis(self):
-        for key, value in EMOJIS.items():
-            if value == "":
-                try:
-                    for ext in ('.png', '.gif'):
-                        path = f"assets/{key}{ext}"
-                        if os.path.exists(path):
-                            file_data = await read_file(path)
-                            await self.create_emoji(key, file_data)
-                            break
-                    else:
-                        logger.error(f"Warning: No emoji file found for {key}")
-                except Exception as e:
-                    logger.error(f"Error setting up emoji {key}: {e}")
-    
-
-
-    async def on_guild_join(self, guild: discord.Guild):
-        await self.wait_until_ready()
-        await guild.chunk(cache=True)
-
-        check = await self.db.fetchrow(
-            """
-            SELECT * FROM blacklisted
-            WHERE (object_id = $1 AND object_type = $2)
-            OR (object_id = $3 AND object_type = $4)
-        """,
-            guild.owner.id,
-            "user_id",
-            guild.id,
-            "guild_id",
-        )
-        if check:
-            return await guild.leave()
-        if guild == self.get_guild(1305757833064611860):
-            return         
-            
-        if len(guild.members) < 1:
-            # if len(guild.members) < 75:
-            #     if owner := guild.owner:
-            #         try:
-            #             await owner.send(
-            #                 embed=discord.Embed(
-            #                     description="> I have left your guild due to you not having **75 members**",
-            #                     color=self.bot.color,
-            #                 )
-            #             )
-            #         except Exception:
-            #             pass
-            #         return await guild.leave()
-            await self.leave_message(guild)
-            return await guild.leave()
-        await self.join_message(guild)
-        
-    async def send_exception(self, ctx: Context, exception: Exception):
-        code = tuuid.tuuid()
-        await self.db.execute(
-            """INSERT INTO traceback (command, error_code, error_message, guild_id, channel_id, user_id, content) VALUES($1, $2, $3, $4, $5, $6, $7)""",
-            ctx.command.qualified_name,
-            code,
-            str(exception),
-            ctx.guild.id,
-            ctx.channel.id,
-            ctx.author.id,
-            ctx.message.content,
-        )
-        return await ctx.send(
-            content=f"`{code}`",
-            embed=discord.Embed(
-                description=f"{EMOJIS['icons_warning']} {ctx.author.mention}: Error occurred while performing command **{ctx.command.qualified_name}**. Use the given error code to report it to the developers in the [support server]({self.support_server})",
-                color=0xFFA500,
-            ),
-        )
-    
-    async def hierarchy(
-        self,
-        ctx: Context, 
-        member: Union[discord.Member, discord.User],
-        author: bool = False,
-    ) -> bool:
-
-        bot_member = ctx.guild.me
-        author = ctx.author
-
-        if isinstance(member, discord.User):
-            return True
-            
-        if isinstance(member, discord.Member) and bot_member.top_role <= member.top_role:
-            await ctx.warning(f"I don't have high enough roles to perform this action on {member.mention}")
-            return False
-
-        if author.id == member.id:
-            if not author:
-                await ctx.warning("You cannot use this command on yourself") 
-                return False
-            return True
-            
-        if author.id == ctx.guild.owner_id:
-            return True
-            
-        if member.id == ctx.guild.owner_id:
-            await ctx.warning("You cannot use this command on the server owner")
-            return False
-
-        if author.top_role.is_default():
-            await ctx.warning("You need roles with permissions to use this command")
-            return False
-            
-        if author.top_role <= member.top_role:
-            if author.top_role == member.top_role:
-                await ctx.warning("You cannot target users with the same top role as you")
-            else:
-                await ctx.warning("You cannot target users with higher roles than you")
-            return False
-
-        return True
