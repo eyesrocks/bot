@@ -33,6 +33,8 @@ class ConfessionModel(Modal, title="confess"):
                 )
 
             channel = interaction.guild.get_channel(check["channel_id"])
+            if not channel:
+                return await interaction.response.send_message("The confession channel no longer exists.", ephemeral=True)
             count = check["confession"] + 1
             embed = Embed(
                 color=interaction.client.color,
@@ -47,7 +49,7 @@ class ConfessionModel(Modal, title="confess"):
             )
             e.set_author(
                 name=f"anonymous confession #{count}",
-                url="https://discord.gg/pomice",
+                url="https://discord.gg/greedbot",
             )
 
             e.set_footer(text="type /confess to send a confession")

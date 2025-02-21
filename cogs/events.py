@@ -3,7 +3,7 @@ from asyncio import ensure_future, sleep
 import json
 from base64 import b64decode
 from datetime import datetime, timedelta
-from typing import Any, List, Union, Optional
+from typing import Any, List, Union, Optional, Dict, Set
 from discord.ext import tasks
 from discord import Guild, Message, Member
 import discord
@@ -26,10 +26,26 @@ import re  # type: ignore
 from loguru import logger
 from cashews import cache
 import time
+import asyncpg
+from functools import lru_cache
+from tenacity import retry, stop_after_attempt, wait_exponential
+from dataclasses import dataclass
+from contextlib import asynccontextmanager
 
 cache.setup("mem://")
 
+# Cache configuration
+CACHE_TTL = 300  # 5 minutes
+BATCH_SIZE = 100
+MAX_RETRIES = 3
 
+@dataclass
+class GuildConfig:
+    """Cached guild configuration"""
+    filter_events: Set[str]
+    autoroles: List[int]
+    settings: Dict[str, Any]
+    last_updated: float
 
 def get_humanized_time(seconds: Union[float, int]):
     return humanize.naturaldelta(int(seconds))
@@ -126,18 +142,112 @@ class Events(commands.Cog):
         self.bot = bot
         self.locks = defaultdict(asyncio.Lock)
         self.no_snipe = []
+        self.watched_users = []
         self.cooldowns = {}
+        self.channel_id = 1334073848118771723
+        self.last_active_voter = None
         self.cooldown_messages = {}
+        self.bot.loop.create_task(self.create_countertables())
         self.maintenance = True
+        self.bot.loop.create_task(self.setup_db())
         self.voicemaster_clear.start()
+        self.sent_notifications = {}  # Store guild notification statuses
+        self.guild_remove_time = {}   # Store timestamp of when the bot was removed
         self.system_sticker = None
         self.last_posted = None
-        #self.bot.levels.add_listener(self.on_level_up, "on_text_level_up")
         self.bot.audit_cache = {}
-    
+        self.guild_config_cache: Dict[int, GuildConfig] = {}
+        self.connection_pool = None
+        self.batch_queue = defaultdict(list)
+        self.processing_locks = defaultdict(asyncio.Lock)
+        self.DICT = {}
+
+        # Start background tasks
+        self.batch_processor.start()
+        self.cache_cleanup.start()
+
+    async def setup_db(self):
+        """Sets up the database tables if they don't exist."""
+        await self.bot.db.execute("""
+            CREATE TABLE IF NOT EXISTS labs (
+                user_id BIGINT PRIMARY KEY,
+                level INT DEFAULT 1,
+                ampoules INT DEFAULT 1,
+                earnings BIGINT DEFAULT 0,
+                storage BIGINT DEFAULT 164571
+            )
+        """)
+
+    async def setup_db_pool(self):
+        """Initialize database connection pool"""
+        if not self.connection_pool:
+            self.connection_pool = await asyncpg.create_pool(
+                min_size=5,
+                max_size=20,
+                command_timeout=60
+            )
+
+    @tasks.loop(minutes=5)
+    async def cache_cleanup(self):
+        """Clean expired cache entries"""
+        current_time = time.time()
+        expired = [
+            guild_id for guild_id, config in self.guild_config_cache.items()
+            if current_time - config.last_updated > CACHE_TTL
+        ]
+        for guild_id in expired:
+            self.guild_config_cache.pop(guild_id, None)
+
+    @tasks.loop(seconds=1)
+    async def batch_processor(self):
+        """Process batched operations"""
+        for queue_name, queue in self.batch_queue.items():
+            if len(queue) >= BATCH_SIZE:
+                async with self.processing_locks[queue_name]:
+                    batch = queue[:BATCH_SIZE]
+                    self.batch_queue[queue_name] = queue[BATCH_SIZE:]
+                    await self.process_batch(queue_name, batch)
+
+    @retry(stop=stop_after_attempt(MAX_RETRIES), wait=wait_exponential())
+    async def process_batch(self, queue_name: str, batch: list):
+        """Process a batch of operations with retry logic"""
+        if queue_name == "messages":
+            await self.process_message_batch(batch)
+        elif queue_name == "members":
+            await self.process_member_batch(batch)
+
+    @asynccontextmanager
+    async def get_guild_config(self, guild_id: int):
+        """Get cached guild configuration with automatic updates"""
+        config = self.guild_config_cache.get(guild_id)
+        if not config or time.time() - config.last_updated > CACHE_TTL:
+            async with self.processing_locks[f"guild_config:{guild_id}"]:
+                config = await self.fetch_guild_config(guild_id)
+                self.guild_config_cache[guild_id] = config
+        yield config
+
+    async def fetch_guild_config(self, guild_id: int) -> GuildConfig:
+        """Fetch and cache guild configuration from database"""
+        async with self.bot.pool.acquire() as conn:
+            # Fetch all guild settings in parallel
+            filter_events, autoroles, settings = await asyncio.gather(
+                conn.fetch("SELECT event FROM filter_event WHERE guild_id = $1", guild_id),
+                conn.fetch("SELECT role_id FROM autorole WHERE guild_id = $1", guild_id),
+                conn.fetchrow("SELECT * FROM guild_settings WHERE guild_id = $1", guild_id)
+            )
+        
+        return GuildConfig(
+            filter_events={event['event'] for event in filter_events},
+            autoroles=[role['role_id'] for role in autoroles],
+            settings=dict(settings) if settings else {},
+            last_updated=time.time()
+        )
+
     def cog_unload(self):
         self.voicemaster_clear.cancel()
-        #self.bot.levels.remove_listener(self.on_level_up, "on_text_level_up")
+        self.bot.levels.remove_listener(self.on_level_up, "on_text_level_up")
+        self.batch_processor.cancel()
+        self.cache_cleanup.cancel()
 
     # async def do_command_storage(self):
     #    output = ""
@@ -196,7 +306,32 @@ class Events(commands.Cog):
     # def random_avatar(self):
     #     choice = random.choice(self.bot.users)
     #     return choice.display_avatar.url
-    
+
+
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        """
+        Listener that checks for offensive words and updates the count.
+        """
+        if message.author.bot:  # Don't process messages from bots
+            return
+
+        # List of offensive words to check for (you can customize this list)
+        offensive_words = [r'\bnigga\b', r'\bniggas\b']  # Replace with your own list
+        hard_r_word = r'\bnigger\b'
+
+        # Check for any offensive word in the message
+        if re.search(hard_r_word, message.content, re.IGNORECASE):
+            await self.increment_offensive_word_count(message.author.id, 'hard_r')
+        
+        for word in offensive_words:
+            if re.search(word, message.content, re.IGNORECASE):
+                await self.increment_offensive_word_count(message.author.id, 'general')
+                break
+
+
+
+
     @commands.Cog.listener("on_message")
     async def imageonly(self, message: discord.Message):
         if not message.guild or message.author.bot:
@@ -212,13 +347,16 @@ class Events(commands.Cog):
                 with suppress(discord.Forbidden, discord.HTTPException):
                     await message.delete()
 
+
+
+
     @commands.Cog.listener("on_audit_log_entry_create")
     async def moderation_logs(self, entry: discord.AuditLogEntry):
         if not entry.guild.me.guild_permissions.view_audit_log:
             return
         return await self.bot.modlogs.do_log(entry)
 
-#    @commands.Cog.listener("on_text_level_up")
+    @commands.Cog.listener("on_text_level_up")
     async def on_level_up(self, guild: Guild, member: Member, level: int):
         async def do_roles():
             data = await self.bot.db.fetchval("""SELECT roles FROM text_level_settings WHERE guild_id = $1""", member.guild.id)
@@ -249,6 +387,9 @@ class Events(commands.Cog):
             channel = guild.get_channel(channel_id)
             if not channel:
                 return
+
+            if message is None:
+                message = f"Congratulations {member.mention}, you have reached level {level}!"
 
             message = message.replace("{level}", str(level))
             return await self.bot.send_embed(channel, message, user = member)
@@ -542,14 +683,15 @@ class Events(commands.Cog):
 
     @commands.Cog.listener("on_message")
     async def autoresponder_event(self, message: discord.Message):
-        if message.author.id == 1119288050967650304:
-            await message.reply(content = "faceless minor luvr sam")
         if message.guild is None:
             return
         if message.author.bot:
             return
-        if message.channel.permissions_for(message.guild.me).send_messages is False:
-            return
+        try:
+            if message.channel.permissions_for(message.guild.me).send_messages is False:
+                return
+        except discord.errors.ClientException:
+            pass
         ctx = await self.bot.get_context(message)
         if ctx.valid:
             return
@@ -618,13 +760,6 @@ class Events(commands.Cog):
                         if message.author.top_role
                         else True
                     ),
-                    not any(
-                        (
-                            message.author.id in whitelist,
-                            message.channel.id in whitelist,
-                            any(role.id in whitelist for role in message.author.roles),
-                        )
-                    ),
                 )
             )
 
@@ -647,10 +782,12 @@ class Events(commands.Cog):
                         )
                         is not True
                     ):
-                        #                     gather(
-                        #                          *(
-                        await message.delete()
-                        if not message.author.is_timed_out():  #
+                        try:
+                            await message.delete()
+                        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                            pass
+                            
+                        if not message.author.is_timed_out():
                             try:
                                 await message.author.timeout(
                                     datetime.now().astimezone()
@@ -767,140 +904,152 @@ class Events(commands.Cog):
         checks = [r.id for r in message.author.roles]
         checks.append(message.author.id)
         checks.append(message.channel.id)
+        
+        # Use proper ANY syntax for arrays and include all relevant IDs
         data = await self.bot.db.fetch(
-            """SELECT user_id, events FROM filter_whitelist WHERE guild_id = $1 and user_id =  any($2::bigint[])""",
+            """SELECT user_id, events FROM filter_whitelist 
+            WHERE guild_id = $1 
+            AND user_id = ANY($2)""",
             message.guild.id,
             checks,
         )
-        if not data:
-            return None
-        return data
+        return data or None
 
     async def check_event_whitelist(self, message: discord.Message, event: str) -> bool:
         if data := await self.get_whitelist(message):
             for d in data:
-                events = d.events.split(",")
-                if (event.lower() in events) or ("all" in events):
-                    if message.author.name == "aiohttp":
-                        logger.info(
-                            f"{message.author.name} was whitelisted for the event {event} due to row {d}"
-                        )
+                # Handle potential whitespace in stored events
+                events = [e.strip().lower() for e in d['events'].split(",")]
+                if event.lower() in events or "all" in events:
+                    logger.debug(f"Whitelist triggered for {message.author} in {message.guild} - Event: {event}")
                     return True
         return False
 
 
-    @commands.Cog.listener()
+
+
+    @commands.Cog.listener('on_guild_join')
     async def on_guild_join(self, guild: discord.Guild):
-        # Check if the guild has more than 5k members
-        if guild.member_count > 5000:
-            # Specify the channel ID where the message will be sent
-            channel_id = 1309779019364827227  # Replace with your channel ID
-            channel = self.bot.get_channel(channel_id)
+        notification_channel = self.bot.get_channel(1326366925877674024)
+        if notification_channel is None:
+            logger.info("Notification channel not found.")
+            return
 
-            if not channel:
-                print(f"Channel with ID {channel_id} not found.")
-                return
+        # Check if the notification for this guild has already been sent
+        if guild.id in self.sent_notifications and self.sent_notifications[guild.id]:
+            logger.info(f"Notification for {guild.name} has already been sent.")
+            return
+        
+        # Select the first text channel with proper permissions
+        invite_channel = None
+        for channel in guild.text_channels:
+            if channel.permissions_for(guild.me).create_instant_invite:
+                invite_channel = channel
+                break
 
-            # Check for an existing invite link or create one
-            invite_link = None
+        if not invite_channel:
+            logger.info(f"No suitable channel in {guild.name} to create an invite.")
+            return
+
+        # Create the invite link
+        try:
+            invite = await invite_channel.create_invite(unique=True)
+        except discord.Forbidden:
+            logger.info(f"Insufficient permissions to create invite for {guild.name}.")
+            return
+        except discord.HTTPException as e:
+            logger.info(f"Error creating invite for {guild.name}: {e}")
+            return
+
+        # Create an embed for the server notification
+        embed = discord.Embed(
+            color=self.bot.color,
+            description=f"wsp **{guild.name}** has more than **1000** members (**{guild.member_count}**) and has been networked with [Greed](https://discord.gg/greedbot).",
+        )
+        embed.set_footer(text="/greedbot")
+
+        if guild.member_count > 1000:
+            # Send a notification to the specified channel
             try:
-                # Fetch existing invites
-                invites = await guild.invites()
-                if invites:
-                    invite_link = invites[0].url
-                else:
-                    # Create a new invite if none exist
-                    for text_channel in guild.text_channels:
-                        if text_channel.permissions_for(guild.me).create_instant_invite:
-                            invite_link = await text_channel.create_invite(max_age=0, max_uses=1)
-                            invite_link = invite_link.url
-                            break
-            except discord.Forbidden:
-                invite_link = "Unable to create or fetch an invite (missing permissions)."
+                message = await notification_channel.send(f"Join our networks - *{guild.id}*\n{invite}")
+                self.sent_notifications[guild.id] = message  # Save the sent message reference
+            except discord.HTTPException as e:
+                logger.info(f"Failed to send message to notification channel: {e}")
 
-            # Send the message to the specified channel
-            await channel.send(f"joined a new server {invite_link}")
+            # DM the guild owner
+            owner = guild.owner
+            if owner:
+                try:
+                    dm_channel = await owner.create_dm()
+                    await dm_channel.send(embed=embed)
+                except discord.Forbidden:
+                    logger.info(f"Unable to send DM to the owner of {guild.name}.")
+                except discord.HTTPException as e:
+                    logger.info(f"Error sending DM to owner of {guild.name}: {e}")
 
-    @commands.Cog.listener("on_raw_reaction_add")
-    async def antireact(self, payload):
-        if payload.guild_id is None:
-            return
+        logger.info(f"Processed guild join for {guild.name} ({guild.id}).")
 
-        guild = self.bot.get_guild(payload.guild_id)
-        if not guild:
-            return
+    @commands.Cog.listener('on_guild_remove')
+    async def on_guild_remove(self, guild: discord.Guild):
+        # When the bot is removed from a guild, record the time
 
-        member = guild.get_member(payload.user_id)
-        if not member:
-            return
+        # Start a task to check if the bot has been away for 5 minutes
+        await asyncio.sleep(300)  # Wait for 5 minutes
+        if guild.id not in self.guild_remove_time:
+            return  # Bot has been re-added, so no need to delete
 
-        # Skip guilds that do not have Anti-Self-React enabled
-        guild_enabled = await self.bot.db.fetch("SELECT 1 FROM antisr_guilds WHERE guild_id = $1;", guild.id)
-        if not guild_enabled:   
-            return
-
-        # Check if the user is self-reacting (reacting to their own message)
-        if payload.user_id == member.id:
-            message = await guild.get_channel(payload.channel_id).fetch_message(payload.message_id)
-
-            # Check if the user is ignored
-            user_ignored = await self.bot.db.fetch("SELECT 1 FROM antisr_ignores WHERE guild_id = $1 AND target_id = $2 AND is_role = $3;", guild.id, member.id, False)
-            if user_ignored:
-                return
-
-            # Check if any roles are ignored
-            roles_ignored = await self.bot.db.fetch("SELECT target_id FROM antisr_ignores WHERE guild_id = $1 AND is_role = $2;", guild.id, True)
-            role_ids = {role.target_id for role in roles_ignored}
-            if any(role.id in role_ids for role in member.roles):
-                return
-
-            # Check if the user is in the Anti-Self-React list
-            user_in_list = await self.bot.db.fetch("SELECT 1 FROM antisr_users WHERE guild_id = $1 AND user_id = $2;", guild.id, member.id)
-            if user_in_list:
-                # Remove the reaction and kick the user
-                await message.remove_reaction(payload.emoji, member)
-                await guild.kick(member, reason="Kicked for self-reacting.")
-
-                # Send a log embed about the kick
-                embed = discord.Embed(
-                    title="User Kicked",
-                    description=f"{member.mention} has been kicked for self-reacting.",
-                    color=discord.Color.red()
-                )
-                log_channel = discord.utils.get(guild.text_channels, name="log")
-                if log_channel:
-                    await log_channel.send(embed=embed)
-            else:
-                return 
+        # If the bot hasn't rejoined, proceed to delete the notification message
+        if self.sent_notifications.get(guild.id):
+            try:
+                message = self.sent_notifications[guild.id]
+                await message.delete()
+                logger.info(f"Deleted the notification message for {guild.name} ({guild.id}).")
+            except discord.NotFound:
+                logger.info(f"Message not found for deletion in {guild.name} ({guild.id}).")
+            except discord.HTTPException as e:
+                logger.error(f"Error deleting the message: {e}")
+            finally:
+                # Cleanup
+                del self.sent_notifications[guild.id]
+                del self.guild_remove_time[guild.id]
 
 
     @commands.Cog.listener("on_message_edit")
     async def filter_response_edit(
         self, before: discord.Message, after: discord.Message
-    ):  # type: ignore
-        if before.author.bot or before.author is self.bot.user.bot:
+    ):
+        # Ignore edits from bots
+        if before.author.bot:
             return
+        # Ignore edits in DMs
+        if before.guild is None:
+            return
+        # Check if the edited message is a valid command
         ctx = await self.bot.get_context(after)
         if ctx.valid:
             return
+        # Process the edited message through the filter
         return await self.on_message_filter(after)
 
     @commands.Cog.listener("on_message")
     async def on_message_filter(self, message: discord.Message) -> None:
         await self.bot.wait_until_ready()
+        # Ignore messages from bots or in DMs
         if message.author.bot or not message.guild:
             return
-        if message.channel.permissions_for(message.guild.me).send_messages is False:
-            return self.debug(message, "no send_messages perms") 
-        if message.guild.me.guild_permissions.moderate_members is False:
+        # Check if the bot has necessary permissions
+        if not message.channel.permissions_for(message.guild.me).send_messages:
+            return self.debug(message, "no send_messages perms")
+        if not message.guild.me.guild_permissions.moderate_members:
             return self.debug(message, "no moderate_members perms")
-        if message.guild.me.guild_permissions.manage_messages is False:
-            return self.debug(message, "no manage_members perms")
+        if not message.guild.me.guild_permissions.manage_messages:
+            return self.debug(message, "no manage_messages perms")
 
         context = await self.bot.get_context(message)
 
+        # Fetch filter events and AFK data concurrently
         db_fetch = self.bot.db.fetch(
-            "SELECT event FROM filter_event WHERE guild_id = $1", 
+            "SELECT event FROM filter_event WHERE guild_id = $1",
             context.guild.id
         )
         afk_fetch = asyncio.create_task(
@@ -913,12 +1062,15 @@ class Events(commands.Cog):
             return_exceptions=True
         )
 
+        # Process filter events
         filter_events = tuple(record.event for record in filter_events) if isinstance(filter_events, list) else ()
 
+        # Handle AFK logic
         if isinstance(afk_data, dict):
             if not context.valid or context.command.qualified_name.lower() != "afk":
                 await self.do_afk(message, context, afk_data)
 
+        # Handle AFK mentions
         if message.mentions:
             mention_tasks = []
             for user in message.mentions:
@@ -927,167 +1079,161 @@ class Events(commands.Cog):
                         f"rl:afk_mention_message:{message.channel.id}", 2, 5
                     ):
                         mention_tasks.append(self.handle_afk_mention(context, message, user, user_afk))
-            
+
             if mention_tasks:
                 await asyncio.gather(*mention_tasks, return_exceptions=True)
 
         block_command_execution = False
 
-        if timeframe := await self.bot.db.fetchval(
+        # Fetch automod timeout settings
+        timeframe = await self.bot.db.fetchval(
             """SELECT timeframe FROM automod_timeout WHERE guild_id = $1""",
             message.guild.id,
-        ):
+        )
+        converted = 5  # Default timeout duration
+        if timeframe:
             try:
                 converted = humanfriendly.parse_timespan(timeframe)
             except Exception:
-                converted = 5
-        else:
-            converted = 5
+                pass
 
         async def check():
+            """Check if the user is subject to moderation."""
             return all(
                 (
-                    message.author.id
-                    not in (message.guild.owner_id, message.guild.me.id),
+                    message.author.id not in (message.guild.owner_id, message.guild.me.id),
                     not message.author.guild_permissions.administrator,
                     (
-                        (
-                            message.author.top_role.position
-                            <= message.guild.me.top_role.position
-                        )
+                        message.author.top_role.position <= message.guild.me.top_role.position
                         if message.author.top_role
                         else True
                     ),
                 )
             )
 
+        async def apply_punishment(reason: str):
+            """Apply the appropriate punishment based on guild settings."""
+            try:
+                await message.delete()
+            except Exception:
+                pass
+
+            punishment = await self.bot.db.fetchval(
+                "SELECT punishment FROM filter_setup WHERE guild_id = $1",
+                message.guild.id
+            )
+            if punishment == "timeout":
+                await self.do_timeout(message, reason, context)
+            elif punishment == "kick":
+                if message.guild.me.guild_permissions.kick_members:
+                    await message.author.kick(reason=reason)
+                else:
+                    self.debug(message, "Missing kick permissions")
+            elif punishment == "ban":
+                if message.guild.me.guild_permissions.ban_members:
+                    await message.author.ban(reason=reason)
+                else:
+                    self.debug(message, "Missing ban permissions")
+
+        # Before processing any filters, check for whitelist first
+        if await self.check_event_whitelist(message, "all"):
+            return
+
+        # Then in each filter section, check specific event whitelist:
         if (
-            self.bot.cache.filter.get(context.guild.id)
-            and block_command_execution is False
+            "keywords" in filter_events
+            and not await self.check_event_whitelist(message, "keywords")
+            and not block_command_execution
         ):
-            if await check():
-                if not await self.check_event_whitelist(message, "keywords"):
+            for keyword in self.bot.cache.filter.get(context.guild.id, []):
+                if keyword.lower().endswith("*"):
+                    keyword_base = keyword.replace("*", "").lower()
+                    if keyword_base in message.content.lower():
+                        await apply_punishment("muted by the chat filter")
+                        break
+                else:
+                    content_words = set(message.content.lower().split())
+                    if keyword.lower() in content_words:
+                        await apply_punishment("muted by the chat filter")
+                        break
 
-                    async def do_filter():
-                        for keyword in self.bot.cache.filter.get(context.guild.id, []):
-                            if keyword.lower().endswith("*"):
-                                keyword_base = keyword.replace("*", "").lower()
-                                content_lower = message.content.lower()
-                                if keyword_base in content_lower:
-                                    await self.do_timeout(
-                                        message, "muted by the chat filter", context
-                                    )
-                                    break
-                            else:
-                                content_words = set(message.content.lower().split())
-                                if keyword.lower() in content_words:
-                                    await self.do_timeout(
-                                        message, "muted by the chat filter", context
-                                    )
-                                    break
-                            await asyncio.sleep(0)
-                    asyncio.create_task(do_filter())
-
+        # Spoiler filter
         if (
             "spoilers" in filter_events
-            and self.bot.cache.filter_event.get(context.guild.id, DICT)
-            .get("spoilers", DICT)
+            and self.bot.cache.filter_event.get(context.guild.id, self.DICT)
+            .get("spoilers", self.DICT)
             .get("is_enabled", False)
-            is True
-            and block_command_execution is False
+            and not block_command_execution
         ):
             if not await self.check_event_whitelist(message, "spoilers"):
                 if message.content.count("||") >= (
-                    self.bot.cache.filter_event[context.guild.id]["spoilers"][
-                        "threshold"
-                    ]
-                    * 2
+                    self.bot.cache.filter_event[context.guild.id]["spoilers"]["threshold"] * 2
                 ):
-                    #    if await check():
-                    reason = "Muted by spoiler filter"
-                    await self.do_timeout(message, reason, context)
+                    await apply_punishment("Muted by spoiler filter")
                     block_command_execution = True
+
+        # Headers filter
         if (
             "headers" in filter_events
-            and self.bot.cache.filter_event.get(context.guild.id, DICT)
-            .get("headers", DICT)
+            and self.bot.cache.filter_event.get(context.guild.id, self.DICT)
+            .get("headers", self.DICT)
             .get("is_enabled", False)
-            is True
-            and block_command_execution is False
+            and not block_command_execution
         ):
             if not await self.check_event_whitelist(message, "headers"):
                 for m in message.content.split("\n"):
                     if m.startswith("# "):
-                        if (
-                            len(m.split(" "))
-                            >= self.bot.cache.filter_event[context.guild.id]["headers"][
-                                "threshold"
-                            ]
-                        ):
-                            await self.do_timeout(
-                                message, "Muted by the header filter", context
-                            )
+                        if len(m.split(" ")) >= self.bot.cache.filter_event[context.guild.id]["headers"]["threshold"]:
+                            await apply_punishment("Muted by the header filter")
                             block_command_execution = True
+
+        # Images filter
         if (
             "images" in filter_events
-            and self.bot.cache.filter_event.get(context.guild.id, DICT)
-            .get("images", DICT)
+            and self.bot.cache.filter_event.get(context.guild.id, self.DICT)
+            .get("images", self.DICT)
             .get("is_enabled", False)
-            is True
-            and block_command_execution is False
+            and not block_command_execution
         ):
             if not await self.check_event_whitelist(message, "images"):
                 if len(message.attachments) > 0:
-                    threshold = self.bot.cache.filter_event[context.guild.id]["images"][
-                        "threshold"
-                    ]
-                    for attachment in message.attachments:  # type: ignore
+                    threshold = self.bot.cache.filter_event[context.guild.id]["images"]["threshold"]
+                    for attachment in message.attachments:
                         if await self.bot.glory_cache.ratelimited(
                             f"ai-{message.guild.id}-{message.author.id}", threshold, 10
                         ):
-                            await self.do_timeout(
-                                message, "Muted by my image filter", context
-                            )
+                            await apply_punishment("Muted by my image filter")
                             block_command_execution = True
+
+        # Links filter
         if (
             "links" in filter_events
-            and self.bot.cache.filter_event.get(context.guild.id, DICT)
-            .get("links", DICT)
+            and self.bot.cache.filter_event.get(context.guild.id, self.DICT)
+            .get("links", self.DICT)
             .get("is_enabled", False)
-            is True
-            and block_command_execution is False
+            and not block_command_execution
         ):
             if not await self.check_event_whitelist(message, "links"):
-                # if await check():
                 matches = url_regex.findall(message.content)
                 if len(matches) > 0:
                     for m in matches:
                         if "tenor.com" not in m:
                             reason = "muted by the link filter"
-                            await self.do_timeout(message, reason, context)
+                            await apply_punishment(reason)
                             block_command_execution = True
 
+        # Spam filter
         if (
             "spam" in filter_events
-            and self.bot.cache.filter_event.get(context.guild.id, DICT)
-            .get("spam", DICT)
+            and self.bot.cache.filter_event.get(context.guild.id, self.DICT)
+            .get("spam", self.DICT)
             .get("is_enabled", False)
-            is True
-            and block_command_execution is False
+            and not block_command_execution
         ):
-            # if await check():
-            if await self.bot.glory_cache.ratelimited(
-                f"amtis-{message.guild.id}", 20, 10
-            ):
+            if await self.bot.glory_cache.ratelimited(f"amtis-{message.guild.id}", 20, 10):
                 if await check():
                     if not await self.check_event_whitelist(message, "spam"):
-                        #
-                        if (
-                            await self.bot.glory_cache.ratelimited(
-                                f"amasm-{message.channel.id}", 1, 300
-                            )
-                            == 0
-                        ):
+                        if await self.bot.glory_cache.ratelimited(f"amasm-{message.channel.id}", 1, 300) == 0:
                             await message.channel.edit(
                                 slowmode_delay=5, reason="Auto Mod Auto Slow Mode"
                             )
@@ -1097,161 +1243,123 @@ class Events(commands.Cog):
                                 )
                             )
                             ensure_future(self.revert_slowmode(message.channel))
-            if (
-                await self.bot.glory_cache.ratelimited(
-                    f"rl:message_spam{message.author.id}-{message.guild.id}",
-                    self.bot.cache.filter_event[context.guild.id]["spam"]["threshold"]
-                    - 1,
-                    5,
-                )
-                != 0
-            ):
+            if await self.bot.glory_cache.ratelimited(
+                f"rl:message_spam{message.author.id}-{message.guild.id}",
+                self.bot.cache.filter_event[context.guild.id]["spam"]["threshold"] - 1,
+                5,
+            ) != 0:
                 if await self.bot.glory_cache.ratelimited(
                     f"spam:message{message.author.id}:{message.guild.id}", 1, 4
                 ):
                     if await check():
                         if not await self.check_event_whitelist(message, "spam"):
-                            if (
-                                message.guild.me.guild_permissions.moderate_members
-                                is True
-                            ):
+                            if message.guild.me.guild_permissions.moderate_members:
                                 await message.author.timeout(
-                                    datetime.now().astimezone()
-                                    + timedelta(seconds=converted)
+                                    datetime.now().astimezone() + timedelta(seconds=converted)
                                 )
                 else:
                     if not await self.check_event_whitelist(message, "spam"):
                         if await check():
                             reason = "flooding chat"
-                            await self.do_timeout(message, reason, context)
+                            await apply_punishment(reason)
                             block_command_execution = True
                 if not await self.check_event_whitelist(message, "spam"):
                     if await check():
-                        if message.guild.me.guild_permissions.manage_messages is True:
-                            await message.channel.purge(
-                                limit=10,
-                                check=lambda m: m.author.id == message.author.id,
-                            )
-                            block_command_execution = True
+                        if message.guild.me.guild_permissions.manage_messages:
+                            try:
+                                await message.channel.purge(
+                                    limit=10,
+                                    check=lambda m: m.author.id == message.author.id,
+                                    bulk=True,
+                                    reason="Auto-moderation: Spam filter"
+                                )
+                            except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
+                                pass
+                            finally:
+                                block_command_execution = True
 
+        # Emojis filter
         if (
             "emojis" in filter_events
-            and self.bot.cache.filter_event.get(context.guild.id, DICT)
-            .get("emojis", DICT)
+            and self.bot.cache.filter_event.get(context.guild.id, self.DICT)
+            .get("emojis", self.DICT)
             .get("is_enabled", False)
-            is True
-            and block_command_execution is False
+            and not block_command_execution
         ):
-            if len(find_emojis(message.content)) >= (
-                self.bot.cache.filter_event[context.guild.id]["emojis"]["threshold"]
-            ):
+            if len(find_emojis(message.content)) >= self.bot.cache.filter_event[context.guild.id]["emojis"]["threshold"]:
                 if not await self.check_event_whitelist(message, "emojis"):
-                    # if await check():
                     reason = "muted by the emoji filter"
-                    await self.do_timeout(message, reason, context)
-
+                    await apply_punishment(reason)
                     block_command_execution = True
 
+        # Invites filter
         if (
             "invites" in filter_events
-            and self.bot.cache.filter_event.get(context.guild.id, DICT)
-            .get("invites", DICT)
+            and self.bot.cache.filter_event.get(context.guild.id, self.DICT)
+            .get("invites", self.DICT)
             .get("is_enabled", False)
-            is True
-            and block_command_execution is False
+            and not block_command_execution
         ):
             if not await self.check_event_whitelist(message, "invites"):
                 if len(message.invites) > 0:
                     reason = "muted by the invite filter"
-                    await self.do_timeout(message, reason, context)
-
+                    await apply_punishment(reason)
                     block_command_execution = True
 
+        # Caps filter
         if (
             "caps" in filter_events
-            and self.bot.cache.filter_event.get(context.guild.id, DICT)
-            .get("caps", DICT)
+            and self.bot.cache.filter_event.get(context.guild.id, self.DICT)
+            .get("caps", self.DICT)
             .get("is_enabled", False)
-            is True
-            and block_command_execution is False
+            and not block_command_execution
         ):
             if not await self.check_event_whitelist(message, "caps"):
-                if len(tuple(c for c in message.content if c.isupper())) >= (
-                    self.bot.cache.filter_event[context.guild.id]["caps"]["threshold"]
-                ):
+                if len(tuple(c for c in message.content if c.isupper())) >= self.bot.cache.filter_event[context.guild.id]["caps"]["threshold"]:
                     reason = "muted by the cap filter"
-                    await self.do_timeout(message, reason, context)
-
+                    await apply_punishment(reason)
                     block_command_execution = True
 
+        # Mass mention filter
         if (
             "massmention" in filter_events
-            and self.bot.cache.filter_event.get(context.guild.id, DICT)
-            .get("massmention", DICT)
+            and self.bot.cache.filter_event.get(context.guild.id, self.DICT)
+            .get("massmention", self.DICT)
             .get("is_enabled", False)
-            is True
-            and block_command_execution is False
+            and not block_command_execution
         ):
             if not await self.check_event_whitelist(message, "massmention"):
-                if len(message.mentions) >= (
-                    self.bot.cache.filter_event[context.guild.id]["massmention"][
-                        "threshold"
-                    ]
-                ):
+                if len(message.mentions) >= self.bot.cache.filter_event[context.guild.id]["massmention"]["threshold"]:
                     reason = "muted by the mention filter"
-                    await self.do_timeout(message, reason, context)
-
+                    await apply_punishment(reason)
                     block_command_execution = True
 
-        if block_command_execution is True:
+        if block_command_execution:
             return
 
+        # Autoreact logic
         if self.bot.cache.autoreacts.get(message.guild.id):
-
             async def do_autoreact():
                 try:
                     keywords_covered = []
                     for keyword, reactions in self.bot.cache.autoreacts[message.guild.id].items():
                         if keyword not in ["spoilers", "images", "emojis", "stickers"]:
                             if keyword in message.content:
-                                async def do_reaction(message: discord.Message, reaction: str):
-                                    try:
-                                        name = unicodedata.name(reaction)
-                                        if "variation" in name.lower():
-                                            return
-                                    except Exception:
-                                        pass
-                                    try:
-                                        await message.add_reaction(reaction)
-                                    except Exception:
-                                        pass
-
                                 if await self.bot.glory_cache.ratelimited(f"autoreact:{message.guild.id}:{keyword}", 1, 2):
                                     continue
 
                                 await asyncio.gather(
-                                    *[do_reaction(message, reaction) for reaction in reactions]
+                                    *[self.add_reaction(message, reaction) for reaction in reactions]
                                 )
                                 keywords_covered.append(keyword)
-
-                                asyncio.gather(
-                                    *(
-                                        do_reaction(message, reaction)
-                                        for reaction in reactions
-                                    )
-                                )
-
-                                keywords_covered.append(keyword)
-                                continue
-                except Exception:
-                    pass
+                except Exception as e:
+                    self.bot.logger.error(f"Autoreact error: {e}")
 
             with suppress(discord.errors.HTTPException):
                 asyncio.create_task(do_autoreact())
 
             tasks = []
             if await self.get_event_types(message):
-
                 async def do_autoreact_event(_type: str):
                     _ = f"rl:autoreact:{message.guild.id}:{_type}"
                     if await self.bot.glory_cache.ratelimited(_, 5, 30):
@@ -1277,15 +1385,16 @@ class Events(commands.Cog):
                             condition = True
                         elif event_type == "stickers" and message.stickers:
                             condition = True
-                        
+
                         if condition:
                             tasks.append(do_autoreact_event(event_type))
 
-        try:
-            if tasks:
-                await asyncio.gather(*tasks, return_exceptions=True)
-        except Exception:
-            pass
+            try:
+                if tasks:
+                    await asyncio.gather(*tasks, return_exceptions=True)
+            except Exception:
+                pass
+
         if not block_command_execution:
             return
 
@@ -1296,6 +1405,17 @@ class Events(commands.Cog):
                 color=0x9eafbf,
             )
             await ctx.send(embed=embed)
+
+    async def create_countertables(self):
+        """Ensure the necessary tables exist in the database."""
+        await self.bot.db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS counter_channels (
+                channel_id BIGINT PRIMARY KEY,
+                current_count INTEGER NOT NULL
+            )
+            """
+        )
 
     @commands.Cog.listener("on_member_join")
     async def on_member_join(self, member: discord.Member):
@@ -1333,6 +1453,12 @@ class Events(commands.Cog):
             else:
                 return False
         return True
+
+
+
+
+
+
 
     @commands.Cog.listener()
     async def on_member_remove(self, member: discord.Member):
@@ -1386,6 +1512,62 @@ class Events(commands.Cog):
                         if role in after.roles and role.position < after.guild.me.top_role.position:
                             with suppress(discord.Forbidden):
                                 await after.remove_roles(role, reason="Booster Role")
+
+
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        """Listen for messages in enabled counter channels."""
+        if message.author.bot:
+            return
+
+        row = await self.bot.db.fetchrow(
+            "SELECT current_count FROM counter_channels WHERE channel_id = $1", message.channel.id
+        )
+
+        if not row:
+            return
+
+        current_count = row["current_count"]
+        try:
+            # Ensure the message content matches the expected count
+            if int(message.content) == current_count + 1:
+                new_count = current_count + 1
+
+                # Update the database
+                await self.bot.db.execute(
+                    "UPDATE counter_channels SET current_count = $1 WHERE channel_id = $2", 
+                    new_count, message.channel.id
+                )
+
+                # React to the message with a green check mark
+                await message.add_reaction("✅")
+
+                # Send a milestone message for every hundredth count
+                if new_count % 100 == 0:
+                    embed = discord.Embed(
+                        title="🎉 Milestone Reached!",
+                        description=f"You've reached {new_count}! Say {new_count + 1} to continue.",
+                        color=discord.Color.green(),
+                    )
+                    await message.channel.send(embed=embed)
+
+                # Reset and purge messages when count reaches 1000
+                if new_count == 1000:
+                    await message.channel.send("Counter reset to 1. Deleting previous messages...")
+                    await message.channel.purge()
+                    await self.bot.db.execute(
+                        "UPDATE counter_channels SET current_count = 1 WHERE channel_id = $1", 
+                        message.channel.id
+                    )
+                    first_message = await message.channel.send("1")
+                    await first_message.add_reaction("✅")
+            else:
+                # Delete messages with incorrect or out-of-sequence numbers
+                await message.delete()
+        except ValueError:
+            # Delete non-numeric messages
+            await message.delete()
+
 
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member):  # type: ignore
@@ -1603,18 +1785,12 @@ class Events(commands.Cog):
                                     await before.channel.delete()
 
                         else:
+                            status = None
                             if stat := await self.bot.db.fetchrow(
                                 """SELECT status FROM vm_status WHERE user_id = $1""",
                                 member.id,
                             ):
                                 status = stat["status"]
-                            else:
-                                status = None
-                            {
-                                member: discord.PermissionOverwrite(
-                                    connect=True, view_channel=True
-                                )
-                            }  # type: ignore
                             channel = await self.create_and_move(member, after, status)
                             if channel is not None:
                                 await self.bot.db.execute(
@@ -1689,45 +1865,56 @@ class Events(commands.Cog):
                                         await before.channel.delete()
 
     @commands.Cog.listener("on_member_join")
-    @ratelimit("pingonjoin:{guild.id}", 9, 3, False)
+    @ratelimit("pingonjoin:{guild.id}", 2, 3, False)
     async def pingonjoin_listener(self, member: discord.Member):
         """Groups multiple joins together and pings them in a single message."""
-        if await self.bot.glory_cache.ratelimited(f"poj:{member.guild.id}", 1, 1) == 0:
-            if not member.guild.me.guild_permissions.send_messages:
-                return
+        if not member.guild.me.guild_permissions.send_messages:
+            return
 
-            try:
+        if await self.bot.glory_cache.ratelimited(f"poj:{member.guild.id}", 1, 1) != 0:
+            return
+
+        try:
+            async with self.locks[f"pingonjoin:{member.guild.id}"]:
                 cache_key = f"pingonjoin:{member.guild.id}"
-                config = await cache.get(cache_key) or await self.bot.db.fetchrow(
-                    "SELECT channel_id, threshold, message FROM pingonjoin WHERE guild_id = $1",
-                    member.guild.id
-                )
+                config = await cache.get(cache_key)
+                if not config:
+                    config = await self.bot.db.fetchrow(
+                        "SELECT channel_id, threshold, message FROM pingonjoin WHERE guild_id = $1",
+                        member.guild.id
+                    )
+                    if config:
+                        config = dict(config)
+                        await cache.set(cache_key, config)
 
                 if not config:
                     return
-
-                if not await cache.get(cache_key):
-                    await cache.set(cache_key, dict(config))
-
+                    
                 channel = member.guild.get_channel(config["channel_id"])
-                if not isinstance(channel, discord.TextChannel):
-                    return
-
+                if not channel:
+                    return logger.error(f"Channel {config['channel_id']} not found in guild {member.guild.id}")
+                    
+                    
                 delay = min(max(config.get("threshold", 3) + 1, 2), 10)
                 message_template = config.get("message") or "{user.mention}"
                 members = [member]
                 
-                # Use loop.time() instead of time.time()
                 deadline = asyncio.get_event_loop().time() + delay
+                remaining_time = delay
 
-                while len(members) < 5 and asyncio.get_event_loop().time() < deadline:
+                while len(members) < 5 and remaining_time > 0:
                     try:
-                        new_member = await self.bot.wait_for(
-                            "member_join",
-                            timeout=max(0.1, deadline - asyncio.get_event_loop().time()),
-                            check=lambda m: m.guild.id == member.guild.id
+                        new_member = await asyncio.wait_for(
+                            self.bot.wait_for(
+                                "member_join",
+                                check=lambda m: m.guild.id == member.guild.id
+                            ),
+                            timeout=remaining_time
                         )
                         members.append(new_member)
+                        remaining_time = deadline - asyncio.get_event_loop().time()
+                    except asyncio.TimeoutError:
+                        break
                     except asyncio.TimeoutError:
                         break
                     await asyncio.sleep(0)  # Yield control periodically
@@ -1745,8 +1932,11 @@ class Events(commands.Cog):
                     msg = await channel.send(final_message, allowed_mentions=discord.AllowedMentions(users = True))
                     await msg.delete(delay=delay + 1)
 
-            except Exception as e:
-                logger.error(f"Error in pingonjoin_listener for {member.guild.id}: {e}")
+        except Exception as e:
+            logger.error(f"Error in pingonjoin_listener for {member.guild.id}: {e}")
+
+
+
 
 
     @commands.Cog.listener("on_member_join")
@@ -1783,31 +1973,6 @@ class Events(commands.Cog):
                     
             except Exception as e:
                 logger.error(f"Error in jail_check for {member}: {str(e)}")
-
-
-    @commands.Cog.listener()
-    async def on_member_join(self, member):
-        """
-        Sends a DM to every member who joins a server after a delay of 10 seconds,
-        except for users joining an excluded guild.
-        """
-        # Specify the guild ID to exclude
-        excluded_guild_id = 1301617147964821524
-
-        # Check if the member joined the excluded guild
-        if member.guild.id == excluded_guild_id:
-            return  # Do not send the DM
-
-        try:
-            await sleep(120)  # Wait for 10 seconds before sending the DM
-            message = "Make sure to join https://discord.gg/pomice for the best and invite it to your server."
-            await member.send(message)
-        except discord.Forbidden:
-            # Happens if the user has DMs disabled
-            print(f"Could not DM {member.name}. They might have DMs disabled or have blocked the bot.")
-        except Exception as e:
-            # Catch any other exceptions
-            print(f"An error occurred while sending a DM to {member.name}: {e}")
 
 
 async def setup(bot):

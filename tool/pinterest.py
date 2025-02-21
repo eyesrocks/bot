@@ -1011,23 +1011,23 @@ async def test_post():
 
     with open("data.json", "wb") as f:
         f.write(orjson.dumps(data))
-    print(data)
+    logger.info(data)
 
 
 async def test_user():
     p = Pinterest()
     data = await p.get_user("poshmark")
-    print(data)
+    logger.info(data)
     from pinmodels import Model
 
     m = Model(**data)
-    print(m.resource_response.data.dict())  # type: ignore
+    logger.info(m.resource_response.data.dict())  # type: ignore
     return m
 
 
 async def test_reverse():
     p = Pinterest()
-    print(
+    logger.info(
         await p.reverse_search(
             "https://i.pinimg.com/474x/8e/22/61/8e226193088b7a446f26a424d6f3dbc6.jpg"
         )

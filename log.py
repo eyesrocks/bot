@@ -15,8 +15,8 @@ LOG_LOCK = threading.Lock()
 def hook():
     pass
 
-def print_chunk(msg):
-    print(msg, file=sys.stderr, end="", flush=True)
+def logger.info_chunk(msg):
+    logger.info(msg, file=sys.stderr, end="", flush=True)
 
 class InterceptHandler(logging.Handler):
     def emit(self, record):
@@ -64,7 +64,7 @@ class AsyncLogEmitter:
                 msg = self.queue.get()
             discards = False
             self.test()
-            print(msg, file=sys.stderr, end="", flush=True)
+            logger.info(msg, file=sys.stderr, end="", flush=True)
 
     def emit(self, msg: str):
         self.queue.put(msg)

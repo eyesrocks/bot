@@ -27,7 +27,7 @@ async def start_dask(bot, address: str) -> distributed.Client:
         for i in range(5):
             try:
                 client = await distributed.Client(
-                    scheduler_file=scheduler_file, asynchronous=True, name=bot.user.name
+                    scheduler_file=scheduler_file, asynchronous=True, name="greed"
                 )
                 break
             except Exception as e:
@@ -46,7 +46,7 @@ async def start_dask(bot, address: str) -> distributed.Client:
             ),
             direct_to_workers=True,
             asynchronous=True,
-            name=bot.user.name,
+            name="greed",
         )
         client.write_scheduler_file(scheduler_file)
         GLOBAL_DASK["client"] = client

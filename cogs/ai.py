@@ -1,4 +1,4 @@
-import discord
+import discord, asyncio, time
 from discord.ext import commands
 from typing import Optional, List, Any
 from datetime import datetime
@@ -9,7 +9,7 @@ from tool.worker import offloaded
 from tools import timeit
 from cashews import cache
 import humanize
-
+from cogs.miscellaneous import get_donator
 cache.setup("mem://")
 
 
@@ -167,10 +167,16 @@ class ai(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.ai = AI()
+#        self.bot.loop.create_task(self.task())
+        self.future = None # I need to add a future for revalidating ai keys - lim
 
-    async def is_premium_user(self, user_id: int) -> bool:
-        query = "SELECT user_id FROM donators WHERE user_id = $1"
-        return await self.bot.db.fetchrow(query, user_id) is not None
+    async def task(self):
+        while True:
+            if self.future:
+                await self.future
+            await asyncio.sleep(300)
+            await self.bot.close()
+    
 
     def split_text(self, text: str, chunk_size: int = 1999):
         # Split the text into chunks of `chunk_size` characters
@@ -179,11 +185,9 @@ class ai(commands.Cog):
     @commands.command(name="ai")
     async def ask(self, ctx, *, question: str):
         """Command to ask the AI a question."""
-        if not await self.is_premium_user(ctx.author.id):
-            raise commands.CommandError(
-                "This command is only available to premium users."
-            )
-        message = await ctx.normal("please wait whilst I generate a response...")
+        if not await get_donator(ctx, ctx.author.id):
+            raise commands.CommandError("this command is for donators only")
+        message = await ctx.normal("<:moon:1336683823894757508> please wait whilst I generate a response...")
         try:
             response = await self.ai.generate_response(question)
             if len(response.text) > 1000:
@@ -197,14 +201,12 @@ class ai(commands.Cog):
                 return await ctx.alternative_paginate(embeds, message=message)
             else:
                 await message.edit(embeds=[
-                    discord.Embed(title=question[:100], description=response.text).set_footer(text=f"⏰ took {humanize.naturaldelta(response.time_elapsed, minimum_unit='microseconds')}")]
+                    discord.Embed(title=question[:100],color=self.bot.color, description=response.text).set_footer(text=f"⏰ took {humanize.naturaldelta(response.time_elapsed, minimum_unit='microseconds')}")]
                 )
         except Exception as e:
             if ctx.author.name == "aiohttp":
                 raise e
             raise commands.CommandError("that was a flagged prompt")
-            print(f"Error: {e}")
-
 
 async def setup(bot):
     await bot.add_cog(ai(bot))

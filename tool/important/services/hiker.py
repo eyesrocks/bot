@@ -339,7 +339,7 @@ class Instagram:
 
     async def close(self):
         await self.session.close()
-        print("closed")
+        logger.info("closed")
 
     def parse_media(self, resource):
         resource_media_type = MediaType(int(resource["media_type"]))
@@ -432,7 +432,7 @@ class Instagram:
             try:
                 data = await response.json(loads=orjson.loads)
             except aiohttp.ContentTypeError:
-                print("Expired Cookie")
+                logger.info("Expired Cookie")
                 raise ExpiredCookie
             if data["status"] != "ok":
                 raise InstagramError(data.get("message"))
@@ -493,7 +493,7 @@ class Instagram:
         user = IgUser(
             user["pk"], user["username"], user["profile_pic_url"], user["full_name"]
         )
-        print(data)
+        logger.info(data)
         return IgPost(
             user,
             media,
@@ -524,7 +524,7 @@ class Instagram:
         user = IgUser(
             user["id"], user["username"], user["profile_pic_url"], user["full_name"]
         )
-        print(data)
+        logger.info(data)
         return IgPost(
             user,
             media,

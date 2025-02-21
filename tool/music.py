@@ -424,10 +424,10 @@ class Music(commands.Cog):
                 # try:
                 self.bot.node = await pomice.NodePool().create_node(
                     bot=self.bot,
-                    host="127.0.0.1",
-                    port=2333,
-                    password="youshallnotpass",
-                    identifier=f"MAIN{tuuid()}",
+                    host="lavahatry4.techbyte.host",
+                    port=3000,
+                    password="NAIGLAVA-dash.techbyte.host",
+                    identifier=f"CharlesNaig Node {tuuid()}",
                     spotify_client_id=spotify.get("d15ca7286e354306b231ca1fa918fc04"),
                     spotify_client_secret=spotify.get(
                         "d5ec1357581b443c879f1e4d3d0e5608"

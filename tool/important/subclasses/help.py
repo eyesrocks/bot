@@ -81,11 +81,11 @@ class HelpModal(discord.ui.Modal, title="Help"):
             name = interaction.data["components"][0]["components"][0]["value"]
             command = find_command(self.bot, name)
             if not command:
-                await interaction.message.edit(embed=Embed(color=0x9eafbf, description=f"no command could be found close to `{name}`"), view=BotHelpView(self.bot, self.ctx))
+                await interaction.message.edit(embed=Embed(color=0x2f4672, description=f"no command could be found close to `{name}`"), view=BotHelpView(self.bot, self.ctx))
                 return await interaction.response.defer()
-            embed = Embed(color=0x9eafbf, timestamp=datetime.datetime.now())
+            embed = Embed(color=0x2f4672, timestamp=datetime.datetime.now())
             embed.set_author(name=self.ctx.author.display_name, icon_url=self.ctx.author.display_avatar.url)
-            embed.set_image(url=f"https://greed.wtf/{command.qualified_name.replace(' ', '_')}.png?{tuuid()}")
+            embed.set_image(url=f"https://greed.rocks/{command.qualified_name.replace(' ', '_')}.png?{tuuid()}")
             await interaction.message.edit(view=BotHelpView(self.bot, self.ctx), embed=embed)
             return await interaction.response.defer()
 
@@ -103,7 +103,7 @@ class BotHelpView(View):
     )
     async def search(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user != self.ctx.author:
-            embed = discord.Embed(description=f"> You aren't the **author**", color=0x2d2b31)
+            embed = discord.Embed(description=f"> psst you see this embed u freak? dont touch it..", color=0x2f4672)
             return await interaction.response.send_message(embed=embed, ephemeral=True)
         return await interaction.response.send_modal(HelpModal(self.bot, self.ctx))
 
@@ -149,8 +149,8 @@ class HelpSelectMenu(discord.ui.Select):
 def generate(ctx: Context, c: Command, example: str = "", usage=False) -> str:
     params = " ".join(f"<{param}>" for param in c.clean_params.keys())
     if usage:
-        ex = f"\n> Example: {example}" if example else ""
-        return f"> Syntax: {ctx.prefix}{c.qualified_name} {params}{ex}"
+        ex = f"\nexample: {example}" if example else ""
+        return f"syntax: {ctx.prefix}{c.qualified_name} {params}{ex}"
     return f"{'view ' if len(c.clean_params.keys()) == 0 else 'change '}the {c.name.lower()}{' for ' + c.qualified_name.lower().split(' ')[-1] + 's' if len(c.qualified_name.lower().split(' ')) > 2 else ''}"
 
 def chunks(array: List, chunk_size: int) -> Generator[List, None, None]:
@@ -191,7 +191,7 @@ class CommandSelect(discord.ui.Select):
         commands_list = self.get_commands_by_category(selected_category)
         embed = discord.Embed(
             title=f"**Commands in {selected_category}**",
-            color=0x9eafbf,
+            color=0x2f4672,
             description=f"```ansi\n\u001b[35m{', '.join(commands_list)}\u001b[0m\n```" if commands_list else "No commands available in this category."
         )
         embed.set_thumbnail(url=self.view.bot.user.display_avatar.url)
@@ -217,8 +217,8 @@ class MyHelpCommand(commands.HelpCommand):
 
         embed = discord.Embed(
             title="Menu",
-            description=f"Select a **category** to view it's commands.\n\n**Links**\n**[invite](https://discord.com/oauth2/authorize?client_id=1149535834756874250&permissions=8&integration_type=0&scope=bot)**\n**[support](https://discord.gg/pomice)**\n**[website](http://greed.wtf)**",
-            color=0x9eafbf,
+            description=f"<:moon:1336683823894757508> open the drop down to view commands in that category\n-# <:00_line:1336685727836274799> type **,help [command name]** for more help.\n-# <:00_line:1336685727836274799> **[support](https://discord.gg/greedbot)**\n-# <:line:1336409552786161724> **[website](https://greed.rocks)**",
+            color=0x2f4672,
         )
         embed.set_author(name=self.context.bot.user.name, icon_url=self.context.bot.user.avatar)
         
@@ -274,10 +274,10 @@ class MyHelpCommand(commands.HelpCommand):
         else:
             await self.context.send(
                 embed=Embed(
-                    color=0x9eafbf,
+                    color=0x2f4672,
                     title=f'**Need help with {group.qualified_name}?**',
-                    url='https://greed.wtf/Commands',
-                    description=f"{EMOJIS['settings_icon']} **Usage**\n> **{group.qualified_name}** has {len([i for i in group.walk_commands()])} sub commands that can be used. To view all commands for **{group.qualified_name}**, use the help menu below or visit our [**website**](https://greed.wtf/)",
+                    url='https://greed.rocks/Commands',
+                    description=f"<:settings:1336689143815602317> **Usage**\n> **{group.qualified_name}** has {len([i for i in group.walk_commands()])} sub commands that can be used. To view all commands for **{group.qualified_name}**, use the help menu below or visit our [**website**](https://greed.rocks/)",
                 ),
                 view=HelpInterface(self.context.bot, embeds)
             )
@@ -285,7 +285,7 @@ class MyHelpCommand(commands.HelpCommand):
     async def send_command_help(self, command):
         if retry_after := await self.context.bot.glory_cache.ratelimited(f"rl:chelp:{self.context.author.id}", 1, 5):
             raise commands.CommandOnCooldown(None, retry_after, None)
-        embed = Embed(color=0x9eafbf, timestamp=datetime.datetime.now())
+        embed = Embed(color=0x2f4672, timestamp=datetime.datetime.now())
         aliases = ", ".join(command.aliases)
         embed.set_author(name=self.context.author.display_name, icon_url=self.context.author.display_avatar.url)
         ctx = self.context
@@ -344,5 +344,5 @@ class MyHelpCommand(commands.HelpCommand):
 
     async def command_not_found(self, string):
         if retry_after := await self.context.bot.glory_cache.ratelimited(f"cnf:{self.context.author.id}", 1, 5):
-            raise OnCooldown()
+            raise commands.CommandOnCooldown(None, retry_after, None)
         raise commands.CommandError(f"**No command** named **{string}** exists")

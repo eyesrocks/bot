@@ -997,7 +997,7 @@ class Greed(Bot):
         try:
             await self.load_extension(f"cogs.{cog}")
         except Exception:
-            traceback.print_exc()
+            traceback.logger.info_exc()
 
     @lock("fetch_message:{channel.id}")
     @ratelimit("rl:fetch_message:{channel.id}", 2, 5, True)
@@ -1691,7 +1691,7 @@ class Greed(Bot):
         try:
             await self.load_extension(f"cogs.{cog}")
         except Exception:
-            traceback.print_exc()
+            traceback.logger.info_exc()
 
 
     @lock("fetch_message:{channel.id}")

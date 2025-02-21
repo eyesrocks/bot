@@ -3,7 +3,7 @@ from discord.ext.commands import (
     Context,
     CommandError,
     CheckFailure,  # type: ignore
-    UserInputError
+    BotMissingPermissions,
 )
 from typing import Union
 import discord
@@ -16,7 +16,8 @@ from tool.aliases import (  # type: ignore
 from tool.snipe import SnipeError  # type: ignore
 from tool.important.subclasses.command import RolePosition  # type: ignore
 from tool.important.subclasses.parser import EmbedError  # type: ignore
-from discord.errors import HTTPException, Forbidden  # type: ignore
+from loguru import logger
+from discord.errors import HTTPException
 from tool.processing import codeblock  # type: ignore
 from aiohttp.client_exceptions import (
     ClientConnectorError,
@@ -67,22 +68,26 @@ class Errors(Cog):
         self.debug = False
 
     def get_rl(self, exception: Exception) -> Union[int, float]:
-        try:
-            if hasattr(exception, "retry_after") and isinstance(exception.retry_after, (int, float)):
-                return exception.retry_after
-        except AttributeError:
-            pass
-        return 5
+        if hasattr(exception, "retry_after"):
+            return exception.retry_after
+        else:
+            return 5
 
     def log_error(self, ctx: Context, exception: Exception) -> None:
-        pass
+        error = getattr(exception, "original", exception)
+        exc = "".join(
+            traceback.format_exception(type(error), error, error.__traceback__)
+        )
+        logger.error(
+            f'{type(error).__name__:25} > {ctx.guild} | {ctx.author} "{ctx.message.content}" \n {error} \n {exc}'
+        )
 
     async def handle_exceptions(self, ctx: Context, exception: Exception) -> None:
         bucket = self.bot._cd.get_bucket(ctx.message)
         retry_after = bucket.update_rate_limit()
 
         if self.debug is True:
-            pass
+            self.log_error(ctx, exception)
         if not isinstance(exception, commands.CommandNotFound):
             if retry_after:  # and type(exception) != commands.CommandNotFound:
                 return
@@ -147,7 +152,7 @@ class Errors(Cog):
                 f"rl:cooldown_message:{ctx.author.id}", 1, self.get_rl(exception) or 5
             ):
                 return
-            return await ctx.send_help()
+            return await ctx.warning(error.message)
         elif isinstance(exception, EmbedError):
             if await self.bot.glory_cache.ratelimited(
                 f"rl:cooldown_message{ctx.author.id}", 3, 5
@@ -224,15 +229,18 @@ class Errors(Cog):
                 f"rl:error_message:{ctx.author.id}", 3, 5
             ):
                 return
-            return await ctx.send_help(ctx.command)
+            return await ctx.warning(get_message(exception.param.name.replace("role_input", "role")))
         if isinstance(exception, commands.BadArgument):
             error = exception
-            # Remove logging
+            tb = "".join(
+                traceback.format_exception(type(error), error, error.__traceback__)
+            )
+            logger.info(tb)
             exception = (
                 str(exception)
                 .replace("Member", "**Member**")
                 .replace("User", "**User**")
-            ) # type: ignore
+            )
             if await self.bot.glory_cache.ratelimited(
                 f"rl:error_message:{ctx.author.id}", 3, 5
             ):
@@ -279,7 +287,7 @@ class Errors(Cog):
             if code == 0:
                 if await self.bot.glory_cache.ratelimited(f"rl:error_message:{ctx.author.id}", 3, 5):
                     return
-                return await ctx.warning("Webhooks are ratelimited please try again later..")
+                return await ctx.warning(f"Webhooks are ratelimited please try again later..")
             if code == 50045:
                 if await self.bot.glory_cache.ratelimited(
                     f"rl:error_message:{ctx.author.id}", 3, 5
@@ -311,14 +319,6 @@ class Errors(Cog):
                 return await ctx.warning(
                     f"I wasn't able to send the message!\n>>> {codeblock(exception.text)}"
                 )
-            elif code == 50074:
-                if await self.bot.glory_cache.ratelimited(
-                    f"rl:error_message:{ctx.author.id}", 3, 5
-                ):
-                    return
-                return await ctx.warning(
-                    "**cannot edit a channel required by community servers!"
-                )
         if isinstance(exception, commands.CommandNotFound):
             await self.bot.paginators.check(ctx)
             aliases = [
@@ -348,6 +348,9 @@ class Errors(Cog):
             ):
                 return
             return await ctx.warning(str(exception))
+        logger.error(
+            f'{type(error).__name__:25} > {ctx.guild} | {ctx.author} "{ctx.message.content}" \n {error} \n {exc}'
+        )
         if isinstance(exception, RolePosition):
             if await self.bot.glory_cache.ratelimited(
                 f"rl:error_message:{ctx.author.id}", 3, 5
@@ -355,12 +358,6 @@ class Errors(Cog):
                 return
             return await ctx.warning(str(exception))
         if isinstance(error, CommandError):
-            if await self.bot.glory_cache.ratelimited(
-                f"rl:error_message:{ctx.author.id}", 3, 5
-            ):
-                return
-            return await ctx.warning(str(exception))
-        if isinstance(error, UserInputError):
             if await self.bot.glory_cache.ratelimited(
                 f"rl:error_message:{ctx.author.id}", 3, 5
             ):
@@ -401,27 +398,26 @@ class Errors(Cog):
             ):
                 return
             if exception.code == "10003":
-                return await ctx.warning("**Channel** not found")
+                return await ctx.warning(f"**Channel** not found")
             elif exception.code == "10008":
-                return await ctx.warning("**Message** not found")
+                return await ctx.warning(f"**Message** not found")
             elif exception.code == "10007":
-                return await ctx.warning("**Member** not found")
+                return await ctx.warning(f"**Member** not found")
             elif exception.code == "10011":
-                return await ctx.warning("**Role** not found")
+                return await ctx.warning(f"**Role** not found")
             elif exception.code == "10013":
-                return await ctx.warning("**User** not found")
+                return await ctx.warning(f"**User** not found")
             elif exception.code == "10014":
-                return await ctx.warning("**Emoji** not found")
+                return await ctx.warning(f"**Emoji** not found")
             elif exception.code == "10015":
-                return await ctx.warning("**Webhook** not found")
+                return await ctx.warning(f"**Webhook** not found")
             elif exception.code == "10062":
                 return
-            elif exception.code == "50074":
-                return await ctx.warning("**Cannot edit a channel required by community servers!**")
             else:
+                self.log_error(ctx, exception)
                 return await self.bot.send_exception(ctx, exception)
         if not isinstance(exception, CommandError):
-            pass  # Removed logging call
+            self.log_error(ctx, exception)
         return await self.bot.send_exception(
             ctx, exception
         )  # await ctx.warning(str(exception))
@@ -430,10 +426,18 @@ class Errors(Cog):
     async def on_error(self, ctx: Context, exception: Exception):
         try:
             return await self.handle_exceptions(ctx, exception)
-        except Forbidden:
-            return
         except Exception as e:
-            pass
+            self.log_error(ctx, e)
+
+    @commands.command(name="debug", hidden=True, brief="enable or disable debug mode")
+    @commands.is_owner()
+    async def set_debug(self, ctx: Context, state: bool):
+        self.debug = state
+        if state is True:
+            m = "**Enabled** debug mode"
+        else:
+            m = "**Disabled** debug mode"
+        return await ctx.success(m)
 
 
 async def setup(bot):

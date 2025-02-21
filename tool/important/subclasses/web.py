@@ -1,29 +1,13 @@
 from __future__ import annotations
 
 import datetime
-from typing import TypedDict, Union, Optional, List, Any
+from typing import TypedDict, Union, Optional, List
 from aiohttp.web import Application, Request, Response, _run_app, json_response
 from discord.ext.commands import Cog, Group, Command
 from prometheus_async import aio
 import socket
-import ujson
 from tool.greed import Greed
 
-def get_available_port(start: int = 8493) -> int:
-    while True:
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.bind(('0.0.0.0', start))
-            sock.close()
-            return start
-        except OSError:
-            start += 1
-            continue
-
-SERVER_CONFIG = {
-    "host": "0.0.0.0", 
-    "port": get_available_port()
-}
 
 class CommandData(TypedDict):
     name: str
@@ -42,7 +26,6 @@ class WebServer(Cog):
     def _setup_routes(self) -> None:
         routes = [
             ('GET', '/', self.index),
-            ('GET', '/avatars/{id}', self.avatars),
             ('GET', '/commands', self.commands),
             ('GET', '/raw', self.command_dump),
             ('GET', '/status', self.status),
@@ -52,49 +35,23 @@ class WebServer(Cog):
             self.app.router.add_route(method, path, handler)
 
     async def cog_load(self) -> None:
+        if self.bot.connection.local_name != "cluster1":
+            return
         self.bot.loop.create_task(self._run())
 
     async def cog_unload(self) -> None:
         await self.app.shutdown()
 
     async def _run(self) -> None:
-        await _run_app(self.app, **SERVER_CONFIG, print=None, handle_signals=False)
+        await _run_app(self.app, host='0.0.0.0', port=2027, handle_signals=False)
 
     @staticmethod
     async def index(_: Request) -> Response:
         return Response(text="API endpoint operational", status=200)
+
     async def status(self, _: Request) -> Response:
-        return json_response([{
-            "uptime": self.bot.startup_time.timestamp(),
-            "latency": round(shard.latency * 1000) if shard.latency != float('inf') else None,
-            "servers": len([g for g in self.bot.guilds if g.shard_id == shard_id]),
-            "users": sum(len(g.members) for g in self.bot.guilds if g.shard_id == shard_id),
-            "shard": shard_id
-        } for shard_id, shard in self.bot.shards.items()])
-
-    async def avatars(self, request: Request) -> Response:
-        try:
-            user_id = int(request.match_info["id"])
-            data = await self.bot.db.fetch(
-                "SELECT * FROM avatars WHERE user_id = $1 ORDER BY time ASC",
-                user_id
-            )
-            if not data:
-                raise ValueError("No data found")
-
-            user = self.bot.get_user(user_id)
-            return json_response({
-                "id": data[0]["user_id"],
-                "avatars": [x["avatar"] for x in data],
-                "time": datetime.datetime.fromtimestamp(int(data[0]["time"])).strftime("%Y-%m-%d %H:%M:%S"),
-                "user": {
-                    "name": user.name if user else data[0]["username"],
-                    "discriminator": user.discriminator if user else "0000",
-                    "id": user_id
-                }
-            })
-        except (ValueError, KeyError) as e:
-            return json_response({"error": str(e)}, status=404)
+        shards = await self.bot.ipc.roundtrip("get_shards")
+        return json_response({"shards": shards})
 
     def _get_permissions(self, command: Union[Command, Group], bot: bool = False) -> Optional[List[str]]:
         perms = command.bot_permissions if bot else command.permissions
@@ -106,9 +63,6 @@ class WebServer(Cog):
             permissions.extend(p.replace("_", " ").title() for p in perms)
         else:
             permissions.append(perms.replace("_", " ").title())
-
-        if not bot and command.cog_name.title() == "Premium":
-            permissions.append("Donator")
         return permissions
     async def command_dump(self, _: Request) -> Response:
         commands: List[CommandData] = []

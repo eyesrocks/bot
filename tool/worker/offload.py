@@ -73,16 +73,13 @@ def offloaded(f: Callable[P, T]) -> Callable[P, Awaitable[T]]:
         for attempt in range(retries):
             dask = get_dask()
             if dask is None or dask.status == "closed":
-                if bot:
-                    try:
-                        dask = await start_dask(bot, "127.0.0.1:8787")
-                    except Exception as e:
-                        if attempt == retries - 1:
-                            raise RuntimeError(f"Failed to restart Dask after {retries} attempts: {e}")
-                        await asyncio.sleep(1)
-                        continue
-                else:
-                    raise RuntimeError("Dask is not available and bot instance not found to restart it")
+                try:
+                    dask = await start_dask("greed", "127.0.0.1:8787")
+                except Exception as e:
+                    if attempt == retries - 1:
+                        raise RuntimeError(f"Failed to restart Dask after {retries} attempts: {e}")
+                    await asyncio.sleep(1)
+                    continue
             
             try:
                 meth = partial(f, *a, **ka)

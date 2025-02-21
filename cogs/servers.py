@@ -1,7 +1,10 @@
 import contextlib
 import re
 import json
-
+from discord import (
+    AuditLogAction,
+    AuditLogEntry,
+)    
 
 import copy
 import asyncio
@@ -27,7 +30,7 @@ from discord import (
     Message,
     TextChannel,  # type: ignore  # noqa: F401
 )
-from tool.views import EmojiConfirmation  # type: ignore
+from tool.views import EmojiConfirmation, Confirmation  # type: ignore
 from tool.aliases import AliasConverter  # type: ignore
 from discord.ext.commands.errors import CommandError
 from tool.important.database import query_limit  # type: ignore
@@ -38,6 +41,7 @@ from discord.ext.commands.converter import PartialEmojiConverter
 from tool.important.subclasses.color import ColorConverter  # type: ignore
 from tool.important import Context, is_donator  # type: ignore
 from tool.important.subclasses.command import (  # type: ignore
+    Member,
     Role,
     Sticker,
     Attachment,
@@ -403,6 +407,8 @@ def check_br_status():
 class Servers(Cog):
     def __init__(self, bot: "Greed") -> None:
         self.bot = bot
+        self.bot.loop.create_task(self.ensure_table())
+
 
     async def get_int(self, string: str):
         t = ""
@@ -413,6 +419,8 @@ class Servers(Cog):
             except Exception:
                 pass
         return t
+
+
 
     async def get_timeframe(self, timeframe: str):
         import humanfriendly
@@ -441,6 +449,84 @@ class Servers(Cog):
                 return EmojiEntry(
                     name=emoji_name, url=url, id=emoji_id, animated=animate
                 )
+
+    async def update_settings(self, guild_id: int, message: str, enabled: bool):
+        """Update the join DM settings in the database."""
+        # Check if the guild already has settings
+        existing_settings = await self.bot.db.fetch('SELECT * FROM join_dm_settings WHERE guild_id = $1', guild_id)
+        
+        if existing_settings:
+            # Update existing settings
+            query = '''
+            UPDATE join_dm_settings
+            SET message = $1, enabled = $2
+            WHERE guild_id = $3
+            '''
+            await self.bot.db.execute(query, message, enabled, guild_id)
+        else:
+            # Insert new settings for the guild
+            query = '''
+            INSERT INTO join_dm_settings (guild_id, message, enabled)
+            VALUES ($1, $2, $3)
+            '''
+            await self.bot.db.execute(query, guild_id, message, enabled)
+
+    async def ensure_table(self):
+        """Ensure the join_dm_settings table exists and is structured properly."""
+        try:
+            # Check if the table already exists before trying to create it
+            table_check_query = '''
+            SELECT to_regclass('public.join_dm_settings');
+            '''
+            result = await self.bot.db.fetchval(table_check_query)
+
+            if result is None:
+                # Create the join_dm_settings table if it doesn't exist
+                create_table_query = '''
+                CREATE TABLE IF NOT EXISTS join_dm_settings (
+                    guild_id BIGINT PRIMARY KEY,
+                    message TEXT,
+                    enabled BOOLEAN DEFAULT TRUE
+                );
+                '''
+                await self.bot.db.execute(create_table_query)
+
+            # Ensure the necessary columns exist (message and enabled)
+            alter_table_query = '''
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'join_dm_settings' AND column_name = 'message') THEN
+                    ALTER TABLE join_dm_settings ADD COLUMN message TEXT;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'join_dm_settings' AND column_name = 'enabled') THEN
+                    ALTER TABLE join_dm_settings ADD COLUMN enabled BOOLEAN DEFAULT TRUE;
+                END IF;
+            END;
+            $$;
+            '''
+            await self.bot.db.execute(alter_table_query)
+
+        except Exception as e:
+            print(f"Error ensuring table: {e}")
+
+    @commands.Cog.listener()
+    async def on_member_join(self, member):
+        """Send the join DM to a member when they join the server, if enabled."""
+        # Get the settings for the server
+        settings = await self.bot.db.fetch('SELECT * FROM join_dm_settings WHERE guild_id = $1', member.guild.id)
+        
+        # If no settings are found or DM is disabled, return
+        if not settings or not settings.get('enabled'):
+            return
+
+        # Get the saved join DM message
+        message = settings.get('message', '')
+        if message:
+            try:
+                # Try sending the message to the member
+                await member.send(message)
+            except Exception as e:
+                print(f"Failed to send join DM to {member.name}: {e}")
 
     @commands.Cog.listener("on_raw_message_delete")
     async def rr_delete(self, message):
@@ -589,18 +675,6 @@ class Servers(Cog):
         embed = Embed(color = self.bot.color, title = "Level Rewards")
         return await self.bot.dummy_paginator(ctx, embed, rows)
 
-    @levels.command(name = "autoboard", brief = "set a channel to have the leaderboard", usage = ",levels channel <channel>", example = ",levels channel top")
-    @commands.has_permissions(manage_guild = True)
-    async def levels_autoboard(self, ctx: Context, *, channel: TextChannel):
-        rows = await self.bot.db.fetch("""SELECT user_id, xp, msgs FROM text_levels WHERE guild_id = $1 ORDER BY xp DESC LIMIT 5;""", ctx.guild.id)
-        desc = ""
-        for i, row in enumerate(rows, start = 1):
-            desc += f"`{i}` <@!{row.user_id}>\n"
-        embed = Embed(title = "Top Users", description = desc, color = self.bot.color)
-        message = await channel.send(embed = embed)
-        data = [channel.id, message.id]
-        await self.bot.db.execute("""INSERT INTO text_level_settings (guild_id, autoboard_channel) VALUES($1, $2) ON CONFLICT(guild_id) DO UPDATE SET autoboard_channel = excluded.autoboard_channel""", ctx.guild.id, json.dumps(data))
-        return await ctx.success(f"The **autoboard has been set** to {channel.mention}")
 
     @levels.command(name = "setup", brief = "setup leveling")
     @commands.has_permissions(manage_guild = True)
@@ -2054,16 +2128,17 @@ class Servers(Cog):
 
     @Cog.listener()
     async def on_member_join(self, member: discord.Member):
-        if data := await self.bot.db.fetchrow(
-            "SELECT * FROM welcome WHERE guild_id = $1", member.guild.id
-        ):
-            channel = self.bot.get_channel(data["channel_id"])
-            message = data["message"]
-            if channel:
-                try:
-                    await self.bot.send_embed(channel, message, user=member)
-                except EmbedError as e:
-                    await channel.send(f"fix your welcome message: {e}")
+        if member.guild.me.guild_permissions.manage_messages:
+            if data := await self.bot.db.fetchrow(
+                "SELECT * FROM welcome WHERE guild_id = $1", member.guild.id
+            ):
+                channel = self.bot.get_channel(data["channel_id"])
+                message = data["message"]
+                if channel:
+                    try:
+                        await self.bot.send_embed(channel, message, user=member)
+                    except EmbedError as e:
+                        await channel.send(f"fix your welcome message: {e}")
 
     @Cog.listener()
     async def on_member_remove(self, member: discord.Member):
@@ -3056,16 +3131,28 @@ class Servers(Cog):
     async def autorole_list(self, ctx: commands.Context):
         guild = ctx.guild
         embed = discord.Embed(title=f"{guild.name} Autoroles", color=self.bot.color)
-        embed.set_author(name=guild.name, icon_url=guild.icon)
+        embed.set_author(name=guild.name, icon_url=guild.icon.url if guild.icon else None)
         if data := await self.bot.db.fetch(
             "SELECT * FROM autorole WHERE guild_id = $1",
             ctx.guild.id,
         ):
-            roles = [
-                f"``{i+1}.`` {guild.get_role(x['role_id']).mention}"
-                for i, x in enumerate(data)
-            ]
-            embed.description = "\n".join(roles)
+            roles = []
+            for i, x in enumerate(data):
+                if role := guild.get_role(x['role_id']):
+                    roles.append(f"``{i+1}.`` {role.mention}")
+                else:
+                    # Delete the invalid role from database
+                    await self.bot.db.execute(
+                        "DELETE FROM autorole WHERE guild_id = $1 AND role_id = $2",
+                        ctx.guild.id,
+                        x['role_id']
+                    )
+                    roles.append(f"``{i+1}.`` Role `{x['role_id']}` was deleted or no longer exists")
+            
+            if roles:
+                embed.description = "\n".join(roles)
+            else:
+                embed.description = "No valid autoroles found"
         else:
             embed = discord.Embed(
                 description=f"{ctx.author.mention}: There are **no autoroles** set",
@@ -3872,7 +3959,7 @@ class Servers(Cog):
             "SELECT user_id FROM donators WHERE user_id = $1", ctx.author.id
         )
         if not premium:
-            return await ctx.fail("**Premium** is required to use this command join [/pomice](https://discord.gg/pomice) to learn more")
+            return await ctx.fail("**Premium** is required to use this command join [/greedbot](https://discord.gg/greedbot) to learn more")
         table = "reskin"
         configuration = await self.bot.db.fetch_config(ctx.guild.id, table) or {}
         if not configuration.get("status"):
@@ -4295,7 +4382,6 @@ class Servers(Cog):
         ):
             return await ctx.fail("**Boost messages** are not **enabled**")
         return await ctx.success(f"```{message}```")
-
     @boostmsg.command(
         name="test", brief="Test the set boost message", example=",boost test"
     )
@@ -4305,16 +4391,13 @@ class Servers(Cog):
             "SELECT * FROM guild.boost WHERE guild_id = $1", ctx.guild.id
         )):
             return await ctx.fail("**Boost messages** are not **enabled**")
-            
-        channel = ctx.guild.get_channel(data['channel_id'])
+        
+        channel = self.bot.get_channel(data['channel_id'])
         if not channel:
-            return await ctx.fail("The boost message channel no longer exists")
-            
-        if not channel.permissions_for(ctx.guild.me).send_messages:
-            return await ctx.fail("I don't have permission to send messages in the boost channel")
+            return await ctx.fail("Boost message channel not found")
 
         await self.bot.send_embed(channel, data['message'], user=ctx.author)
-        return await ctx.success("**Boost message** was tested")
+        return await ctx.success("**Boost message** was sent")
 
     @commands.group(name="thread", invoke_without_command=True)
     async def _thread(self, ctx):
@@ -4325,6 +4408,7 @@ class Servers(Cog):
         brief="Locks a thread",
         example=",thread lock #channel"
     )
+    @commands.has_permissions(manage_threads=True)
     async def thread_lock(self, ctx, thread: Optional[discord.Thread] = None):
         if not thread:
             thread = ctx.channel
@@ -4343,6 +4427,7 @@ class Servers(Cog):
         brief="Unlocks a thread",
         example=",thread unlock #channel"
     )
+    @commands.has_permissions(manage_threads=True)
     async def thread_unlock(self, ctx, thread: Optional[discord.Thread] = None):
         if not thread:
             thread = ctx.channel
@@ -4356,59 +4441,94 @@ class Servers(Cog):
         )
         return await ctx.success(f"Successfully unlocked {thread.name}")
 
+    @_thread.command(
+        name="remove",
+        brief="Remove a member from the thread",
+        example=",thread remove #thread @member"
+    )
+    @commands.has_permissions(manage_threads=True) 
+    async def thread_remove(self, ctx, thread: Optional[discord.Thread] = None, member: discord.Member = None):
+        if not thread:
+            thread = ctx.channel
+        if not isinstance(thread, discord.Thread):
+            return await ctx.fail("> This channel is not a thread!")
+            
+        if not member:
+            return await ctx.fail("> Please specify a member to remove!")
+
+        try:
+            await thread.fetch_member(member.id)
+        except discord.NotFound:
+            return await ctx.fail(f"{member.mention} is not in this thread!")
+            
+        await thread.remove_user(member)
+        return await ctx.success(f"Successfully removed {member.mention} from {thread.name}")
+
+    @_thread.command(
+        name="add",
+        brief="Add a member to the thread",
+        example=",thread add #thread @member"
+    )
+    @commands.has_permissions(manage_threads=True)
+    async def thread_add(self, ctx, thread: Optional[discord.Thread] = None, member: discord.Member = None): 
+        if not thread:
+            thread = ctx.channel
+        if not isinstance(thread, discord.Thread):
+            return await ctx.fail("> This channel is not a thread!")
+            
+        if not member:
+            return await ctx.fail("> Please specify a member to add!")
+
+        if await thread.fetch_member(member.id):
+            return await ctx.fail(f"{member.mention} is already in this thread!")
+            
+        await thread.add_user(member)
+        return await ctx.success(f"Successfully added {member.mention} to {thread.name}")
 
 
-    @commands.group(name="antiselfreact", aliases=("asr",), brief="Set antiself react", example=",antisr [code]")
-    @commands.has_permissions(manage_messages=True)
-    async def antisr(self, ctx):
-        """Base command group for anti-self-react feature."""
-        if ctx.invoked_subcommand is None:
-            await ctx.fail("use ,h asr for help with commands")
+    @commands.group(name="counter", invoke_without_command=True, brief="Manage and track counting channels.")
+    async def counter(self, ctx):
+        """Base command for the counter."""
+        return await ctx.send_help(ctx.command.qualified_name)
 
-    @antisr.command(name="enable", aliases=("on",), brief="Enable Anti-Self-React in the guild", example=",antisr enable")
-    @commands.has_permissions(manage_messages=True)
-    async def enable(self, ctx):
-        """Enable Anti-Self-React in the guild."""
-        # Insert the guild into the antisr_guilds table to mark it as enabled
-        await self.bot.db.execute("INSERT INTO antisr_guilds (guild_id) VALUES ($1) ON CONFLICT(guild_id) DO NOTHING;", ctx.guild.id)
-        await ctx.success("Anti-Self-React has been enabled in this server.")
+    @counter.command(name="enable", brief="Enable the counter in a specific channel.")
+    @has_permissions(manage_channels=True)
+    async def counter_enable(self, ctx, channel: discord.TextChannel):
+        """Enable the counter in a specific channel."""
+        # Check if the channel is already enabled
+        row = await self.bot.db.fetchrow(
+            "SELECT current_count FROM counter_channels WHERE channel_id = $1", channel.id
+        )
 
-    @antisr.command(name="disable", aliases=("off",), brief="Disable Anti-Self-React in the guild", example=",antisr disable")
-    @commands.has_permissions(manage_messages=True)
-    async def disable(self, ctx):
-        """Disable Anti-Self-React in the guild."""
-        await self.bot.db.execute("DELETE FROM antisr_guilds WHERE guild_id = $1;", ctx.guild.id)
-        await ctx.success("Anti-Self-React has been disabled in this server.")
+        if row:
+            await ctx.warning(f"{channel.mention} is already enabled for the counter.")
+            return
 
-    @antisr.command(name="add", aliases=("include",), brief="Add a user to the Anti-Self-React list", example=",antisr add @user")
-    @commands.has_permissions(manage_messages=True)
-    async def add(self, ctx, user: discord.Member):
-        """Add a user to the Anti-Self-React list."""
-        await self.bot.db.execute("INSERT INTO antisr_users (guild_id, user_id) VALUES ($1, $2) ON CONFLICT(guild_id, user_id) DO NOTHING;", ctx.guild.id, user.id)
-        await ctx.success(f"{user.mention} has been added to the Anti-Self-React list.")
+        # Add the channel to the database with an initial count of 1
+        await self.bot.db.execute(
+            "INSERT INTO counter_channels (channel_id, current_count) VALUES ($1, $2)", channel.id, 1
+        )
+        await ctx.success(f"Counter enabled in {channel.mention}!")
 
-    @antisr.command(name="remove", aliases=("exclude",), brief="Remove a user from the Anti-Self-React list", example=",antisr remove @user")
-    @commands.has_permissions(manage_messages=True)
-    async def remove(self, ctx, user: discord.Member):
-        """Remove a user from the Anti-Self-React list."""
-        await self.bot.db.execute("DELETE FROM antisr_users WHERE guild_id = $1 AND user_id = $2;", ctx.guild.id, user.id)
-        await ctx.success(f"{user.mention} has been removed from the Anti-Self-React list.")
+        # Send the first message
+        first_message = await channel.send("1")
+        await first_message.add_reaction("✅")
 
-    @antisr.command(name="ignore", aliases=("skip",), brief="Ignore a user or role from Anti-Self-React", example=",antisr ignore @role")
-    @commands.has_permissions(manage_messages=True)
-    async def ignore(self, ctx, target: discord.Object):
-        """Ignore a user or role from the Anti-Self-React feature."""
-        is_role = isinstance(target, discord.Role)
-        await self.bot.db.execute("INSERT INTO antisr_ignores (guild_id, target_id, is_role) VALUES ($1, $2, $3) ON CONFLICT(guild_id, target_id) DO NOTHING;", ctx.guild.id, target.id, is_role)
-        await ctx.success(f"{'Role' if is_role else 'User'} {target.id} has been ignored.")
+    @counter.command(name="disable", brief="Disabel the counter in a specific channel.")
+    @has_permissions(manage_channels=True)
+    async def counter_disable(self, ctx, channel: discord.TextChannel):
+        """Disable the counter in a specific channel."""
+        row = await self.bot.db.fetchrow(
+            "SELECT current_count FROM counter_channels WHERE channel_id = $1", channel.id
+        )
 
-    @antisr.command(name="unignore", aliases=("unskip",), brief="Unignore a user or role from Anti-Self-React", example=",antisr unignore @role")
-    @commands.has_permissions(manage_messages=True)
-    async def unignore(self, ctx, target: discord.Object):
-        """Unignore a user or role from the Anti-Self-React feature."""
-        is_role = isinstance(target, discord.Role)
-        await self.bot.db.execute("DELETE FROM antisr_ignores WHERE guild_id = $1 AND target_id = $2 AND is_role = $3;", ctx.guild.id, target.id, is_role)
-        await ctx.success(f"{'Role' if is_role else 'User'} {target.id} is no longer ignored.")
+        if not row:
+            await ctx.warning(f"{channel.mention} is not an active counter channel.")
+            return
+
+        # Remove the channel from the database
+        await self.bot.db.execute("DELETE FROM counter_channels WHERE channel_id = $1", channel.id)
+        await ctx.success(f"Counter disabled in {channel.mention}.")
 
 
     @commands.group(name="pingonjoin", aliases=["poj"], brief="Toggle ping on join", invoke_without_command=True)
@@ -4613,7 +4733,331 @@ class Servers(Cog):
             index
         )
 
+    @commands.group(
+        name="rolelock",
+        brief="Manage role locks.",
+        invoke_without_command=True,
+        usage=",rolelock [subcommand]"
+    )
+    async def rolelock(self, ctx):
+        """RoleLock management commands."""
+        return await ctx.send_help(ctx.command.qualified_name)
 
+    @rolelock.command(
+        name="add",
+        brief="Add role locks for locker roles.",
+        usage=",rolelock add <@locker_role> <@locked_role>, <@locked_role>, ..."
+    )
+    @commands.has_permissions(manage_guild=True)
+    async def add(self, ctx, locker: discord.Role, *locked_roles: str):
+        """
+        Add one or multiple role locks to allow a locker role to grant certain locked roles.
+        Example: ,rolelock add @staff @mod, @admin
+        """
+        if not locked_roles:
+            return await ctx.send_help(ctx.command.qualified_name)
+
+        locked_role_ids = []
+        for locked_role in locked_roles:
+            try:
+                locked_role_obj = await commands.RoleConverter().convert(ctx, locked_role.strip())
+                locked_role_ids.append(locked_role_obj.id)
+            except commands.RoleNotFound:
+                await ctx.send(f"Could not find role: `{locked_role.strip()}`. Skipping.")
+
+        success_roles = []
+        for locked_role_id in locked_role_ids:
+            await self.bot.db.execute(
+                "INSERT INTO rolelock (guild_id, locker_role, locked_role) VALUES ($1, $2, $3)",
+                ctx.guild.id, locker.id, locked_role_id
+            )
+            success_roles.append(locked_role_id)
+
+        if success_roles:
+            success_names = ", ".join(f"<@&{role_id}>" for role_id in success_roles)
+            await ctx.send(f"{locker.mention} can now grant the following roles: {success_names}.")
+        else:
+            await ctx.send("No valid locked roles were provided.")
+
+    @rolelock.command(
+        name="remove",
+        brief="Remove a role lock.",
+        usage=",rolelock remove <@locker_role>"
+    )
+    @commands.has_permissions(manage_guild=True)
+    async def remove(self, ctx, locker: discord.Role):
+        """Remove a role lock by specifying the locker role."""
+        await self.bot.db.execute(
+            "DELETE FROM rolelock WHERE guild_id = $1 AND locker_role = $2",
+            ctx.guild.id, locker.id
+        )
+        await ctx.send(f"All locks related to {locker.mention} have been removed.")
+
+    @rolelock.command(
+        name="list",
+        brief="List all role locks.",
+        usage=",rolelock list"
+    )
+    @commands.has_permissions(manage_guild=True)
+    async def list(self, ctx):
+        """List all role locks set in the guild."""
+        rows = await self.bot.db.fetch(
+            "SELECT locker_role, locked_role FROM rolelock WHERE guild_id = $1",
+            ctx.guild.id
+        )
+        if not rows:
+            await ctx.send("No role locks have been set in this server.")
+        else:
+            description = "\n".join(
+                f"<@&{locker}> can grant <@&{locked}>" for locker, locked in rows
+            )
+            await ctx.send(f"RoleLocks in this server:\n{description}")
+
+    @commands.Cog.listener()
+    async def on_member_update(self, before, after):
+        """Listen for role updates and handle locked role enforcement."""
+        if before.roles == after.roles:
+            return
+
+        added_roles = [role for role in after.roles if role not in before.roles]
+
+        for role in added_roles:
+            rows = await self.bot.db.fetch(
+                "SELECT locker_role, locked_role, authorized_user_ids FROM rolelock WHERE guild_id = $1 AND locked_role = $2",
+                after.guild.id, role.id
+            )
+
+            if rows:
+                locker_role_id = rows[0]["locker_role"]
+                locked_role_id = rows[0]["locked_role"]
+                authorized_user_ids = rows[0]["authorized_user_ids"].split(",") if rows[0]["authorized_user_ids"] else []
+
+                # Check if the locked role was assigned
+                if role.id == locked_role_id:
+                    has_locker_role = locker_role_id in [r.id for r in after.roles]
+
+                    # Identify the assigner via audit logs
+                    assigner_id = None
+                    async for entry in after.guild.audit_logs(limit=5, action=discord.AuditLogAction.member_role_update):
+                        if entry.target.id == after.id and role in entry.changes.after:
+                            assigner_id = entry.user.id
+                            break
+
+                    # Verify role assignment permission
+                    if not (has_locker_role or (assigner_id and str(assigner_id) in authorized_user_ids)):
+                        try:
+                            await after.remove_roles(role, reason="RoleLock Enforcement: Unauthorized role assignment.")
+                            print(f"Removed {role.name} from {after.name}. Unauthorized role assignment.")
+                        except discord.Forbidden:
+                            print(f"Failed to remove {role.name} from {after.name}. Permissions issue.")
+                        except Exception as e:
+                            print(f"Unexpected error removing role from {after.name}: {e}")
+                    else:
+                        print(f"Role {role.name} added to {after.name} by an authorized user or locker role.")
+
+                # Handle authorized users if the locker role is added
+                elif role.id == locker_role_id and str(after.id) not in authorized_user_ids:
+                    authorized_user_ids.append(str(after.id))
+                    updated_ids = ",".join(authorized_user_ids)
+                    await self.bot.db.execute(
+                        "UPDATE rolelock SET authorized_user_ids = $1 WHERE guild_id = $2 AND locked_role = $3",
+                        updated_ids, after.guild.id, locked_role_id
+                    )
+                    print(f"User {after.name} added to authorized users for locked role {locked_role_id}.")
+
+    @commands.command(
+        name = "drag",
+        brief = "Drag a member to your voicechannel",
+        example = ",drag @shittour",
+        aliases = ['d']
+    )
+    @commands.has_permissions(move_members=True, manage_channels=True)
+    async def drag(self, ctx: Context, member: discord.Member):
+        if not ctx.author.voice:
+            return await ctx.send("You must be in a voice channel to use this command.")
+        if not member.voice:
+            return await ctx.send("The user must be in a voice channel to drag them.")
+        await member.move_to(ctx.author.voice.channel)
+        await ctx.success(f"Dragged {member.mention} to your voice channel.")
+
+    @commands.command(
+        name="clearinvites",
+        brief="Clear all server invites",
+        example=",clearinvites"
+    )
+    @commands.has_permissions(manage_guild=True)
+    async def clearinvites(self, ctx: Context):
+        invites = await ctx.guild.invites()
+        if not invites:
+            return await ctx.fail("No invites found in this server")
+
+        await ctx.confirm("Are you sure you want to delete all invites?")
+        async with ctx.typing():        
+            deleted = 0
+            for invite in invites:
+                try:
+                    await invite.delete(reason=f"Cleared by {str(ctx.author)}")
+                    deleted += 1
+                except:
+                    continue
+            return await ctx.success(f"Successfully cleared `{deleted}` invites")
+
+    @commands.command(
+        name="unbanall",
+        brief="Unbans every member in the guild",
+        example=",unbanall"
+    )
+    async def unbanall(self, ctx: Context):
+        
+        if ((user := ctx.author).id != ctx.guild.owner_id):
+            return await ctx.fail("You must be the server owner to use this command")
+        
+        await ctx.confirm("Are you sure you want to unban everyone?")
+        
+        bans = [entry async for entry in ctx.guild.bans()]
+        if not bans:
+            return await ctx.fail("There are no banned users in this server")
+            
+        async with ctx.typing():
+            unbanned = 0
+            for ban_entry in bans:
+                try:
+                    await ctx.guild.unban(ban_entry.user, reason=f"Mass unban by {str(ctx.author)}")
+                    unbanned += 1
+                except:
+                    continue
+            
+            return await ctx.success(f"Successfully unbanned `{unbanned}` users")
+
+
+    @commands.group(name="antiselfreact", aliases=['antisr'], brief="Anti-Self-React feature")
+    @commands.has_permissions(manage_messages=True)
+    async def antisr(self, ctx: Context):
+        """Base command group for the Anti-Self-React feature."""
+        if ctx.invoked_subcommand is None:
+            return await ctx.send_help(ctx.command.qualified_name)
+
+    @antisr.command(name="enable", aliases=["on"], brief="Enable Anti-Self-React in the guild")
+    @commands.has_permissions(manage_messages=True)
+    async def enable(self, ctx: Context):
+        """Enable Anti-Self-React in the guild."""
+        await self.bot.db.execute("INSERT INTO antisr_guilds (guild_id) VALUES ($1) ON CONFLICT(guild_id) DO NOTHING;", ctx.guild.id)
+        await ctx.success("AntiSelfReact has been enabled in this server.")
+
+    @antisr.command(name="disable", aliases=["off"], brief="Disable Anti-Self-React in the guild")
+    @commands.has_permissions(manage_messages=True)
+    async def disable(self, ctx: Context):
+        """Disable Anti-Self-React in the guild."""
+        await self.bot.db.execute("DELETE FROM antisr_guilds WHERE guild_id = $1;", ctx.guild.id)
+        await ctx.success("AntiSelfReact has been disabled in this server.")
+
+    @antisr.command(name="add", aliases=["include"], brief="Add a user to the Anti-Self-React list")
+    @commands.has_permissions(manage_messages=True)
+    async def add(self, ctx: Context, user: discord.Member):
+        """Add a user to the Anti-Self-React list."""
+        await self.bot.db.execute("INSERT INTO antisr_users (guild_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING;", ctx.guild.id, user.id)
+        await ctx.success(f"{user.mention} has been added to the AntiSelfReact list.")
+
+    @antisr.command(name="remove", aliases=["exclude"], brief="Remove a user from the Anti-Self-React list")
+    @commands.has_permissions(manage_messages=True)
+    async def remove(self, ctx: Context, user: discord.Member):
+        """Remove a user from the Anti-Self-React list."""
+        await self.bot.db.execute("DELETE FROM antisr_users WHERE guild_id = $1 AND user_id = $2;", ctx.guild.id, user.id)
+        await ctx.success(f"{user.mention} has been removed from the AntiSelfReact list.")
+
+    @antisr.command(name="ignore", aliases=["skip"], brief="Ignore a user or role")
+    @commands.has_permissions(manage_messages=True)
+    async def ignore(self, ctx: Context, target: discord.Object):
+        """Ignore a user or role from Anti-Self-React."""
+        is_role = isinstance(target, discord.Role)
+        await self.bot.db.execute(
+            "INSERT INTO antisr_ignores (guild_id, target_id, is_role) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING;",
+            ctx.guild.id, target.id, is_role
+        )
+        await ctx.success(f"{'Role' if is_role else 'User'} {target.id} has been ignored.")
+
+    @antisr.command(name="unignore", aliases=["unskip"], brief="Unignore a user or role")
+    @commands.has_permissions(manage_messages=True)
+    async def unignore(self, ctx: Context, target: Union[discord.Role, discord.Member, discord.User]):
+        """Unignore a user or role from Anti-Self-React."""
+        is_role = isinstance(target, discord.Role)
+        await self.bot.db.execute(
+            "DELETE FROM antisr_ignores WHERE guild_id = $1 AND target_id = $2 AND is_role = $3;",
+            ctx.guild.id, target.id, is_role
+        )
+        await ctx.success(f"{'Role' if is_role else 'User'} {target.id} is no longer ignored.")
+
+    @commands.Cog.listener("on_raw_reaction_add")
+    async def antireact(self, payload: discord.RawReactionActionEvent):
+        """Handle reaction events and enforce Anti-Self-React."""
+        if payload.guild_id is None:
+            return
+
+        guild = self.bot.get_guild(payload.guild_id)
+        if not guild:
+            return
+
+        if not await self.bot.db.fetchrow("SELECT 1 FROM antisr_guilds WHERE guild_id = $1;", guild.id):
+            return
+
+        try:
+            member = guild.get_member(payload.user_id) or await guild.fetch_member(payload.user_id)
+        except discord.NotFound:
+            return
+        except discord.HTTPException as e:
+            logger.error(f"Member fetch failed: {e}")
+            return
+
+        channel = guild.get_channel(payload.channel_id)
+        if not channel or not isinstance(channel, discord.TextChannel):
+            return
+
+        try:
+            message = await channel.fetch_message(payload.message_id)
+        except discord.NotFound:
+            return
+        except discord.HTTPException as e:
+            logger.error(f"Message fetch failed: {e}")
+            return
+
+        if message.author.id != member.id:
+            return
+
+        role_ids = [role.id for role in member.roles]
+        exempt = await self.bot.db.fetchval("""
+            SELECT EXISTS (
+                SELECT 1 FROM antisr_ignores
+                WHERE guild_id = $1
+                AND (
+                    (target_id = $2 AND NOT is_role) OR
+                    (target_id = ANY($3::BIGINT[]) AND is_role)
+                )
+            )
+            """, guild.id, member.id, role_ids)
+        
+        if exempt:
+            return
+
+        if not await self.bot.db.fetchrow("SELECT 1 FROM antisr_users WHERE guild_id = $1 AND user_id = $2;", guild.id, member.id):
+            return
+
+        try:
+            await message.remove_reaction(payload.emoji, member)
+        except discord.Forbidden:
+            logger.warning(f"Missing reaction manage permissions in {guild.id}")
+        except discord.HTTPException as e:
+            logger.error(f"Reaction removal failed: {e}")
+
+        try:
+            await member.kick(reason="Anti-Self-React: Reacted to own message")
+            logger.info(f"Kicked {member} ({member.id}) in {guild} for self-reacting")
+        except discord.Forbidden:
+            logger.warning(f"Missing kick permissions in {guild.id}")
+        except discord.HTTPException as e:
+            logger.error(f"Kick failed: {e}")
+        else:
+            return await self.bot.db.execute("DELETE FROM antisr_users WHERE guild_id = $1 AND user_id = $2;", guild.id, member.id)
+            
 
 async def setup(bot: "Greed") -> None:
     await bot.add_cog(Servers(bot))

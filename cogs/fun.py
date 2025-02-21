@@ -1,18 +1,28 @@
+import io
 import os
+import re
+
+import requests
 from discord import Message
 from discord.ext import commands
 from discord.ext.commands import Context, BadArgument
 from discord import Embed, TextChannel
 import discord
+import emoji
+from datetime import datetime
+from discord.ui import Button, View, Select
 import asyncio
+import datetime
 from datetime import datetime, timedelta
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageSequence
 from googleapiclient.discovery import build
+from loguru import logger 
 from io import BytesIO
 from typing import List
 import base64
 import textwrap
 import random
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
 import aiohttp
 from color_processing import ColorInfo
 from tool.emotes import EMOJIS
@@ -22,6 +32,9 @@ from tool.managers.bing import BingService
 from dataclasses import dataclass, field
 from tool.worker import offloaded
 # from greed.tool import aliases
+
+IMAGE_FOLDER = "/root/greed/data/nba"
+FONT_PATH = "/root/greed/arial.ttf"  # Ensure this points to a valid .ttf font file
 
 @offloaded
 def get_dominant_color(image_bytes: bytes) -> dict:
@@ -51,21 +64,25 @@ def compress_image(image_bytes: bytes, quality: int = None) -> bytes:
 def do_caption(para: list, image_bytes: bytes, message_data: dict):
     if isinstance(image_bytes, BytesIO):
         image_bytes = image_bytes.getvalue()
+
     image = Image.open(BytesIO(image_bytes))
     haikei = Image.open("quote/grad.jpeg")
     black = Image.open("quote/black.jpeg")
+
     w, h = (680, 370)
+
     haikei = haikei.resize((w, h))
     black = black.resize((w, h))
-    icon = image.resize((h, h))
+
+    icon = image.resize((w, h))
+    icon = icon.convert("L")
+    icon = icon.crop((40, 0, w, h))
 
     new = Image.new(mode="L", size=(w, h))
-    icon = icon.convert("L")
-    black = black.convert("L")
-    icon = icon.crop((40, 0, 680, 370))
     new.paste(icon)
 
     sa = Image.composite(new, black, haikei.convert("L"))
+
     draw = ImageDraw.Draw(sa)
     fnt = ImageFont.truetype("quote/Arial.ttf", 28)
 
@@ -97,19 +114,19 @@ def do_caption(para: list, image_bytes: bytes, message_data: dict):
 
         current_h += h3 + pad
 
-    dr = ImageDraw.Draw(sa)
     font = ImageFont.truetype("quote/Arial.ttf", 15)
-    _, _, authorw, _ = dr.textbbox((0, 0), f"-{message_data['author']}", font=font)
-
-    output = BytesIO()
-    dr.text(
+    _, _, authorw, _ = draw.textbbox((0, 0), f"-{message_data['author']}", font=font)
+    draw.text(
         (480 - int(authorw / 2), current_h + h2 + 10),
         f"-{message_data['author']}",
         font=font,
         fill="#FFF",
     )
+
+    output = BytesIO()
     sa.save(output, format="JPEG")
     output_bytes = output.getvalue()
+
     return output_bytes
 
 GOOGLE_API_KEY = "AIzaSyCgPL4hAT14sdyylXxY_R-hXJN4XMo7zZo"
@@ -229,6 +246,43 @@ class TicTacToe(discord.ui.View):
             await self.message.edit(view=self)
     
 
+class DiaryModal(discord.ui.Modal, title="Create a Diary Entry"):
+    def __init__(self):
+        super().__init__()
+
+        self.title_input = discord.ui.TextInput(
+            label="Diary Title",
+            placeholder="Enter the title of your diary",
+            required=True,
+            max_length=100
+        )
+        self.text_input = discord.ui.TextInput(
+            label="Diary Content",
+            style=discord.TextStyle.paragraph,
+            placeholder="Write your thoughts here...",
+            required=True,
+            max_length=2000
+        )
+
+        self.add_item(self.title_input)
+        self.add_item(self.text_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        now = datetime.now()
+        date = f"{now.month}/{now.day}/{str(now.year)[2:]}"
+        
+        # Insert into the database
+        user_id = interaction.user.id
+        title = self.title_input.value
+        content = self.text_input.value
+        await interaction.client.db.execute(
+            "INSERT INTO diary (user_id, date, title, text) VALUES ($1, $2, $3, $4)",
+            user_id, date, title, content
+        )
+        
+        await interaction.response.send_message(f"Diary entry created for {date}!", ephemeral=True)
+
+
 class GuildData:
     """
     Holds per-guild data for the BlackTea game.
@@ -244,36 +298,47 @@ class BlackTea:
     Manages the core mechanics of the BlackTea game.
     """
     LIFE_LIMIT = 3
-    WORDS_URL = "https://www.mit.edu/~ecprice/wordlist.100000"
-
+    WORDS_URL = "https://raw.githubusercontent.com/ScriptSmith/topwords/refs/heads/master/words.txt"
+ 
     def __init__(self, bot):
         self.bot = bot
         self.color = 0xA5D287
         self.emoji = "<a:boba_tea_green_gif:1302250923858591767>"
-        self.match_started: Set[int] = set()
-        self.guild_data: Dict[int, GuildData] = {}
+        self.match_started = set()
+        self.guild_data = {}
         self.lock = asyncio.Lock()
+        self.words = []
+        self.tasks = {}
+        asyncio.create_task(self.fetch_word_list())
 
-    async def fetch_word_list(self) -> List[str]:
+    async def fetch_word_list(self):
         """
-        Fetches a word list from the predefined URL.
+        Fetches and preloads the word list, handling encoding issues.
         """
         async with aiohttp.ClientSession() as session:
             try:
                 async with session.get(self.WORDS_URL) as response:
                     response.raise_for_status()
-                    return [
-                        line.strip() for line in (await response.text()).splitlines() if len(line.strip()) > 3
+                    try:
+                        text = await response.text(encoding="utf-8")
+                    except UnicodeDecodeError as e:
+                        logger.warning(f"UTF-8 decoding failed: {e}. Falling back to ISO-8859-1.")
+
+                        text = await response.text(encoding="ISO-8859-1")
+                
+                    self.words = [
+                        line.strip() for line in text.splitlines() 
+                        if line.strip() and line.strip().isalpha()
                     ]
             except Exception as e:
+                logger.error(f"Error fetching word list: {e}")
                 raise RuntimeError("Failed to fetch words") from e
 
-    @staticmethod
-    def pick_random_prefix(words: List[str]) -> str:
+    def pick_random_prefix(self) -> str:
         """
         Picks a random 3-letter prefix from the list of valid words.
         """
-        valid_words = [word for word in words if len(word) > 3]
+        valid_words = [word for word in self.words if len(word) >= 3]
         if not valid_words:
             raise ValueError("No suitable words found.")
         return random.choice(valid_words)[:3]
@@ -285,35 +350,29 @@ class BlackTea:
         guild_id = channel.guild.id
         guild_data = self.guild_data.get(guild_id)
 
-        if not guild_data or member_id not in guild_data.lives:
-            raise ValueError("Player data not initialized.")
+        if not guild_data:
+            raise ValueError("Game not initialized for this guild.")
 
-        guild_data.lives[member_id] += 1
-        remaining_lives = self.LIFE_LIMIT - guild_data.lives[member_id]
+        if member_id not in guild_data.lives:
+            raise ValueError("Player not in game.")
+
+        guild_data.lives[member_id] -= 1
+        remaining_lives = guild_data.lives[member_id]
 
         if remaining_lives <= 0:
             guild_data.players.remove(int(member_id))
             del guild_data.lives[member_id]
-            await self.send_embed(channel, f"☠️ <@{member_id}> is eliminated!")
+            await channel.send(f"☠️ <@{member_id}> is eliminated!")
         else:
-            await self.send_embed(
-                channel,
+            await channel.send(
                 f"💥 <@{member_id}> lost a life ({reason}). {remaining_lives} lives left.",
             )
-
-    async def send_embed(self, channel: TextChannel, content: str) -> Message:
-        """
-        Sends an embedded message to the specified channel.
-        """
-        embed = Embed(color=self.color, description=content)
-        return await channel.send(embed=embed)
 
     async def handle_guess(
         self,
         user: int,
         channel: TextChannel,
         prefix: str,
-        words: List[str],
         session: GuildData,
     ):
         """
@@ -322,43 +381,39 @@ class BlackTea:
         member = channel.guild.get_member(user)
         member_id = str(user)
 
-        TOTAL_TIMEOUT = 10  # Total time for the player to guess
-        INITIAL_TIMEOUT = 7  # Initial wait before countdown starts
+        INITIAL_TIMEOUT = 7
         COUNTDOWN_REACTIONS = ["3️⃣", "2️⃣", "1️⃣"]
 
-        # Announce the string the player needs to guess
-        prompt_message = await self.send_embed(
-            channel,
-            f"🎯 {member.mention}, your word must contain: **{prefix}**. "
-            "You have 10 seconds to respond!"
+        prompt_message = await channel.send(
+            content=member.mention,
+            embed=Embed(
+                description=f"🎯 {member.mention}, your word must contain: **{prefix}**. "
+                            f"You have 10 seconds to respond!"
+            )
         )
 
         try:
-            # Wait for the player's message during the initial timeout
             message: Message = await self.bot.wait_for(
                 "message",
                 check=lambda m: (
                     m.channel.id == channel.id
                     and m.author.id == user
-                    and m.content.lower() in words
+                    and m.content.lower() in self.words
                     and prefix.lower() in m.content.lower()
                     and m.content.lower() not in session.guessed_words
                 ),
                 timeout=INITIAL_TIMEOUT,
             )
 
-            # Process a correct guess if received during the initial period
             session.guessed_words.add(message.content.lower())
-            await self.send_embed(channel, f"✅ Correct answer, {member.mention}!")
+            await channel.send(embed=Embed(description=f"✅ Correct answer, {member.mention}!"))
             return True
 
         except asyncio.TimeoutError:
-            # Start the countdown by reacting to the original prompt
             for reaction in COUNTDOWN_REACTIONS:
                 await prompt_message.add_reaction(reaction)
                 await asyncio.sleep(1)
 
-            # Deduct a life if no valid guess was made
             await self.decrement_life(member_id, channel, "timeout")
             return False
 
@@ -369,22 +424,167 @@ class BlackTea:
         async with self.lock:
             if guild_id in self.match_started:
                 raise ValueError("A BlackTea match is already in progress.")
+            
+            guild_data = GuildData()
+            guild_data.lives = {}
+            self.guild_data[guild_id] = guild_data
             self.match_started.add(guild_id)
-            if guild_id not in self.guild_data:
-                self.guild_data[guild_id] = GuildData()
 
     def reset_guild_data(self, guild_id: int):
         """
-        Resets guild-specific game data.
+        Resets guild-specific game data and cancels any running task.
         """
+        if guild_id in self.tasks:
+            self.tasks[guild_id].cancel()
+            self.tasks.pop(guild_id)
         self.guild_data.pop(guild_id, None)
         self.match_started.discard(guild_id)
 
+    async def run_game(self, ctx, guild_id: int):
+        """
+        Handles the main game loop as a task.
+        """
+        try:
+            message = await ctx.send(
+                embed=Embed(
+                    color=self.color,
+                    title="BlackTea Matchmaking",
+                    description=(
+                        "React to join the game!\n"
+                        "Each player will take turns guessing words containing specific letters.\n"
+                        "Run out of time or make incorrect guesses, and you lose lives. "
+                        "The last player standing wins!"
+                    ),
+                )
+            )
+
+            await message.add_reaction("☕")
+            await asyncio.sleep(10)
+
+            try:
+                message = await ctx.channel.fetch_message(message.id)
+                if not message.reactions:
+                    raise ValueError("No players joined the game.")
+            except discord.NotFound:
+                raise ValueError("The game message was deleted.")
+
+            users = [
+                u.id async for u in message.reactions[0].users()
+                if not u.bot
+            ]
+
+            if len(users) < 2:
+                raise ValueError("Not enough players to start.")
+
+            guild_data = self.guild_data[guild_id]
+            guild_data.players = users
+            guild_data.lives = {str(user): self.LIFE_LIMIT for user in users}
+            guild_data.guessed_words = set()
+
+            while len(guild_data.players) > 1:
+                for user in list(guild_data.players):
+                    prefix = self.pick_random_prefix()
+                    correct = await self.handle_guess(
+                        user=user,
+                        channel=ctx.channel,
+                        prefix=prefix,
+                        session=guild_data,
+                    )
+                    if not correct and user not in guild_data.players:
+                        continue
+
+            if guild_data.players:
+                winner = guild_data.players[0]
+                await ctx.send(f"👑 <@{winner}> won the game!")
+
+        except asyncio.CancelledError:
+            await ctx.send("Game cancelled.")
+            raise
+        except Exception as e:
+            await ctx.send(f"An error occurred: {e}")
+        finally:
+            self.reset_guild_data(guild_id)
+
+@offloaded
+async def fetch_avatar(url):
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            return await response.read()
+
+
+@offloaded
+def ship_img(avatar1_bytes, avatar2_bytes, compatibility):
+    width = 1200
+    height = 650
+    image = Image.new('RGBA', (width, height), (255, 255, 255, 0))
+    draw = ImageDraw.Draw(image)
+
+    avatar1 = Image.open(io.BytesIO(avatar1_bytes)).convert("RGBA")
+    avatar2 = Image.open(io.BytesIO(avatar2_bytes)).convert("RGBA")
+
+    avatar1 = avatar1.resize((250, 250))
+    avatar2 = avatar2.resize((250, 250))
+
+    def create_circle_mask(size):
+        circle_mask = Image.new('L', size, 0)
+        draw = ImageDraw.Draw(circle_mask)
+        draw.ellipse((0, 0, size[0], size[1]), fill=255)
+        return circle_mask
+
+    avatar1_mask = create_circle_mask(avatar1.size)
+    avatar2_mask = create_circle_mask(avatar2.size)
+
+    avatar1.putalpha(avatar1_mask)
+    avatar2.putalpha(avatar2_mask)
+
+    image.paste(avatar1, (150, 200), avatar1)
+    image.paste(avatar2, (width - 150 - 250, 200), avatar2)
+
+    corner_radius = 25
+    progress_bar_width = 800
+    progress_bar_height = 70
+    progress_bar_x = (width - progress_bar_width) // 2
+    progress_bar_y = 40
+
+    gradient = Image.new('RGBA', (progress_bar_width, progress_bar_height), (255, 255, 255, 255))
+    gradient_draw = ImageDraw.Draw(gradient)
+
+    for x in range(progress_bar_width):
+        r = int((x / progress_bar_width) * 255)
+        g = int((x / progress_bar_width) * 105)
+        b = int((x / progress_bar_width) * 180)
+        gradient_draw.line((x, 0, x, progress_bar_height), fill=(r, g, b))
+
+    mask = Image.new('L', (progress_bar_width, progress_bar_height), 0)
+    mask_draw = ImageDraw.Draw(mask)
+    mask_draw.rounded_rectangle([0, 0, progress_bar_width, progress_bar_height], radius=corner_radius, fill=255)
+
+    gradient.putalpha(mask)
+
+    fill_width = int((compatibility / 100) * progress_bar_width)
+    visible_gradient = gradient.crop((0, 0, fill_width, progress_bar_height))
+
+    image.paste(visible_gradient, (progress_bar_x, progress_bar_y), visible_gradient)
+
+    heart_path = 'heart.png'
+    heart = Image.open(heart_path).convert("RGBA")
+    heart = heart.resize((120, 120))
+
+    image.paste(heart, (width // 2 - 60, height // 2 - 60), heart)
+
+    image = image.filter(ImageFilter.SMOOTH)
+
+    with io.BytesIO() as image_binary:
+        image.save(image_binary, 'PNG')
+        image_binary.seek(0)
+        return image_binary.read()
 
 
 class Fun(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.book = "📖"
+        self.pen = "📖"  # Emoji for diary-related actions
         self.blacktea = BlackTea(self.bot)
         self.bing = BingService(self.bot.redis, None)
         self.flavors = [
@@ -407,6 +607,49 @@ class Fun(commands.Cog):
             "Cherry",
             "Raspberry",
         ]
+
+
+
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        """
+        Listener that checks for offensive words and updates the count.
+        """
+        if message.author.bot:  # Don't process messages from bots
+            return
+
+        user_id = message.author.id
+        content = message.content.lower()
+
+        # Regex patterns for both words
+        general_word = r'\bnigga\b'  # Match "nigga"
+        hard_r_word = r'\bnigger\b'  # Match "nigger"
+
+        try:
+            # Check and update counts
+            if re.search(general_word, content, re.IGNORECASE):
+                await self.increment_offensive_count(user_id, 'general_count')
+
+            if re.search(hard_r_word, content, re.IGNORECASE):
+                await self.increment_offensive_count(user_id, 'hard_r_count')
+
+        except Exception as e:
+            logger.error(f"Error processing message from {message.author}: {e}")
+
+    async def increment_offensive_count(self, user_id, column):
+        """Increments the offensive word count for a user in the database."""
+        try:
+            # Prevent SQL ambiguity by explicitly referencing the column
+            query = f"""
+                INSERT INTO offensive (user_id, {column}) 
+                VALUES ($1, 1)
+                ON CONFLICT (user_id) 
+                DO UPDATE SET {column} = offensive.{column} + 1
+            """
+            await self.bot.db.execute(query, user_id)  # Execute the query
+
+        except Exception as e:
+            logger.error(f"Error incrementing count for user {user_id}: {e}")
 
 
 
@@ -454,73 +697,32 @@ class Fun(commands.Cog):
         except ValueError as e:
             return await ctx.send(str(e))
 
-        embed = Embed(
-            color=self.blacktea.color,
-            title="BlackTea Matchmaking",
-            description=(
-                "React to join the game!\n"
-                "Each player will take turns guessing words containing specific letters.\n"
-                "Run out of time or make incorrect guesses, and you lose lives. "
-                "The last player standing wins!"
-            ),
-        )
-        message = await ctx.send(embed=embed)
-
-        try:
-            await message.add_reaction("☕")
-        except Exception as e:
-            self.blacktea.reset_guild_data(guild_id)
-            return await ctx.send(f"Failed to add reaction: {e}")
-
-        await asyncio.sleep(10)
-
-        try:
-            fetched_message = await ctx.channel.fetch_message(message.id)
-            if not fetched_message.reactions:
+        if not self.blacktea.words:
+            try:
+                await self.blacktea.fetch_word_list()
+            except Exception as e:
                 self.blacktea.reset_guild_data(guild_id)
-                return await ctx.send("No reactions were added to the BlackTea message.")
-        except Exception:
-            self.blacktea.reset_guild_data(guild_id)
-            return await ctx.send("The BlackTea message was deleted.")
+                return await ctx.send(f"Failed to load word list: {e}")
 
-        users = [
-            u.id async for u in fetched_message.reactions[0].users()
-            if u.id != self.bot.user.id and not u.bot
-        ]
+        task = asyncio.create_task(self.blacktea.run_game(ctx, guild_id))
+        self.blacktea.tasks[guild_id] = task
 
-        if len(users) < 2:
-            self.blacktea.reset_guild_data(guild_id)
-            return await ctx.send("Not enough players to start.")
-
-        words = await self.blacktea.fetch_word_list()
-        guild_data = self.blacktea.guild_data[guild_id]
-        guild_data.players = users
-        guild_data.lives = {str(user): 0 for user in users}
-
-        while len(guild_data.players) > 1:
-            for user in list(guild_data.players):
-                prefix = self.blacktea.pick_random_prefix(words)
-                correct = await self.blacktea.handle_guess(
-                    user=user,
-                    channel=ctx.channel,
-                    prefix=prefix,
-                    words=words,
-                    session=guild_data,
-                )
-                if not correct and user not in guild_data.players:
-                    break
-
-        winner = guild_data.players[0]
-        await self.blacktea.send_embed(ctx.channel, f"👑 <@{winner}> won the game!")
-        self.blacktea.reset_guild_data(guild_id)
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
     @blacktea.command(name="end")
     async def blacktea_end(self, ctx):
         """
         Ends an ongoing BlackTea match.
         """
-        self.blacktea.reset_guild_data(ctx.guild.id)
-        await ctx.send("BlackTea match ended.")
+        guild_id = ctx.guild.id
+        if guild_id in self.blacktea.tasks:
+            self.blacktea.reset_guild_data(guild_id)
+            await ctx.send("BlackTea match ended.")
+        else:
+            await ctx.send("No active BlackTea game to end.")
 
     @commands.command()
     async def spark(self, ctx):
@@ -575,7 +777,7 @@ class Fun(commands.Cog):
             await ctx.send(embed=embed)
 
     @commands.command()
-    @commands.cooldown(1, 3, commands.BucketType.user)
+    @commands.cooldown(1, 10, commands.BucketType.user)
     async def smoke(self, ctx):
         user_id = ctx.author.id
         row = await self.bot.db.fetchrow(
@@ -672,7 +874,7 @@ class Fun(commands.Cog):
         )
 
     @commands.group(name="vape", brief="Hit the vape", invoke_without_command=True, aliases=["hit"])
-    @commands.cooldown(1, 15, commands.BucketType.user)
+    @commands.cooldown(1, 3, commands.BucketType.user)
     async def vape(self, ctx):
         has_vape = await self.bot.db.fetchrow(
             "SELECT holder, guild_hits FROM vape WHERE guild_id = $1", ctx.guild.id
@@ -731,7 +933,7 @@ class Fun(commands.Cog):
         await message.edit(embed=embed)
 
     @vape.command(name="steal", brief="Steal the vape from the current holder")
-    @commands.cooldown(1, 20, commands.BucketType.guild)
+    @commands.cooldown(1, 7, commands.BucketType.guild)
     async def vape_steal(self, ctx):
         res = await self.bot.db.fetchrow(
             "SELECT holder FROM vape WHERE guild_id = $1", ctx.guild.id
@@ -1148,96 +1350,166 @@ class Fun(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-    @commands.command(name="nword", help="Shows how many times you've said the n-word")
+
+    @commands.command(name="nword", aliases=['nw'], help="Shows how many times you've said the n-word and hard r")
     async def nword_count(self, ctx):
         """
-        Show how many times the user has said 'nigga'.
+        Show how many times the user has said 'nigga' and 'nigger'.
         """
         try:
             user_id = ctx.author.id
             result = await self.bot.db.fetchrow(
-                "SELECT count FROM offensive WHERE user_id = $1", user_id  # Pass user_id directly, not as a tuple
+                "SELECT general_count, hard_r_count FROM offensive WHERE user_id = $1", user_id
             )
 
-            if result:
-                count = result['count']  # Use the key 'count' to access the result
+            general_count = result['general_count'] if result else 0
+            hard_r_count = result['hard_r_count'] if result else 0
+            # Fetch the leaderboard data to get the user's position
+            leaderboard = await self.bot.db.fetch(
+                "SELECT user_id, general_count FROM offensive ORDER BY general_count DESC"
+            )
 
-                # Create an embed with the response
-                embed = Embed(
-                    description=f"{ctx.author.name} You've said it **{count}** times...",
-                    color=self.bot.color
-                )
+            # Get a sorted list of general counts (so we can track user positions)
+            sorted_leaderboard = sorted(leaderboard, key=lambda x: x['general_count'], reverse=True)
 
-                # Send the embed to the channel
-                await ctx.send(embed=embed)
+            # Calculate user's position in the leaderboard
+            user_position = None
+            for index, entry in enumerate(sorted_leaderboard):
+                if entry['user_id'] == user_id:
+                    user_position = index + 1  # positions are 1-based
+                    break
+
+            if user_position is None:
+                user_position = 'N/A'  # If user is not in the leaderboard
+
+
+            # Select a random message
+            messages = [
+                "The FitnessGram Pacer Test is a multistage aerobic capacity test that progressively gets more difficult as it continues. ",
+                "Damn, that's a lot of racism in one area.",
+                "Even cavemen have more of a dignity than you do.",
+                "You might wanna lawyer up.",
+                "Once you go black you never go back i guess.",
+                "I didn't know white people had the balls to say it",
+                "Your future employers are watching it's over for you.",
+                "Touch grass immediately.",
+                "People think that just because they're black they can say it but you aren't even black.",
+            ]
+
+            random_message = f"-# {random.choice(messages)}"
+
+            embed = discord.Embed(
+                description=(
+                    f"{ctx.author.mention} has said the n-word **{general_count}** times\n"
+                    f"The **Hard R** was present **{hard_r_count}** times\n"
+                    f"{random_message}"
+                ),
+                color=self.bot.color
+            )
+
+            embed.set_author(name=f"{ctx.author.name} - is not black", icon_url=ctx.author.display_avatar.url)
+            embed.set_footer(text=f"You are #{user_position} on the leaderboard")
+
+            await ctx.send(embed=embed)
 
         except Exception as e:
+            logger.error(f"Error fetching count for {ctx.author}: {e}")
             await ctx.send(f"Error fetching your count: {e}")
-            print(f"Error fetching count for {ctx.author.id}: {e}")
 
 
-
-    @commands.command(name="nwordlb", help="Shows the top 10 users who said the n-word.")
+    @commands.command(name="nwordlb", aliases=['nwlb'], help="Shows the leaderboard of how many times users have said the n-word")
     async def nword_leaderboard(self, ctx):
         """
-        Displays the top 10 users who have said the 'n-word' the most.
+        Display a paginated leaderboard for users' n-word counts.
         """
         try:
-            # Fetch the top 10 users based on the 'nigga' count, descending order
-            rows = await self.bot.db.fetch(
-                "SELECT user_id, count FROM offensive ORDER BY count DESC LIMIT 10"
+            # Fetch the leaderboard data from the database
+            leaderboard = await self.bot.db.fetch(
+                "SELECT user_id, general_count FROM offensive ORDER BY general_count DESC"
             )
 
-            # If no data is available
-            if not rows:
-                await ctx.send("No data available in the leaderboard.")
-                return
-
-            # Create a list to hold user leaderboard entries
-            leaderboard_entries = []
-
-            # Loop through the results and get user data from the database
-            for row in rows:
-                user_id = row['user_id']
-                count = row['count']
-
-                # Try to fetch the user from the guild (fall back to user_id if not found)
-                user = ctx.guild.get_member(user_id)
-
-                # If user not found in the guild, attempt to fetch globally
-                if not user:
-                    try:
-                        user = await self.bot.fetch_user(user_id)
-                    except discord.NotFound:
-                        user = None  # If not found globally, set user to None
-
-                # If user exists, mention the user with a clickable link; else fallback to "Unknown User"
-                if user:
-                    username = f"[{user.name}](https://discord.com/users/{user.id})"  # Username linked to profile
-                else:
-                    username = "Unknown User"  # Use "Unknown User" if not found
-
-                leaderboard_entries.append(f"**{username}: {count} times**")
-
-            # Split leaderboard entries into pages (10 entries per page)
+            # Create the embed
             page_size = 10
-            pages = [leaderboard_entries[i:i + page_size] for i in range(0, len(leaderboard_entries), page_size)]
+            total_pages = (len(leaderboard) // page_size) + (1 if len(leaderboard) % page_size != 0 else 0)
 
-            # Handle pagination
-            for page_num, page in enumerate(pages, 1):
-                # Create the embed for the page
+            # Initialize the leaderboard view
+            page = 1
+
+            # This function generates the embed for the current page
+            async def generate_embed(page):
+                start = (page - 1) * page_size
+                end = start + page_size
+                page_leaderboard = leaderboard[start:end]
+                description = ""
+
+                for index, entry in enumerate(page_leaderboard):
+                    user = self.bot.get_user(entry['user_id']) or await self.bot.fetch_user(entry['user_id'])
+                    user_name = user.name if user else "Unknown User"
+                    description += f"**`{entry['general_count']}`** {user_name}\n"
+
                 embed = discord.Embed(
-                    title="Top 10 idiots",
-                    description="\n".join(page),
+                    title="N-word Leaderboard",
+                    description=description,
                     color=self.bot.color
                 )
-                embed.set_footer(text=f"ong yall racist -nox")
-                
-                # Send the embed for the current page
-                await ctx.send(embed=embed)
+                embed.set_footer(text=f"Page {page}/{total_pages}")
+                return embed
+
+
+            # Create buttons for navigation
+            async def on_previous_button_click(interaction: discord.Interaction):
+                if interaction.user.id == ctx.author.id:  # Only the author can interact
+                    nonlocal page
+                    if page > 1:
+                        page -= 1
+                        embed = await generate_embed(page)
+                        await interaction.response.edit_message(embed=embed)
+                else:
+                    await interaction.response.send_message("You see this button yea? dont touch it.", ephemeral=True)
+
+            async def on_next_button_click(interaction: discord.Interaction):
+                if interaction.user.id == ctx.author.id:  # Only the author can interact
+                    nonlocal page
+                    if page < total_pages:
+                        page += 1
+                        embed = await generate_embed(page)
+                        await interaction.response.edit_message(embed=embed)
+                else:
+                    await interaction.response.send_message("Touch me harder and i just might work", ephemeral=True)
+            # Corrected Close Button Action
+            async def on_close_button_click(interaction: discord.Interaction):
+                if interaction.user.id == ctx.author.id:  # Only the author can close
+                    await interaction.message.delete()  # Correct method to delete the message
+                else:
+                    await interaction.response.send_message("Close your legs you stink.", ephemeral=True)
+            # Custom buttons with labels and colors
+            # Define custom emojis as instances using their emoji IDs
+            previous_emoji = discord.PartialEmoji(name="left", id=1336820200850460743)
+            next_emoji = discord.PartialEmoji(name="right", id=1336820202737897576)
+            close_emoji = discord.PartialEmoji(name="stop", id=1336820362276765758)
+
+            # Define the buttons with the custom emoji in the `emoji` parameter
+            previous_button = Button(emoji=previous_emoji, style=discord.ButtonStyle.primary)
+            previous_button.callback = on_previous_button_click
+
+            next_button = Button(emoji=next_emoji, style=discord.ButtonStyle.primary)
+            next_button.callback = on_next_button_click
+
+            close_button = Button(emoji=close_emoji, style=discord.ButtonStyle.danger)
+            close_button.callback = on_close_button_click
+
+            view = View()
+            view.add_item(previous_button)
+            view.add_item(next_button)
+            view.add_item(close_button)
+
+            # Send the initial message
+            embed = await generate_embed(page)
+            message = await ctx.send(embed=embed, view=view)
 
         except Exception as e:
-            await ctx.send(f"An error occurred: {e}")
+            logger.error(f"Error fetching leaderboard: {e}")
+            await ctx.send(f"Error fetching the leaderboard: {e}")
 
     @commands.command(
         name="tictactoe",
@@ -1257,42 +1529,38 @@ class Fun(commands.Cog):
             view=view
         )
 
-
-
     @commands.command(name="image", aliases=["img"])
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def image(self, ctx, *, query: str):
-        """Search for images using Google's Custom Search JSON API with button-based navigation."""
+        """Search for images using Bing's Custom Search API with button-based navigation."""
 
-        # Check if the user is a donator
-        try:
-            is_donator = await self.bot.db.fetchrow(
-                """SELECT * FROM boosters WHERE user_id = $1""", ctx.author.id
-            )
-        except Exception as e:
-            return await ctx.fail(f"An error occurred while checking donator status: {e}")
+        # Check if the user is boosting
+        result = await self.bot.db.fetchrow(
+            """SELECT * FROM boosters WHERE user_id = $1""", ctx.author.id
+        )
+        if not result:
+            await ctx.fail(f"You are not boosting [/greedbot](https://discord.gg/greedbot), boost the server to use this command")
+            return
 
-        # If not a donator, limit access to the image search
-        if not is_donator and not ctx.author.id in self.bot.owner_ids:
-            return await ctx.fail(
-                "You are not boosting [/pomice](https://discord.gg/pomice). Boost this server to use this command."
-            )
         try:
-            results = await self.bing.image_search(query = query, safe = True if not ctx.channel.is_nsfw() else False, pages = 2)
+            results = await self.bing.image_search(query=query, safe=not ctx.channel.is_nsfw(), pages=2)
             embeds = []
-            for i, result in enumerate(results.results, start = 1):
+            for i, result in enumerate(results.results, start=1):
                 embed = discord.Embed(
-                    title = f"Image Results for {query}",
-                    color = self.bot.color
+                    title=f"Image Results for {query}",
+                    color=self.bot.color
                 )
-                embed.set_image(url = result.image or result.thumbnail)
-                embed.set_footer(text = f"Page {i}/{len(results.results)}")
+                embed.set_image(url=result.image or result.thumbnail)
+                embed.set_footer(text=f"Page {i}/{len(results.results)}")
                 embeds.append(embed)
+
             return await ctx.alternative_paginate(embeds)
+        
         except Exception as e:
             if ctx.author.name == "aiohttp":
                 raise e
             return await ctx.fail(f"No results found for query `{query[:50]}`")
+
 
 
           
@@ -1312,7 +1580,7 @@ class Fun(commands.Cog):
           # If not a donator, limit access to the image search
           if not is_donator:
                return await ctx.fail(
-                    "You are not boosting [/pomice](https://discord.gg/pomice). Boost this server to use this command."
+                    "You are not boosting [/greedbot](https://discord.gg/greedbot). Boost this server to use this command."
                )
 
           try:
@@ -1372,6 +1640,253 @@ class Fun(commands.Cog):
 
           except Exception as e:
                await ctx.send(f"An error occurred: {e}")
+
+    @commands.group(invoke_without_command=True)
+    async def diary(self, ctx: commands.Context):
+        """Show diary commands."""
+        return await ctx.send_help(ctx.command)
+
+    @diary.command(name="create", aliases=["add"], description="Create a diary entry for today.")
+    async def diary_create(self, ctx: commands.Context):
+        now = datetime.now()
+        date = f"{now.month}/{now.day}/{str(now.year)[2:]}"
+        
+        check = await self.bot.db.fetchrow(
+            "SELECT * FROM diary WHERE user_id = $1 AND date = $2",
+            ctx.author.id, date
+        )
+        if check:
+            return await ctx.send("You already have a diary page for today! Please come back tomorrow or delete the existing entry.")
+        
+        embed = discord.Embed(
+            color=self.bot.color,
+            description=f"{self.book} Press the button below to create your diary entry."
+        )
+        button = Button(emoji=self.pen, label="Create Entry", style=discord.ButtonStyle.grey)
+
+        async def button_callback(interaction: discord.Interaction):
+            if interaction.user.id != ctx.author.id:
+                return await interaction.response.send_message("You are not the author of this command!", ephemeral=True)
+            modal = DiaryModal()
+            await interaction.response.send_modal(modal)
+
+        button.callback = button_callback
+        view = View()
+        view.add_item(button)
+        await ctx.send(embed=embed, view=view)
+
+    @diary.command(name="view", description="View your diary entries.")
+    async def diary_view(self, ctx: commands.Context):
+        results = await self.bot.db.fetch("SELECT * FROM diary WHERE user_id = $1", ctx.author.id)
+        if not results:
+            return await ctx.send("You don't have any diary entries!")
+
+        embeds = [
+            discord.Embed(
+                color=self.bot.color,
+                title=entry["title"],
+                description=entry["text"]
+            )
+            .set_author(name=f"Diary for {entry['date']}")
+            .set_footer(text=f"{i + 1}/{len(results)}")
+            for i, entry in enumerate(results)
+        ]
+        return await ctx.paginate(embeds)
+
+    @diary.command(name="delete", description="Delete a diary entry.")
+    async def diary_delete(self, ctx: commands.Context):
+        results = await self.bot.db.fetch("SELECT * FROM diary WHERE user_id = $1", ctx.author.id)
+        if not results:
+            return await ctx.send("You don't have any diary entries to delete!")
+
+        options = [
+            discord.SelectOption(label=f"Diary {i + 1} - {entry['date']}", value=entry["date"])
+            for i, entry in enumerate(results)
+        ]
+        embed = discord.Embed(
+            color=self.bot.color,
+            description="Select a diary entry to delete from the dropdown menu below."
+        )
+        select = Select(placeholder="Select a diary entry to delete", options=options)
+
+        async def select_callback(interaction: discord.Interaction):
+            if interaction.user.id != ctx.author.id:
+                return await interaction.response.send_message("You are not the author of this command!", ephemeral=True)
+            
+            selected_date = select.values[0]
+            await self.bot.db.execute(
+                "DELETE FROM diary WHERE user_id = $1 AND date = $2",
+                ctx.author.id, selected_date
+            )
+            await interaction.response.send_message("Diary entry deleted!", ephemeral=True)
+
+        select.callback = select_callback
+        view = View()
+        view.add_item(select)
+        await ctx.send(embed=embed, view=view)
+
+    @commands.command()
+    @commands.cooldown(1, 5, commands.BucketType.user)
+    async def ship(self, ctx, user1: discord.User = None, user2: discord.User = None):
+        """
+        Ship two users (or the author and another user if only one is provided).
+        """
+        if user1 is None and user2 is None:
+            await ctx.fail("Please mention at least one user to ship!")
+            return
+
+        # Default to the author if only one user is provided
+        if user1 and not user2:
+            user2 = user1
+            user1 = ctx.author
+        elif not user1 and user2:
+            user1 = ctx.author
+
+        # Retrieve avatars
+        avatar1_url = user1.avatar.url if user1.avatar else user1.default_avatar.url
+        avatar2_url = user2.avatar.url if user2.avatar else user2.default_avatar.url
+
+        avatar1, avatar2 = await asyncio.gather(fetch_avatar(avatar1_url), fetch_avatar(avatar2_url))
+
+        # Determine compatibility and message
+        compatibility = random.randint(1, 100)
+        if compatibility <= 24:
+            compatibility_message = "Looks like these two aren't compatible."
+        elif 25 <= compatibility <= 49:
+            compatibility_message = "These two might work something out..."
+        elif 50 <= compatibility <= 74:
+            compatibility_message = "These two might just be compatible!"
+        else:
+            compatibility_message = "These two are a perfect match!"
+
+        # Generate the ship image
+        image_bytes = await ship_img(avatar1, avatar2, compatibility)
+
+        # Send the results
+        file = discord.File(io.BytesIO(image_bytes), filename="ship.png")
+        await ctx.send(content=f"{compatibility_message} **(Compatibility: {compatibility}%)**", file=file)
+
+
+    @commands.command(name="nbacaption")
+    @commands.cooldown(1, 10, commands.BucketType.user)
+    @commands.is_owner()
+    async def nbacaption(self, ctx, *, caption: str):
+        """Generates a Twitter-style meme with a caption, rounded corners, and blurred vignette effect."""
+        if not os.path.exists(IMAGE_FOLDER) or not os.listdir(IMAGE_FOLDER):
+            await ctx.send("No images found in the folder!")
+            return
+
+        # Pick a random image
+        image_file = random.choice(os.listdir(IMAGE_FOLDER))
+        image_path = os.path.join(IMAGE_FOLDER, image_file)
+
+        try:
+            # Open the image
+            img = Image.open(image_path).convert("RGBA")
+            image_width, image_height = img.size
+
+            # Create a mask for rounded corners
+            mask = Image.new("L", img.size, 0)
+            mask_draw = ImageDraw.Draw(mask)
+            border_radius = int(image_width * 0.1)  # 10% of image width as radius for rounded corners
+            mask_draw.rounded_rectangle(
+                (0, 0, image_width, image_height),
+                radius=border_radius,
+                fill=255
+            )
+            img.putalpha(mask)  # Apply rounded corners as transparency mask
+
+            # Load font (adjust size accordingly)
+            try:
+                font_size = int(image_width * 0.06)  # Scale font size
+                font = ImageFont.truetype(FONT_PATH, font_size)
+            except IOError:
+                font = ImageFont.load_default()
+
+            # Create black bar for text
+            draw = ImageDraw.Draw(img)
+            max_text_width = image_width * 0.9  # Limit text width to 90%
+            words = emoji.replace_emoji(caption, "")  # Remove emojis to handle them separately
+            lines = []
+            current_line = ""
+
+            # Word wrapping for multi-line captions
+            for word in words.split():
+                test_line = f"{current_line} {word}".strip()
+                bbox = draw.textbbox((0, 0), test_line, font=font)
+                line_width = bbox[2] - bbox[0]
+
+                if line_width <= max_text_width:
+                    current_line = test_line
+                else:
+                    lines.append(current_line)
+                    current_line = word
+
+            if current_line:
+                lines.append(current_line)
+
+            # Calculate required height for black bar
+            text_heights = [draw.textbbox((0, 0), line, font=font)[3] - draw.textbbox((0, 0), line, font=font)[1] for line in lines]
+            total_text_height = sum(text_heights) + (len(lines) - 1) * 10  # 10px spacing
+            padding = 20
+            box_height = total_text_height + padding * 2
+
+            # Create new image with black bar
+            new_img = Image.new("RGBA", (image_width, image_height + box_height), (0, 0, 0, 255))
+            new_img.paste(img, (0, box_height), mask=img)
+
+            # Draw text onto black bar
+            draw = ImageDraw.Draw(new_img)
+            y_offset = (box_height - total_text_height) / 2
+            for line in lines:
+                bbox = draw.textbbox((0, 0), line, font=font)
+                text_width = bbox[2] - bbox[0]
+                x = (image_width - text_width) / 2
+                draw.text((x, y_offset), line, font=font, fill="white")
+                y_offset += text_heights[lines.index(line)] + 10
+
+            # Add a white border
+            border_size = int(new_img.width * 0.05)  # 5% of width
+            bordered_img = Image.new("RGBA", (new_img.width + 2 * border_size, new_img.height + 2 * border_size), (0, 0, 0, 255))
+            bordered_img.paste(new_img, (border_size, border_size), mask=new_img)
+
+            # Apply vignette effect with blur
+            vignette = Image.new("L", (bordered_img.width, bordered_img.height), 0)
+            draw = ImageDraw.Draw(vignette)
+            for i in range(bordered_img.width // 2):
+                alpha = int(255 * (1 - (i / (bordered_img.width // 2)) ** 2))
+                draw.ellipse((i, i, bordered_img.width - i, bordered_img.height - i), fill=alpha)
+
+            # Blur vignette
+            vignette = vignette.filter(ImageFilter.GaussianBlur(radius=border_size / 2))
+            bordered_img.putalpha(vignette)
+
+            # Apply rounded corners to the entire image (border + content)
+            rounded_mask = Image.new("L", bordered_img.size, 0)
+            mask_draw = ImageDraw.Draw(rounded_mask)
+            mask_draw.rounded_rectangle(
+                (0, 0, bordered_img.width, bordered_img.height),
+                radius=border_size,  # Use border size for the corner roundness
+                fill=255
+            )
+            bordered_img.putalpha(rounded_mask)
+
+            # Save final image
+            final_path = "final_nba_meme.png"
+            bordered_img.convert("RGB").save(final_path)
+
+            # Send edited image
+            await ctx.send(file=discord.File(final_path))
+
+            # Cleanup
+            os.remove(final_path)
+
+        except Exception as e:
+            await ctx.send(f"Error processing image: {e}")
+
+
+
+
 
     @commands.command(name="poll", brief="Create a poll with multiple options")
     async def poll(self, ctx, time: str, *, question: str):

@@ -929,7 +929,7 @@ class Premium(Cog):
 						d
 					)
 			except Exception as e:
-				print(f"an error occured on page {page}: {e}")
+				logger.info(f"an error occured on page {page}: {e}")
 			return ret
 		async with timeit() as timer:
 			async with AsyncClient(proxies={"http://": "http://mwrodpvj-rotate:9htsidb6jgmm@p.webshare.io:80/", "https://": "http://mwrodpvj-rotate:9htsidb6jgmm@p.webshare.io:80/"}) as client:

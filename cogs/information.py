@@ -33,7 +33,7 @@ from tool.emotes import EMOJIS  # type: ignore
 from typing_extensions import Type
 import re
 from discord import Embed
-
+from cogs.lastfm import LastFMHTTPRequester
 if typing.TYPE_CHECKING:
     pass
 from munch import DefaultMunch
@@ -48,6 +48,7 @@ from tool.down_detector import DiscordStatus
 from geopy.geocoders import Nominatim
 from timezonefinder import TimezoneFinder
 
+GUILD_ID = 1301617147964821524
 
 @offloaded
 def get_timezone(location: str) -> str:
@@ -94,7 +95,7 @@ class plural:
         result += plural if abs(v) != 1 else singular
         return result
 
-PERKS_IMAGE_URL = "https://cdn.discordapp.com/attachments/1301628329111326755/1317350684382990357/ea0c12e2acc4c390abb75c0430f72040.png?ex=675e5dee&is=675d0c6e&hm=5c6891dec920afa9017065f05a6b75532f4da5f8f82427de8ec529080e0631b8&"
+
 DISCORD_FILE_PATTERN = r"(https://|http://)?(cdn\.|media\.)discord(app)?\.(com|net)/(attachments|avatars|icons|banners|splashes)/[0-9]{17,22}/([0-9]{17,22}/(?P<filename>.{1,256})|(?P<hash>.{32}))\.(?P<mime>[0-9a-zA-Z]{2,4})?"
 
 
@@ -399,6 +400,7 @@ class CommandTransformer(app_commands.Transformer):
 class Information(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.requester = LastFMHTTPRequester(api_key="260c08af4a7f26f90743f66637572031")        
         #       self.recognizer = Recognizer()
         self.command_count = len(
             [
@@ -407,6 +409,32 @@ class Information(commands.Cog):
                 if cmd.cog_name not in ("Jishaku", "events", "Owner")
             ]
         )
+
+    async def lf(self, mem: Union[Member, discord.User]):
+        """Fetches the last played song on LastFM for a user using the nowplaying method"""
+        if not (
+            conf := await self.bot.db.fetchrow(
+                "SELECT * FROM lastfm.conf WHERE user_id = $1", mem.id
+            )
+        ):
+            return None
+
+        try:
+            # Fetch recent tracks and user info
+            data = await self.requester.get(method="user.getrecenttracks", user=conf['username'])
+            if 'error' in data:
+                return None
+
+            track_data = data.get("recenttracks", {}).get("track", [])
+            if track_data:
+                track_name = track_data[0]['name']
+                track_url = track_data[0]['url']
+                artist_name = track_data[0]['artist']['#text']
+                return f"<a:lfm:1333750101067305002> Listening to **{track_name}**"
+        except Exception as e:
+            print(f"Error fetching LastFM data: {e}")
+        
+        return None  # If no track is found, return None
 
     @commands.command(name = "level", brief = "see your level in the server", aliases = ["lvl", "rank", "rnk", "activity"], usage = ",level <member>", example = ",level @aiohttp")
     async def level(self, ctx: Context, *, member: Optional[Member] = commands.Author):
@@ -495,6 +523,7 @@ class Information(commands.Cog):
                     },
                 ) as response:
                     data = DefaultMunch.fromDict(await response.json())
+                    logger.info(data)
                     if not data.matches:
                         return await ctx.fail(
                             f"Couldn't find any matches for [`{data.query.hash}`]({image.url})!"
@@ -557,6 +586,7 @@ class Information(commands.Cog):
             data = await get_timezone(timezone)
         except Exception as e:
             # data = await self.find_timezone(city=timezone)
+            return await ctx.fail(e)
             raise e
 
 
@@ -667,60 +697,54 @@ class Information(commands.Cog):
     @commands.command(
         name="botinfo",
         aliases=["bi", "system", "sys"],
-        brief="View the bots information on its growth",
-        example=",botinfo", 
+        brief="View the bot's detailed information and stats.",
+        example=",botinfo",
     )
-    async def botinfo(self, ctx: Context):
-        get_lines()
-        stat = await self.bot.get_statistics()
+    async def botinfo(self, ctx: commands.Context):
+        stat = await self.bot.get_statistics()  # Custom function to get bot stats
         uptime = stat.uptime.replace("Uptime: ", "")
-        
+        total_commands = len(set(self.bot.walk_commands()))
+        latency = round(self.bot.latency * 1000)
+        memory = psutil.Process().memory_info().rss / 1024 / 1024
+        num_guilds = await self.bot.guild_count()
+        num_users = await self.bot.user_count()
+
         embed = discord.Embed(
             color=self.bot.color,
-            description=f"**[Greed](https://greed.wtf)** is serving **{await self.bot.guild_count():,}** guilds with **{await self.bot.user_count():,}** users"
+            description=(
+                f"**[Greed](https://greed.rocks)** is serving **{num_guilds:,}** guilds "
+                f"with **{num_users:,}** users.\n\n"
+            ),
         )
-        
+
         embed.add_field(
-            name=f"stats\n",
+            name="<:moon:1336683823894757508> Stats",
             value=f"""
-commands: **{len(set(self.bot.walk_commands()))}**
-latency: **{round(self.bot.latency * 1000)}ms** 
-memory: ** {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB**\n ㅤ­ """,
-            inline=False
-        )
-
-        usage = psutil.disk_usage("/")
-        free_space = int(usage.free / (1024 ** 3))
-        embed.add_field(
-            name=f"links",
-            value=f"""
-[website](https://greed.wtf)
-[support](https://greed.wtf/discord)
-[builder](https://greed.wtf/embed)
-""",
-            inline=False
+> Commands: **{total_commands}**
+> Latency: **{latency}ms**
+> Memory: **{memory:.2f} MB**
+            """,
+            inline=False,
         )
 
 
-        embed.add_field(
-            name=f"uptime",
-            value=f"{uptime}",
-            inline=False
-        )
-        embed.set_author(
-            name=f"{self.bot.user.name}",
-            icon_url=self.bot.user.avatar
-        )
-        
-        embed.set_thumbnail(url=self.bot.user.avatar)
-        
+        embed.add_field(name="⏱ Uptime", value=uptime, inline=False)
+
+
+        embed.set_author(name=f"{self.bot.user.name}", icon_url=self.bot.user.avatar.url)
+        embed.set_thumbnail(url=self.bot.user.avatar.url)
+
         view = discord.ui.View()
-        view.add_item(discord.ui.Button(
-            style=discord.ButtonStyle.link,
-            label="Invite",
-            url=f"https://discord.com/oauth2/authorize?client_id={self.bot.user.id}&permissions=8&scope=bot"
-        ))
-
+        view.add_item(
+            discord.ui.Button(
+                style=discord.ButtonStyle.link,
+                label="Invite",
+                url=(
+                    f"https://discord.com/oauth2/authorize?client_id={self.bot.user.id}"
+                    f"&permissions=8&scope=bot"
+                ),
+            )
+        )
 
         await ctx.send(embed=embed, view=view)
 
@@ -834,21 +858,30 @@ memory: ** {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB**\n ㅤ­ "
         example=",userinfo @lim",
         brief="View information on a user's account",
     )
-    async def whois(self, ctx, user: Member = None):
+    async def whois(self, ctx, user: Union[User, Member] = None):
         """View some information on a user"""
-
         user = user or ctx.author
 
+        if isinstance(user, discord.User):
+            # Handle User that is not in the server - show minimal info
+            embed = discord.Embed(
+                color=self.bot.color,
+                title=f"{user.name}",
+            )
+            embed.add_field(
+                name="**Created**",
+                value=f"**{discord.utils.format_dt(user.created_at, style='D')}**",
+                inline=True,
+            )
+            embed.set_thumbnail(url=user.display_avatar)
+            return await ctx.send(embed=embed)
+
+        # Handle Member with full server info
         mutual_guilds = tuple(g for g in self.bot.guilds if g.get_member(user.id))
-
-        if not user:
-            return await ctx.fail("Member not found")
-
         position = sorted(ctx.guild.members, key=lambda m: m.joined_at).index(user) + 1
 
         badges = []
         staff = []
-
         flags = user.public_flags
 
         emojis = {
@@ -980,10 +1013,18 @@ memory: ** {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB**\n ㅤ­ "
         if status == "":
             status = "N/A"
 
+        # Fetch the current LastFM track for this user
+        lastfm_status = await self.lf(user)
+
+        if lastfm_status:
+            lastfm_status = f"{lastfm_status}"
+        else:
+            lastfm_status = ""
+
         embed = discord.Embed(
             color=self.bot.color,
-            title=f"{staff}\n{user.name} {badges}", 
-            description=f"{status_emoji} {status}",
+            title=f"{staff}\n{user.name} {badges}",
+            description=f"{status_emoji} {status}\n{lastfm_status}",
         )
 
         embed.add_field(
@@ -1021,6 +1062,9 @@ memory: ** {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB**\n ㅤ­ "
         )
 
         await ctx.send(embed=embed)
+
+
+
         
     @commands.command(
         name="serveravatar",
@@ -1040,65 +1084,6 @@ memory: ** {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB**\n ㅤ­ "
         e.set_author(name=f"{ctx.author.display_name}", icon_url=ctx.author.avatar)
         await ctx.send(embed=e)
 
-    @commands.command(
-        name="profile",
-        brief="View the avatar of a user along with their banner",
-        example=",profile @lim",
-        aliases=["pi"],
-    )
-    async def profile(self, ctx, *, user: Member = None):
-        # Set the target user (default to the message author if no user is mentioned)
-        member = user or ctx.author
-
-        # Fetch user information
-        user = await self.bot.fetch_user(member.id)
-
-        # Get the avatar URL (fall back to default avatar if user doesn't have one)
-        avatar_url = user.avatar.url if user.avatar else user.default_avatar.url
-
-        # Check if the user has a banner
-        if user.banner:
-            banner_url = user.banner.url  # Get the banner URL
-
-            # Create the buttons for avatar and banner links
-            button1 = Button(label="Avatar", url=avatar_url)
-            button2 = Button(label="Banner", url=banner_url)
-
-            # Create an embed for displaying the user's avatar and banner
-            embed = discord.Embed(
-                description=f"Here is the avatar and banner for [**{user.display_name}**](https://discord.com/users/{user.id})",
-                color=self.bot.color  # You can change this to your bot's color
-            )
-            embed.set_author(name=f"{user.display_name}", icon_url=avatar_url, url=f"https://discord.com/users/{user.id}")
-            embed.set_image(url=banner_url)  # Set the banner image
-            embed.set_thumbnail(url=avatar_url)  # Set the avatar as the thumbnail
-
-            # Create a view with the buttons
-            view = View()
-            view.add_item(button1)
-            view.add_item(button2)
-
-            # Send the embed with buttons
-            await ctx.reply(embed=embed, view=view, mention_author=False)
-
-        else:
-            # No banner found, show only the avatar
-            embed = discord.Embed(
-                color=0x456BB2,
-                description=f"{user.mention} doesn't have a profile banner to display."
-            )
-            embed.set_author(name=f"{user.display_name}", icon_url=avatar_url, url=f"https://discord.com/users/{user.id}")
-            embed.set_thumbnail(url=avatar_url)  # Set the avatar as the thumbnail
-
-            # Create the Avatar Button
-            button = Button(label="Avatar", url=avatar_url)
-
-            # Create a view for the button
-            view = View()
-            view.add_item(button)
-
-            # Send the embed with only the avatar button
-            await ctx.reply(embed=embed, view=view, mention_author=False)
 
 
     @commands.command(
@@ -1165,20 +1150,54 @@ memory: ** {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB**\n ㅤ­ "
 
     @commands.command(
         name="guildbanner",
-        brief="View the banner of a server",
-        example=",guildbanner",
+        brief="View the banner of a server using its ID or vanity URL.",
+        usage=",guildbanner [server_id | vanity_url]",
         aliases=["gb"],
     )
-    async def guildbanner(self, ctx, *, guild: discord.Guild = None):
-        guild = ctx.guild if guild is None else guild
-        e = discord.Embed(
-            title=f"{guild.name}'s banner", url=guild.banner, color=self.bot.color
+    async def guildbanner(self, ctx, *, input_value: str = None):
+        guild = None
+
+        if input_value is None:
+            guild = ctx.guild  # Default to the current server if no input is given
+        else:
+            # Check if the input is a numeric Guild ID
+            if input_value.isdigit():
+                guild = self.bot.get_guild(int(input_value))
+
+            # If not a guild ID, assume it's a vanity URL and try fetching via invite
+            if guild is None:
+                try:
+                    invite = await self.bot.fetch_invite(input_value)
+                    guild = invite.guild
+                except discord.NotFound:
+                    return await ctx.fail("Invalid server ID or vanity URL.")
+                except discord.Forbidden:
+                    return await ctx.fail("I do not have permission to fetch this invite.")
+                except discord.HTTPException:
+                    return await ctx.fail("An error occurred while fetching the invite.")
+
+        if guild is None:
+            return await ctx.fail("Unable to find the server.")
+
+        if not guild.banner:
+            return await ctx.fail("This server does not have a banner.")
+
+        total_guilds = len(self.bot.guilds)  # Get bot's total guild count
+
+        embed = discord.Embed(
+            title=f"{guild.name}'s Banner",
+            url=guild.banner.url,
+            color=self.bot.color
         )
-        e.set_author(
-            name=f"{ctx.author.display_name}", icon_url=ctx.author.display_avatar
+        embed.set_author(
+            name=ctx.author.display_name,
+            icon_url=ctx.author.display_avatar
         )
-        e.set_image(url=guild.banner)
-        await ctx.send(embed=e)
+        embed.set_image(url=guild.banner.url)
+
+
+        await ctx.send(embed=embed)
+
 
     @commands.command(
         name="guildsplash",
@@ -1215,7 +1234,11 @@ memory: ** {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB**\n ㅤ­ "
             if role.name != "@everyone":
                 num += 1
                 ret.append(f"``{num}.`` {role.mention}")
-                pages = [p for p in discord.utils.as_chunks(ret, 10)]
+
+        if not ret:
+            return await ctx.fail("No roles found in this server.")
+
+        pages = [p for p in discord.utils.as_chunks(ret, 10)]
         for page in pages:
             pagenum += 1
             embeds.append(
@@ -1233,6 +1256,24 @@ memory: ** {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB**\n ㅤ­ "
             return await ctx.send(embed=embeds[0])
         else:
             await ctx.paginate(embeds)
+
+    @commands.command(
+        name="clearnames",
+        aliases=["clearnamehistory", "clnh", "clearnh"],
+        brief="clear a user's name history",
+        example=",clearnames @lim",
+    )
+    async def clearnames(self, ctx, *, user: discord.User = None):
+        if user is None:
+            user = ctx.author
+        
+        # Clear name history for the user
+        await self.bot.db.execute(
+            "DELETE FROM names WHERE user_id = $1", 
+            user.id
+        )
+        
+        await ctx.success(f"Successfully cleared the name history for **{str(user)}**.")
 
     @commands.command(
         name="names",
@@ -1578,7 +1619,7 @@ memory: ** {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB**\n ㅤ­ "
 
         if len(emojis) == 0:
             embed = discord.Embed(
-                color=0x456BB2, description="**Guild Has No Emojis**"
+                color=self.bot.color, description="**Guild Has No Emojis**"
             ).set_author(name=ctx.author.name, icon_url=ctx.author.display_avatar)
 
             await ctx.send(embed=embed)
@@ -1608,7 +1649,7 @@ memory: ** {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB**\n ㅤ­ "
 
                 embeds.append(
                     discord.Embed(
-                        color=0x456BB2,
+                        color=self.bot.color,
                         title=f"{ctx.guild.name}'s Emojis",
                         description="\n".join(page),
                     )
@@ -1627,7 +1668,7 @@ memory: ** {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB**\n ㅤ­ "
 
             embeds.append(
                 discord.Embed(
-                    color=0x456BB2,
+                    color=self.bot.color,
                     title=f"{ctx.guild.name}'s Emojis",
                     description="\n".join(page),
                 )
@@ -1638,7 +1679,7 @@ memory: ** {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB**\n ㅤ­ "
         if not embeds:
             embeds.append(
                 discord.Embed(
-                    color=0x456BB2, description="**Guild Has No Emojis**"
+                    color=self.bot.color, description="**Guild Has No Emojis**"
                 ).set_author(name=ctx.author.name, icon_url=ctx.author.display_avatar)
             )
 
@@ -1829,46 +1870,51 @@ memory: ** {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB**\n ㅤ­ "
             return await ctx.reply(embed=embed, view=view)
 
 
-    @commands.command(name="perks", brief="Show subscription perks.")
-    async def perks(self, ctx):
-        """
-        Sends an embed showcasing subscription perks for Tier 1 and Tier 2.
-        """
-        try:
-            embed = discord.Embed(
-                title="Perks",
-                description="Check out the amazing perks for our **[subscription](https://discord.gg/pomice)** tiers!",
-                color=self.bot.color,
-            )
-            embed.set_image(url="https://i.imgur.com/9EVxHyi.png")  # Replace with your image URL
 
-            embed.add_field(
-                name="**Tier 1 - $2.99**",
-                value=(
-                    "✔️ Access to exclusive channels\n"
-                    "✔️ Custom role\n"
-                    "✔️ Access to premium commands"
-                ),
-                inline=False,
-            )
+    @commands.command(name="vote")
+    async def vote(self, ctx):
+        """Command to send an embed with a button to vote for Greed bot on top.gg."""
+        bot_id = str(self.bot.user.id)  # Use the bot's ID dynamically
+        embed = Embed(
+            title="Vote for Greed Bot!",
+            color=self.bot.color,
+            description=f"Vote for **{self.bot.user.name}** and get voter perks and econonmy rewards!"
+        )
+        embed.set_footer(text="You can vote once every 12 hours!")
 
-            embed.add_field(
-                name="**Tier 2 - $4.99**",
-                value=(
-                    "✔️ All perks from Tier 1\n"
-                    "✔️ Priority support\n"
-                    "✔️ Access to wrath bot"
-                ),
-                inline=False,
-            )
+        # Create a button that opens the vote link on top.gg
+        button = discord.ui.Button(label="Vote Here", style=discord.ButtonStyle.link, url=f"https://top.gg/bot/{bot_id}/vote")
 
-            embed.set_footer(text="Subscribe today and enjoy these exclusive perks!")
+        # Create a view to add the button
+        view = discord.ui.View()
+        view.add_item(button)
 
-            # Send the embed
-            await ctx.send(embed=embed)
+        await ctx.send(embed=embed, view=view)
 
-        except Exception as e:
-            await ctx.send(f"An error occurred while generating the perks embed: {e}")
+    @commands.command()
+    async def donate(self, ctx):
+        """Send an embed with purchase options and buttons."""
+        
+        # Create the embed
+        embed = discord.Embed(
+            title="Donate Here",
+            description=(
+                "Purchase donator here and gain access to exclusive commands.\n"
+                "Along with also being able to whitelist wrath in 2 servers instead of 1\n"
+                "Please do not ask to pay with Discord Nitro, or to negotiate the price. "
+            ),
+            color=self.bot.color,
+        )
+
+
+        donate_button = Button(label="Donate $10", style=discord.ButtonStyle.green, url="https://buy.stripe.com/3csaIx2xWfcXaGI7sY")
+
+
+        view = View()
+        view.add_item(donate_button)
+
+
+        await ctx.send(embed=embed, view=view)
 
 
     @commands.command()
@@ -1879,7 +1925,7 @@ memory: ** {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB**\n ㅤ­ "
         embed = discord.Embed(
             title="Purchase Wrath",
             description=(
-                "Purchase Wrath for **$10** one time or **$3.50** monthly\n\n"
+                "Purchase Wrath for **$10** one time, **$3.50** monthly, and **$3.00** for transfers.\n\n"
                 "If you're interested in purchasing Wrath for a Discord server of your choice, "
                 "please open a ticket below to buy or if you purchased a server subscription\n\n"
                 "Prices and the available payment methods are listed here.\n\n"
@@ -1892,50 +1938,90 @@ memory: ** {psutil.Process().memory_info().rss / 1024 / 1024:.2f} MB**\n ㅤ­ "
 
         monthly_button = Button(label="Monthly - $3.50", style=discord.ButtonStyle.green, url="https://buy.stripe.com/aEUdUJc8w3uf6qsfZ7")
         lifetime_button = Button(label="Lifetime - $10", style=discord.ButtonStyle.blurple, url="https://buy.stripe.com/dR6bMBa0ogh1dSUaEE")
+        transfer_button = Button(label="Transfers - $3", style=discord.ButtonStyle.blurple, url="https://buy.stripe.com/cN29Et0pOd4P3eg4gu")
 
 
         view = View()
         view.add_item(monthly_button)
         view.add_item(lifetime_button)
+        view.add_item(transfer_button)
 
 
         await ctx.send(embed=embed, view=view)
 
 
-    @commands.command(
-        name="support",
-        aliases=["supportserver"],
-        brief="Get the support server invite",
-    )
-    async def support(self, ctx):
-        """Get the support server invite link."""
-        await ctx.success("**[greed support](https://discord.com/channels/1301617147964821524/1302829884900376577)**")
-
 
     @commands.command(
+        name="bible",
         brief="Get a random bible verse",
         example=",bible"
     )
     async def bible(self, ctx):
-        async with self.bot.session.get("https://beta.ourmanna.com/api/v1/get/?format=json") as response:
-            data = await response.json()
-            verse = data["verse"]["details"]["text"]
-            verse_reference = data["verse"]["details"]["reference"]
-            await ctx.send(f"{verse} - {verse_reference}")
-            logger.info(data)
-            
+        """Get a random Bible verse with reference."""
+        try:
+            async with self.bot.session.get("https://beta.ourmanna.com/api/v1/get/?format=json") as response:
+                if response.status != 200:
+                    return await ctx.fail("Failed to fetch verse. Please try again later.")
+                    
+                data = await response.json()
+                if not data.get("verse") or not data["verse"].get("details"):
+                    return await ctx.fail("Invalid API response received.")
+
+                verse = data["verse"]["details"]["text"]
+                verse_reference = data["verse"]["details"]["reference"]
+                
+                # Create embed
+                embed = discord.Embed(
+                    title="Bible Verse",
+                    color=self.bot.color,
+                    description=f"*{verse}*"
+                )
+                embed.set_footer(text=verse_reference)
+                embed.set_author(name=ctx.author.name, icon_url=ctx.author.display_avatar)
+                
+                await ctx.send(embed=embed)
+                
+        except Exception as e:
+            logger.error(f"Error in bible command: {str(e)}")
+            await ctx.fail("An error occurred while fetching the verse. Please try again later.")
+
+
     @commands.command(
         name="quran",
-        brief="Get a random quran verse",
-        example=",quran",
+        brief="Get a random quran verse with translation", 
+        example=",quran"
     )
     async def quran(self, ctx):
-        """Get a random quran verse."""
-        async with self.bot.session.get("https://api.alquran.cloud/v1/ayah/random") as response:
-            data = await response.json()
-            verse = data["data"]["text"]
-            await ctx.send(verse)
+        """Get a random Quran verse with English translation."""
+        try:
+            # Get random verse with translation
+            async with self.bot.session.get("https://api.alquran.cloud/v1/ayah/random/editions/quran-simple-enhanced,en.asad") as response:
+                if response.status != 200:
+                    return await ctx.fail("Failed to fetch verse. Please try again later.")
+                    
+                data = await response.json()
+                if not data.get("data") or len(data["data"]) < 2:
+                    return await ctx.fail("Invalid API response received.")
 
+                # Extract Arabic verse and English translation
+                arabic = data["data"][0]
+                english = data["data"][1]
+
+                # Create embed
+                embed = discord.Embed(
+                    title=f"Surah {arabic['surah']['englishName']} ({arabic['surah']['name']})",
+                    color=self.bot.color
+                )
+                
+                embed.description = f"{arabic['text']}\n\n*{english['text']}*"
+                embed.set_footer(text=f"Verse {arabic['numberInSurah']} • Juz {arabic['juz']}")
+                embed.set_author(name=ctx.author.name, icon_url=ctx.author.display_avatar)
+                
+                await ctx.send(embed=embed)
+                
+        except Exception as e:
+            logger.error(f"Error in quran command: {str(e)}")
+            await ctx.fail("An error occurred while fetching the verse. Please try again later.")
 
 
 async def setup(bot):

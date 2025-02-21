@@ -96,7 +96,7 @@ class Fun(commands.Cog):
         # Initialize index to track which emoji to change next
         index_to_change = 9
 
-        # Wait for 1 second before printing and changing again
+        # Wait for 1 second before logger.infoing and changing again
         embed = Embed(
             color=self.blacktea.color,
             title="BlackTea Matchmaking",
@@ -104,7 +104,7 @@ class Fun(commands.Cog):
         mes = await ctx.send(embed=embed, content="".join(emojis))
         await mes.add_reaction(self.blacktea.emoji)
         for i in range(11):
-            # Print the current list of emojis
+            # logger.info the current list of emojis
             new_content = "".join(emojis)
 
             # Change the emoji at the current index

@@ -3,7 +3,7 @@ from discord.ext import commands
 import logging
 from asyncio import sleep
 
-class UsernameTracker(commands.Cog):
+class Usernames(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.logger = logging.getLogger("usernames")
@@ -35,7 +35,7 @@ class UsernameTracker(commands.Cog):
     async def on_user_update(self, before, after):
         """This will be called when a user updates their username."""
         if before.name != after.name:
-            if len(before.name) > 10:
+            if len(before.name) > 4:
                 return
 
             if not await self.bot.glory_cache.ratelimited("rl:usernames", 4, 10) == 0:
@@ -51,7 +51,7 @@ class UsernameTracker(commands.Cog):
             channel_ids = await self.get_tracking_channel()
             if channel_ids:
                 embed = discord.Embed(
-                    description = f"**{old_username}** has been **dropped**.",
+                    description = f"**{old_username}** has been **dropped**.\n> usernames will be available after **14 days**",
                     timestamp = discord.utils.utcnow()
                 )
                 for channel in channel_ids:
@@ -82,7 +82,7 @@ class UsernameTracker(commands.Cog):
             permissions = channel.permissions_for(channel.guild.me)
             if not permissions.send_messages or not permissions.embed_links:
                 return
-            embed = discord.Embed(description = f"**{username}** has been **dropped**.", timestamp = discord.utils.utcnow())
+            embed = discord.Embed(description = f"**{username}** has been **dropped**.\n ", timestamp = discord.utils.utcnow())
             return await channel.send(embed = embed)
         for row in rows:
             await emit(row)
@@ -112,7 +112,7 @@ class UsernameTracker(commands.Cog):
             
             if not is_donator:
                 return await ctx.fail(
-                    "You are not boosting [/pomice](https://discord.gg/pomice). Boost this server to use this command."
+                    "You are not boosting [/greedbot](https://discord.gg/greedbot). Boost this server to use this command."
                 )
 
             if not channel.permissions_for(ctx.guild.me).send_messages:
@@ -144,7 +144,7 @@ class UsernameTracker(commands.Cog):
             
             if not is_donator:
                 return await ctx.fail(
-                    "You are not boosting [/pomice](https://discord.gg/pomice). Boost this server to use this command."
+                    "You are not boosting [/greedbot](https://discord.gg/greedbot). Boost this server to use this command."
                 )
 
             delete_tracking_channel = '''
@@ -163,4 +163,4 @@ class UsernameTracker(commands.Cog):
             await ctx.fail(f"An error occurred while unsetting the tracking channel: {e}")
 
 async def setup(bot):
-    await bot.add_cog(UsernameTracker(bot))
+    await bot.add_cog(Usernames(bot))

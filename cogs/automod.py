@@ -1175,6 +1175,53 @@ class Automod(commands.Cog):
             f"**Removed** the `{keyword}` from the **filtered list**"
         )
 
+    @_filter.command(
+        name = "punishment",
+        aliases = ["punish"],
+        brief = "Set the punishment for breaking automod rules",
+        example = ",filter punishment delete",
+    )
+    @commands.bot_has_permissions(administrator=True)
+    @commands.has_permissions(manage_guild=True)
+    async def filter_punishment(self, ctx: Context, *, punishment: str):
+        await self.check_setup(ctx.guild)
+        if punishment.lower() not in ["delete", "timeout", "kick", "ban"]:
+            return await ctx.fail(f"That is not a **valid punishment**")
+
+        await self.bot.db.execute(
+            "INSERT INTO filter_setup (guild_id, punishment) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET punishment = EXCLUDED.punishment;",
+            ctx.guild.id,
+            punishment.lower(),
+        )
+        return await ctx.success(f"**Punishment** for breaking automod rules is now `{punishment.lower()}`")
+
+    @_filter.command(
+        name = "punishments",
+        brief = "View the current punishment for breaking automod rules",
+        example = ",filter punishments",
+    )
+    @commands.bot_has_permissions(administrator=True)
+    @commands.has_permissions(manage_guild=True)
+    async def filter_punishments(self: "Automod", ctx: Context):
+        await self.check_setup(ctx.guild)
+        punishment = await self.bot.db.fetchval(
+            "SELECT punishment FROM filter_setup WHERE guild_id = $1", ctx.guild.id
+        )
+        if not punishment:
+            p = [
+                "delete",
+                "timeout",
+                "kick",
+                "ban",
+            ]
+            embed = discord.Embed(
+                title="Punishments",
+                description="\n".join(f"**{i}**" for i in p),
+                color=self.bot.color,
+            )
+            return await ctx.send(embed=embed)
+        return await ctx.success(f"**Punishment** for breaking automod rules is `{punishment}`")
+
 
 async def setup(bot: Greed):
     await bot.add_cog(Automod(bot))

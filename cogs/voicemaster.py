@@ -1,11 +1,11 @@
 import discord  # type: ignore
 from discord.ui import View  # type: ignore
-from discord.ext import commands  # type: ignore
+from discord.ext import commands, tasks  # type: ignore
 from typing import Union  # noqa: F401
 from tool.views import RenameModal
 from tool import views
 from tool.views import reclaim
-
+from contextlib import suppress
 
 class VmButtons(View):
     def __init__(self, bot):
@@ -589,6 +589,7 @@ class VmButtons(View):
 class Voicemaster(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+
 
     @commands.group(
         name="voicemaster", aliases=["vm", "vc"], invoke_without_command=True

@@ -114,7 +114,7 @@ class Vanity(commands.Cog):
         for channel_id in channel_ids:
             try:
                 await self.bot.send_raw(channel_id, embed=embed)
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.1)
             except Exception:
                 pass
 

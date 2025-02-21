@@ -12,7 +12,7 @@ unicode_emoji = re.compile(
 )
 custom_emoji = re.compile(r"<(a?):([a-zA-Z0-9\_]+):([0-9]+)>")
 discord_invite = re.compile(
-    r"(?:https?://)?discord(?:app)?\.(?:com/invite|gg)/[a-zA-Z0-9]+/?"
+    r"(?:https:\/\/)?(?:www\.)?(discord(?:app\.com\/invite|\.gg)\/[a-zA-Z0-9\-]+)"
 )
 user_mention = re.compile(r"<@!?(\d+)>")
 link = re.compile(

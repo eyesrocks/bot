@@ -6,12 +6,12 @@
     <title>Greed - Discord Bot</title>
     
     <!-- Meta Tags -->
-    <meta name="description" content="The best multi-purpose bot watching over 19k+ guilds & 1.5mil+ users.">
+    <meta name="description" content="The best multi-purpose bot watching over 21k+ guilds & 2.6mil+ users.">
     <meta name="keywords" content="Discord, bot, automation, commands, Greed">
     
     <!-- Open Graph / Social Tags -->
     <meta property="og:title" content="Greed - Discord Bot">
-    <meta property="og:description" content="The best multi-purpose bot watching over 19k+ guilds & 1.5mil+ users.">
+    <meta property="og:description" content="The best multi-purpose bot watching over 22k+ guilds & 2.6mil+ users.">
     <meta property="og:image" content="https://cdn.discordapp.com/avatars/1149535834756874250/b041500cefbb37f6e610dfb39d79005b.png?size=1024">
     
     <!-- Resources -->
@@ -136,14 +136,14 @@
              class="logo-animation mx-auto mb-8">
         
         <div class="text-white mb-8 opacity-0 transition-opacity duration-1000" id="bot-description">
-            <p>The best multi-purpose bot watching over 19k+ guilds & 1.5mil+ users.</p>
+            <p>The best multi-purpose bot watching over 21k+ guilds & 2.6mil+ users.</p>
         </div>
 
         <div class="button-grid">
             <a href="commands" class="action-button">
                 <i class="fa-solid fa-terminal"></i> Commands
             </a>
-            <a href="https://discord.gg/pomice" class="action-button">
+            <a href="https://discord.gg/greedbot" class="action-button">
                 <i class="fab fa-discord"></i> Discord
             </a>
             <a href="https://discord.com/oauth2/authorize?client_id=1149535834756874250&scope=bot+applications.commands&permissions=8" 
@@ -189,7 +189,7 @@
             }
 
             try {
-                const response = await fetch(`https://cdn.greed.wtf/avatars/${userId}`);
+                const response = await fetch(`https://cdn.greed.rocks/avatars/${userId}`);
                 const html = await response.text();
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(html, 'text/html');

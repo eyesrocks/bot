@@ -25,10 +25,10 @@ from discord import User, Member, Guild
 from typing import Union, Optional, Literal
 from loguru import logger
 from tool.greed import Greed
-from asyncio import TimeoutError
+from asyncio import TimeoutError, sleep
 from discord import Webhook
 import aiohttp
-
+from cogs.economy import format_int
 
 class Owner(commands.Cog):
     def __init__(self, bot: Greed):
@@ -93,6 +93,7 @@ class Owner(commands.Cog):
         self.check_subs.cancel()
         self.check_boosts.cancel()
 
+
     @tasks.loop(seconds=60)
     async def check_boosts(self):
         """Check and sync booster roles with boosters database."""
@@ -145,10 +146,8 @@ class Owner(commands.Cog):
             if not (guild := self.bot.get_guild(self.guild_id)):
                 return
             premium = guild.get_role(1305842894111768587)
-            basic = guild.get_role(1326913774686441543)
-            prime = guild.get_role(1326916553475883018)
-            plus = guild.get_role(1310104324197580850)
-            if not (basic and prime and premium and plus): 
+            donator = guild.get_role(1338595841962934372)
+            if not (donator and premium): 
                 logger.warning("Could not find subscription roles")
                 return
 
@@ -161,7 +160,7 @@ class Owner(commands.Cog):
                 [(owner,) for owner in self.bot.owner_ids]
             )
 
-            role_members = set(m.id for m in basic.members + prime.members + premium.members + plus.members)
+            role_members = set(m.id for m in premium.members + donator.members)
             await self.bot.db.executemany(
                 """
                 INSERT INTO donators (user_id, ts)
@@ -208,6 +207,8 @@ class Owner(commands.Cog):
             return 0
 
 
+
+
     @commands.command(name = "saveemoji")
     @commands.is_owner()
     async def saveemoji(self, ctx: Context, *emojis: discord.PartialEmoji):
@@ -215,24 +216,33 @@ class Owner(commands.Cog):
             await emoji.save(f"assets/{emoji.name}.{'gif' if emoji.animated else 'png'}")
 
 
+    @commands.command(name="resetampoules")
+    @commands.is_owner()
+    async def reset_ampoules(self, ctx):
+        """Reset all users' ampoules to 1."""
+        await self.bot.db.execute("UPDATE labs SET ampoules = 1")
+        await ctx.success("All users' ampoules have been reset to **1**.")
+
     @commands.group(name="donator", invoke_without_command=True)
     @commands.is_owner()
-    async def donator(self, ctx: Context, *, member:Union[Member, User]):
-        if await self.bot.db.fetchrow(
-            """SELECT * FROM donators WHERE user_id = $1""", member.id
-        ):
-            await self.bot.db.execute(
-                """DELETE FROM donators WHERE user_id = $1""", member.id
-            )
-            m = f"removed **donator permissions** from {member.mention}"
-        else:
-            await self.bot.db.execute(
-                """INSERT INTO donators (user_id, ts) VALUES($1, $2)""",
-                member.id,
-                datetime.datetime.now(),
-            )
-            m = f"**donator permissions** has been applied to {member.mention}"
-        return await ctx.success(m)
+    async def donator(self, ctx: commands.Context, *, member: Union[Member, User]):
+        role_id = 1338595841962934372  # Donator role ID
+        guild = ctx.guild
+        role = guild.get_role(role_id)
+
+        if not role:
+            return await ctx.fail("**Donator role not found!** Please check the role ID.")
+
+        # Add or remove the role from the member
+        if isinstance(member, Member):
+            if role in member.roles:
+                await member.remove_roles(role, reason="Removed donator permissions")
+                m = f"Removed **donator role** from {member.mention}"
+            else:
+                await member.add_roles(role, reason="Granted donator permissions")
+                m = f"Applied **donator role** to {member.mention}"
+
+        await ctx.success(m)
 
 
     @commands.group(name="premium", invoke_without_command=True)
@@ -797,6 +807,7 @@ class Owner(commands.Cog):
 
 
 
+
     @blacklist.command(name="list", aliases=["show", "view"], hidden=True)
     @commands.is_owner()
     async def blacklist_list(self, ctx):
@@ -1035,7 +1046,19 @@ class Owner(commands.Cog):
         await ctx.success("Synced boosters, donators, and all servers to their shards")
 
 
- 
+    @commands.command(name="setbalance", hidden=True)
+    @commands.is_owner()
+    async def setbalance(self, ctx: Context, member: Union[Member, User], amount: int):
+        await self.bot.db.execute(
+            """UPDATE economy SET balance = $1, earnings = $1 WHERE user_id = $2""",
+            amount,
+            member.id,
+        )
+        return await ctx.success(
+            f"**{member.mention}'s balance is set to `{format_int(amount)}` bucks**"
+        )
+
+
 
 async def setup(bot):
     await bot.add_cog(Owner(bot))

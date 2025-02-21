@@ -24,6 +24,7 @@ from tool.important import Context  # type: ignore
 from typing import Union
 from discord import PartialEmoji 
 import cairosvg
+from datetime import datetime, timedelta
 from gtts import gTTS
 from io import BytesIO
 from bs4 import BeautifulSoup
@@ -39,7 +40,6 @@ import json
 from loguru import logger
 
 
-
 def generate(img: bytes) -> bytes:
     return cairosvg.svg2png(bytestring=img)
 
@@ -51,6 +51,38 @@ from cashews import cache
 DEBUG = True
 cache.setup("mem://")
 eros_key = "c9832179-59f7-477e-97ba-dca4a46d7f3f"
+
+@cache(ttl=300, key="donator:{user_id}")
+async def get_donator(ctx: Context, user_id: int) -> bool:
+    """Check if a user is a donator through top.gg votes or server boosters.
+    
+    Args:
+        ctx: Command context
+        user_id: Discord user ID to check
+        
+    Returns:
+        bool: True if user is a donator, False otherwise
+    """
+    if await ctx.bot.db.fetchrow(
+        "SELECT 1 FROM boosters WHERE user_id = $1", user_id
+    ):
+        return True
+        
+    try:
+        url = f"https://top.gg/api/bots/{ctx.bot.user.id}/check?userId={user_id}"
+        headers = {
+            "Authorization": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjExNDk1MzU4MzQ3NTY4NzQyNTAiLCJib3QiOnRydWUsImlhdCI6MTczODEzODM1MH0.HQRfKRPwsZ6RlPuXWyt7pK2tEwYGgZI22_YwulNdt8I"
+        }
+        
+        async with ctx.bot.session.get(url, headers=headers, timeout=5.0) as response:
+            if response.status == 200:
+                data = await response.json()
+                return data.get("voted", 0) == 1
+                
+    except Exception as e:
+        logger.error(f"Error checking top.gg vote status: {e}")
+        
+    return False
 
 
 class ValorantProfile(BaseModel):
@@ -162,6 +194,7 @@ class Miscellaneous(Cog):
         self.bot = bot
         self.color = self.bot.color
         self.bot.afks = {}
+        self.locks = {}
         self.revive_loops = {}  # Store tasks for each guild
         self.revive_tasks = {}  # Store task objects to manage looping tasks
         self.nsfw_domains = [
@@ -228,23 +261,70 @@ class Miscellaneous(Cog):
                 await server_owner.send(embed=embed)
             except Exception as e:
                 await ctx.fail("Could not notify the server owner. Ensure their DMs are open.")
-    
     @tasks.loop(seconds=10)
     async def check_reminds(self):
-        reminds = await self.bot.db.fetch(
-            "SELECT * FROM reminders WHERE time < $1", datetime.utcnow()
-        )
-        for remind in reminds:
-            user = await self.bot.fetch_user(remind["user_id"])
-            channel = self.bot.get_channel(remind["channel_id"])
-            if channel:
-                view = discord.ui.View()
-                view.add_item(discord.ui.Button(style=discord.ButtonStyle.gray, label="reminder set by user", disabled=True))
-                await channel.send(f"{user.mention} {remind['reminder']}", view=view)
-                await self.bot.db.execute(
-                    "DELETE FROM reminders WHERE time = $1", remind["time"]
+        try:
+            BATCH_SIZE = 10
+            total_processed = 0
+
+            while True:
+                reminds = await self.bot.db.fetch(
+                    "SELECT * FROM reminders WHERE time < $1 LIMIT $2",
+                    datetime.utcnow(),
+                    BATCH_SIZE
                 )
-    
+                
+                if not reminds:
+                    break
+
+                for i in range(0, len(reminds), 5):
+                    chunk = reminds[i:i+5]
+                    
+                    for remind in chunk:
+                        try:
+                            user = await self.bot.fetch_user(remind["user_id"])
+                            channel = self.bot.get_channel(remind["channel_id"])
+                            
+                            if channel:
+                                view = discord.ui.View()
+                                view.add_item(discord.ui.Button(
+                                    style=discord.ButtonStyle.gray, 
+                                    label="reminder set by user", 
+                                    disabled=True
+                                ))
+                                
+                                await channel.send(
+                                    f"{user.mention} {remind['reminder']}", 
+                                    view=view
+                                )
+                                
+                                await self.bot.db.execute(
+                                    "DELETE FROM reminders WHERE time = $1 AND user_id = $2",
+                                    remind["time"],
+                                    remind["user_id"]
+                                )
+                                
+                                total_processed += 1
+                                
+                        except discord.NotFound:
+                            await self.bot.db.execute(
+                                "DELETE FROM reminders WHERE time = $1 AND user_id = $2",
+                                remind["time"],
+                                remind["user_id"]
+                            )
+                            
+                    await asyncio.sleep(1)
+                
+                if len(reminds) < BATCH_SIZE:
+                    break
+                    
+                await asyncio.sleep(2)
+                
+            if total_processed > 0:
+                logger.info(f"Processed {total_processed} reminders")
+                
+        except Exception as e:
+            logger.error(f"Error in check_reminds: {e}")
 
     def parse_embed_code(self, embed_code: str) -> discord.Embed:
         """Parses the provided embed code into a Discord Embed."""
@@ -300,11 +380,35 @@ class Miscellaneous(Cog):
                     embed = self.parse_embed_code(message)
                     await channel.send(embed=embed)
                 except Exception as e:
-                    print(f"Error sending embed: {e}")
+                    logger.info(f"Error sending embed: {e}")
             else:
                 await channel.send(message)
 
 
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        """Listener to transform messages from uwulocked users into uwu-speak."""
+        if message.author.bot:
+            return
+
+        data = await self.bot.db.fetchrow(
+            """SELECT * FROM uwulock WHERE guild_id = $1 AND user_id = $2 AND channel_id = $3""",
+            message.guild.id,
+            message.author.id,
+            message.channel.id,
+        )
+
+        if data:
+            await message.delete()
+
+            async with aiohttp.ClientSession() as session:
+                webhook = discord.Webhook.from_url(data["webhook_url"], session=session)
+                await webhook.send(
+                    self.uwuify(message.content),
+                    username=message.author.display_name,
+                    avatar_url=message.author.display_avatar.url,
+                )
 
     # @commands.command(
     #     name="valorant",
@@ -319,44 +423,6 @@ class Miscellaneous(Cog):
         #           return await ctx.fail(f"that valorant user couldn't be fetched")
         # embed = await data.to_embed(ctx)  # type: ignore  # noqa: F821
         # return await ctx.send(embed=embed)
-
-    @commands.command(name="tts", help="Converts text to speech and plays it in your voice channel.")
-    async def tts(self, ctx, *, text: str):
-        if not ctx.author.voice:
-            return await ctx.fail("You need to be in a voice channel to use this command!")
-            
-        
-        if ctx.voice_client:
-            if not isinstance(ctx.voice_client, discord.VoiceClient):
-                return await ctx.warning("Cannot use TTS while music is playing!")
-                
-            if ctx.voice_client.channel != ctx.author.voice.channel:
-                await ctx.voice_client.move_to(ctx.author.voice.channel)
-            vc = ctx.voice_client
-        else:
-            vc = await ctx.author.voice.channel.connect()
-        
-        try:
-            fp = BytesIO()
-            tts = gTTS(text=text, lang='en')
-            tts.write_to_fp(fp)
-            fp.seek(0)
-        except Exception as e:
-            return await ctx.fail(f"Error generating TTS: {e}")
-            
-        
-        try:
-            vc.play(discord.FFmpegPCMAudio(fp, pipe=True), 
-                   after=lambda e: print(f"Finished playing: {e}"))
-            vc.source = discord.PCMVolumeTransformer(vc.source)
-            vc.source.volume = 2
-            await ctx.send(f"Speaking: {text}")
-        except Exception as e:
-            await ctx.send(f"Error playing TTS: {e}")
-        finally:
-            while vc.is_playing():
-                await asyncio.sleep(1)
-            fp.close()
 
 
     @commands.command(
@@ -374,51 +440,7 @@ class Miscellaneous(Cog):
             ctx, discord.Embed(title="variables", color=self.bot.color), rows
         )
     
-    # async def do_tts(self, message: str, model: Optional[str] = "amy") -> str:
-    #     try:
-    #         return await self.texttospeech.tts_api(model, "en_US", "low", message)
-    #     except Exception as e:
-    #         if DEBUG:
-    #             raise e
-    #         from aiogtts import aiogTTS  # type: ignore
-    #         i = io.BytesIO()
-    #         aiogtts = aiogTTS()
-    #         await aiogtts.save(message, ".tts.mp3", lang="en")
-    #         await aiogtts.write_to_fp(message, i, slow=False, lang="en")
-    #         return ".tts.mp3"
 
-#     @commands.command(
-#         name="tts",
-#         brief="Allow the bot to speak to a user in a voice channel",
-#         example=",tts whats up guys",
-#     )
-#     async def tts(self, ctx: Context, model: Optional[Literal["amy","danny","arctic","hfc_female","hfc_male","joe","kathleen","kusal","lessac","ryan",]] = "amy", *, message: str):
-#         fp = await self.do_tts(message, model)
-#         if ctx.author.voice is None:
-#             msg = await self.file_processor.upload_to_discord(ctx.channel, fp)
-#             await self.texttospeech.delete_soon(fp, 3)
-#             await self.texttospeech.delete_soon(fp.replace(".mp3", ".ogg"), 3)
-#             return msg
-#         if voice_channel := ctx.author.voice.channel:
-# #            if ctx.voice_client is None:
-#  #           else:
-#             try: 
-#                 await ctx.voice_client.disconnect()
-#             except Exception: 
-#                 pass
-#             vc = await voice_channel.connect()
-#   #                  await ctx.voice_client.move_to(voice_channel)
-#             #            aiogtts = aiogTTS()
-#             async with self.queue[ctx.guild.id]:
-#                 await asyncio.sleep(0.5)
-#                 try:
-#                     vc.play(discord.FFmpegPCMAudio(source=fp))
-#                 except Exception as e: 
-#                     raise e #return await ctx.reply(file = discord.File("./.tts.mp3"))
-#         #                os.remove(".tts.mp3")
-#                 await self.texttospeech.delete_soon(fp, 3)
-#         else:
-#             return await ctx.fail("you aren't in a voice channel")
 
     @commands.command(
         name="afk",
@@ -436,7 +458,7 @@ class Miscellaneous(Cog):
     @commands.command()
     async def randomuser(self, ctx):
         # Log the total number of members in the guild
-        print(f"Total members in guild: {len(ctx.guild.members)}")
+        logger.info(f"Total members in guild: {len(ctx.guild.members)}")
         
         # Get the list of all members in the server
         members = ctx.guild.members
@@ -445,7 +467,7 @@ class Miscellaneous(Cog):
         human_members = [member for member in members if not member.bot]
 
         # Log the number of human members
-        print(f"Total human members (excluding bots): {len(human_members)}")
+        logger.info(f"Total human members (excluding bots): {len(human_members)}")
 
         # Check if there are human members available
         if not human_members:
@@ -456,7 +478,7 @@ class Miscellaneous(Cog):
         chosen_member = random.choice(human_members)
 
         # Log the chosen user's name
-        print(f"Chosen user: {chosen_member.name}")
+        logger.info(f"Chosen user: {chosen_member.name}")
 
         # Send the selected member's username
         await ctx.send(f"Randomly selected user: {chosen_member.name}")
@@ -629,6 +651,8 @@ class Miscellaneous(Cog):
         await self.bot.snipes.clear_entries(ctx.channel)
         return await ctx.success(f"**Cleared** snipes for {ctx.channel.mention}")
 
+
+
     @commands.group(
         name="birthday",
         aliases=["bday"],
@@ -762,7 +786,7 @@ class Miscellaneous(Cog):
           # If not a donator, limit the maximum messages that can be purged
           if not is_donator and amount > 0:
                return await ctx.fail(
-                    "only boosters in [/pomice](https://discord.gg/pomice) can use selfpurge boost the server and dm an owner to claim your permissions."
+                    "only boosters in [/greedbot](https://discord.gg/greedbot) can use selfpurge boost the server and dm an owner to claim your permissions."
                )
 
           def check(message):
@@ -958,83 +982,6 @@ class Miscellaneous(Cog):
 
 
 
-    @commands.command(name="screenshot", help="Takes a screenshot of a website.")
-    async def screenshot(self, ctx, url: str):
-        """
-        Takes a screenshot of the given website URL, saves it to the server, and deletes after 2 seconds.
-        """
-        try:
-            # Check if the URL starts with 'http://' or 'https://'. If not, prepend 'https://'.
-            if not url.startswith(('http://', 'https://')):
-                url = 'https://' + url
-
-            # Block NSFW domains
-            if any(nsfw_domain in url for nsfw_domain in self.nsfw_domains):
-                await ctx.send("Error: This URL is blocked because it's NSFW.")
-                return
-
-            # Prepare the query parameters for the API request
-            querystring = {
-                "url": url,  # The URL to take a screenshot of
-                "width": "1920",  # Width of the screenshot
-                "height": "1080",  # Height of the screenshot
-                "waitTime": "5000",  # Wait for 5 seconds to ensure the page is fully loaded
-            }
-
-            # API URL and headers
-            api_url = "https://website-screenshot6.p.rapidapi.com/screenshot"
-            headers = {
-                "x-rapidapi-key": "153315b3a7msh91fdaf0f92e2df7p1abcfbjsn1a9bc21996f7",
-                "x-rapidapi-host": "website-screenshot6.p.rapidapi.com"
-            }
-
-            # Send GET request to the API
-            response = requests.get(api_url, headers=headers, params=querystring)
-
-            # Check if the request was successful
-            if response.status_code == 200:
-                data = response.json()
-
-                # Retrieve the screenshot URL from the API response
-                screenshot_url = data.get("screenshotUrl")
-
-                # If no screenshot URL is returned, handle the error
-                if not screenshot_url:
-                    await ctx.send("Error: Could not retrieve the screenshot.")
-                    return
-
-                # Download the screenshot image and save it to a file
-                screenshot_data = requests.get(screenshot_url).content
-
-                # Define the directory and file path
-                save_dir = '/root/greed/data'
-                os.makedirs(save_dir, exist_ok=True)
-                screenshot_path = os.path.join(save_dir, 'screenshot.png')
-
-                # Save the image to the filesystem
-                with open(screenshot_path, 'wb') as f:
-                    f.write(screenshot_data)
-
-                # Send the screenshot image to Discord
-                await ctx.send(file=discord.File(screenshot_path))
-
-                # Wait for 2 seconds before deleting the file
-                time.sleep(2)
-
-                # Delete the screenshot after 2 seconds
-                if os.path.exists(screenshot_path):
-                    os.remove(screenshot_path)
-
-                # Optionally, confirm deletion (this is a log message for debugging)
-                print(f"Screenshot file '{screenshot_path}' deleted after 2 seconds.")
-
-            else:
-                await ctx.send(f"Error: Could not take the screenshot. Response code: {response.status_code}")
-
-        except Exception as e:
-            await ctx.send(f"An error occurred: {e}")
-
-
     @commands.group(name="revive", invoke_without_command=True)
     async def revive_group(self, ctx):
         """Command group for revive-related commands.
@@ -1158,7 +1105,7 @@ class Miscellaneous(Cog):
                 embed = self.parse_embed_code(message)
                 await channel.send(embed=embed)
             except Exception as e:
-                print(f"Error sending embed: {e}")
+                logger.info(f"Error sending embed: {e}")
         else:
             await channel.send(message)
 

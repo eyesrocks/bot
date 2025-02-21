@@ -178,6 +178,13 @@ class starboard(commands.Cog, name="Starboard"):
         member: discord.Member,
         message_id: int,
     ):
+        if await self.bot.glory_cache.ratelimited(
+            f"star_msgrl:{guild.id}:{message_id}", 
+            5, 
+            15
+        ):
+            return
+            
         lock = self._locks.get(guild.id)
         if not lock:
             self._locks[guild.id] = lock = asyncio.Lock()
@@ -267,6 +274,13 @@ class starboard(commands.Cog, name="Starboard"):
         member: discord.Member,
         message_id: int,
     ):
+        if await self.bot.glory_cache.ratelimited(
+            f"unstar_msgrl:{guild.id}:{message_id}", 
+            5,
+            15
+        ):
+            return
+
         lock = self._locks.get(guild.id)
         if not lock:
             self._locks[guild.id] = lock = asyncio.Lock()

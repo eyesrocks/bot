@@ -1,6 +1,7 @@
 from discord import Embed, Message, Reaction, Member, TextChannel, VoiceChannel, Permissions
 from discord.ext import commands
 from cogs.antinuke import trusted
+from tool.important.subclasses.command import has_permissions
 
 class deathshit(commands.Cog):
     def __init__(self, bot):
@@ -44,7 +45,7 @@ class deathshit(commands.Cog):
 
 
     @commands.command(name='setupchannelban', aliases=['scb', 'setupcb'])
-    @commands.has_permissions(administrator=True)
+    @has_permissions(administrator=True)
     async def setup_channelban(self, ctx):
         try:
             guild = ctx.guild
@@ -87,7 +88,7 @@ class deathshit(commands.Cog):
 
 
     @commands.command(name="channelban", aliases=['cban', 'shutthefuckup', 'shutupnia', 'stfu', 'stfubitch', 'silencenia', 'silencebitch'])
-    @commands.has_permissions(manage_channels=True)
+    @has_permissions(manage_channels=True)
     async def channelban(self, ctx, member: Member):
         try:
             if member.top_role >= ctx.author.top_role:
@@ -105,7 +106,7 @@ class deathshit(commands.Cog):
             await ctx.send(f"An error occurred: {str(e)}")
 
     @commands.command(name="channelunban", aliases=['cub', 'cunban'])
-    @commands.has_permissions(manage_channels=True)
+    @has_permissions(manage_channels=True)
     async def channelunban(self, ctx, member: Member):
         ban_role_id = await self.bot.db.fetchval("SELECT role_id FROM channelban WHERE guild_id = $1", ctx.guild.id)
         ban_role = ctx.guild.get_role(ban_role_id)
@@ -118,7 +119,7 @@ class deathshit(commands.Cog):
 
 
     @commands.command(name="channelbanlist", aliases=['cbl'])
-    @commands.has_permissions(manage_channels=True)
+    @has_permissions(manage_channels=True)
     async def channelbanlist(self, ctx):
         ban_role_id = await self.bot.db.fetchval("SELECT role_id FROM channelban WHERE guild_id = $1", ctx.guild.id)
         ban_role = ctx.guild.get_role(ban_role_id)
@@ -151,7 +152,7 @@ class deathshit(commands.Cog):
             await member.move_to(None)
 
     @commands.command(name="vcban", aliases=['vban'])
-    @commands.has_permissions(manage_channels=True)
+    @has_permissions(manage_channels=True)
     async def vcban(self, ctx, member: Member):
         try:
 
@@ -173,7 +174,7 @@ class deathshit(commands.Cog):
             await ctx.send(f"An error occurred: {str(e)}")
 
     @commands.command(name="unvcban", aliases=['uvban'])
-    @commands.has_permissions(manage_channels=True)
+    @has_permissions(manage_channels=True)
     async def unvcban(self, ctx, member: Member):
         guild = ctx.guild
         for channel in guild.voice_channels:
@@ -183,7 +184,7 @@ class deathshit(commands.Cog):
         await ctx.send(f"{member.mention} has been voice channel unbanned.")
 
     @commands.command(name="banlist", aliases=['blist'])
-    @commands.has_permissions(manage_channels=True)
+    @has_permissions(manage_channels=True)
     async def banlist(self, ctx):
         guild = ctx.guild
         ban_role_id = await self.bot.db.fetchval("SELECT role_id FROM channelban WHERE guild_id = $1", guild.id)
@@ -389,7 +390,7 @@ class deathshit(commands.Cog):
         aliases = ['mban']
     )
     @trusted()
-    @commands.has_permissions(ban_members=True)
+    @has_permissions(ban_members=True)
     async def mass_ban(self, ctx, *members: Member):
         """Mass ban members from the server."""
         ignored_users = []
@@ -405,7 +406,7 @@ class deathshit(commands.Cog):
         aliases = ['mkick']
     )
     @trusted()
-    @commands.has_permissions(kick_members=True)
+    @has_permissions(kick_members=True)
     async def mass_kick(self, ctx, *members: Member):
         """Mass kick members from the server."""
         ignored_users = []

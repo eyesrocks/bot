@@ -651,7 +651,7 @@ class Context(commands.Context):
             return None
 
     async def success(self, text, **kwargs):
-        emoji = ""
+        emoji = "<:check:1336689145216766015>"
         if config := await self.bot.db.fetchrow(
             """SELECT success_emoji, success_color FROM context WHERE guild_id = $1""",
             self.guild.id,
@@ -661,10 +661,10 @@ class Context(commands.Context):
             if config.get("success_color"):
                 color = discord.Color.from_str(config["success_color"])
             else:
-                color = 0x2a8000
+                color = 0x2f4672
         else:
-            color = 0x2a8000
-            emoji = EMOJIS["UB_Check_Icon"]
+            color = 0x2f4672
+
         embed = discord.Embed(
             color=color, description=f"{emoji} {self.author.mention}: {text}"
         )
@@ -690,7 +690,7 @@ class Context(commands.Context):
         color = 0x2a8000
         embed = discord.Embed(
             color=color,
-            description=f"<a:Money:1150678869960032296> {self.author.mention}: {text}",
+            description=f"💵 {self.author.mention}: {text}",
         )
         if footer := kwargs.get("footer"):
             if isinstance(footer, tuple):
@@ -711,7 +711,7 @@ class Context(commands.Context):
         return await self.send(embed=embed, delete_after=delete_after)
 
     async def deposit(self, text, **kwargs):
-        color = 0x2a8000
+        color = self.bot.color
         embed = discord.Embed(
             color=color,
             description=f":bank: {self.author.mention}: {text}",
@@ -735,10 +735,10 @@ class Context(commands.Context):
         return await self.send(embed=embed, delete_after=delete_after)
 
     async def withdraw(self, text, **kwargs):
-        color = 0x2a8000
+        color = self.bot.color
         embed = discord.Embed(
             color=color,
-            description=f":bank: {self.author.mention}: {text}",
+            description=f":credit_card: {self.author.mention}: {text}",
         )
         if footer := kwargs.get("footer"):
             if isinstance(footer, tuple):
@@ -759,7 +759,7 @@ class Context(commands.Context):
         return await self.send(embed=embed, delete_after=delete_after)
 
     async def normal(self, text, **kwargs):
-        color = 0x2B2D31
+        color = 0x2f4672
         embed = discord.Embed(color=color, description=f"{self.author.mention}: {text}")
         if footer := kwargs.get("footer"):
             if isinstance(footer, tuple):
@@ -862,6 +862,8 @@ class Context(commands.Context):
     # misc
 
     async def send(self, *args, **kwargs):
+        if isinstance(self.channel, discord.TextChannel) and not self.channel.permissions_for(self.guild.me).send_messages:
+            return
         reskin = await self.reskin()
         if reskin:
             webhook = reskin["webhook"]
@@ -1094,7 +1096,9 @@ class MSG:
 
                 return message
 
+        except discord.NotFound:
+            return None
         except discord.HTTPException as e:
             logger.error(f"Failed to edit message: {get_error(e)}")
-            raise
+            return None
 

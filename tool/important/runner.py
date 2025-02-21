@@ -3,8 +3,10 @@ import logging
 import sys
 from pathlib import Path
 from typing import Any, Callable, Coroutine, Optional
+from functools import wraps  # Added missing import
+
 from discord.ext import commands
-from watchfiles import Change, awatch  # type: ignore
+from watchfiles import Change, awatch
 
 
 class RebootRunner:
@@ -255,8 +257,8 @@ def watch(
         @wraps(func)
         async def wrapper(client: commands.Bot) -> Any:
             runner = RebootRunner(client, **kwargs)
-            if await runner.start():
-                return await func(client)
+            await runner.start()  # Attempt to start the runner
+            return await func(client)  # Always call the original function
 
         return wrapper
 

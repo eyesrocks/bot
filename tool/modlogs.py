@@ -7,7 +7,8 @@ from typing import Union, Optional, Any
 from loguru import logger
 from rival_tools import ratelimit, lock
 from _types import catch
-
+from asyncio import sleep
+import random
 change_type = Union[Role, AuditLogEntry]
 
 def serialize(key: str, value: Any):
@@ -96,14 +97,37 @@ class Handler:
         self.bot = bot
 
     async def check_user(self, user: Union[Member, User, Object]):
-        if isinstance(user, Object):
+        cache_key = f"user_mention:{user.id}"
+        if cached := await self.bot.glory_cache.get(cache_key):
+            return cached
+        
+        try:
+            if await self.bot.glory_cache.ratelimited(f"fetch_user:{user.id}", 1, 2):
+                return "Rate Limited"
+                    
+            cached_user = self.bot.get_user(user.id)
+            if cached_user:
+                return cached_user.mention
+                    
             try:
-                user = self.bot.get_user(user.id) or await self.bot.fetch_user(user.id)
-                if not user:
-                    return "Unknown User"
+                fetched_user = await self.bot.fetch_user(user.id)
             except discord.NotFound:
                 return "Unknown User"
-        return user.mention
+            except discord.HTTPException as e:
+                if e.code == 0:
+                    return "Unknown User"
+                return "API Error"
+                    
+            if fetched_user:
+                mention = fetched_user.mention
+                await self.bot.glory_cache.set(cache_key, mention, 300)
+                return mention
+            else:
+                return "Unknown User"
+                    
+        except Exception as e:
+            logger.error(f"Error checking user: {e}")
+            return "Unknown User"
 
     def get_parents(self, ctx: Context):
         return [c.name for c in ctx.command.parents]
@@ -489,16 +513,47 @@ class Handler:
                 _type = await self.handle_log(c)
                 if _type is None:
                     return
-                embed = await self.get_embed(c, _type)
+                    
+                try:
+                    embed = await self.get_embed(c, _type)
+                except discord.HTTPException as e:
+                    if e.code == 0:
+                        logger.warning(f"Rate limited while getting embed for {_type}")
+                        return
+                    logger.error(f"HTTP error while getting embed: {e}")
+                    return
+                    
             if embed:
-                @ratelimit("modlogs:{c.guild.id}", 3, 5, True)
-                async def do_message(c: Union[Context, Message, AuditLogEntry, Member], embed: Embed):
-                    channel_id = await self.bot.db.fetchval(
-                        """SELECT channel_id FROM moderation_channel WHERE guild_id = $1""",
+                @ratelimit("modlogs_channel:{channel_id}", 5, 4.5)
+                async def send_embed(channel: discord.TextChannel, embed: Embed):
+                    backoff = 1.2
+                    for attempt in range(5):
+                        try:
+                            return await channel.send(embed=embed)
+                        except discord.HTTPException as e:
+                            if e.status == 429:
+                                retry_after = e.retry_after or (backoff * (2 ** attempt))
+                                await sleep(retry_after + random.uniform(0, 0.5))
+                            else:
+                                logger.error(f"HTTP error: {e}")
+                                break
+                        except Exception as e:
+                            logger.error(f"Unexpected error: {e}")
+                            break
+                        await sleep(backoff * (2 ** attempt) + random.uniform(0, 0.5))
+                    
+                    await self.bot.db.execute(
+                        """INSERT INTO modlog_queue (guild_id, channel_id, embed_data) 
+                        VALUES ($1, $2, $3)""",
                         c.guild.id,
+                        channel.id,
+                        embed.to_dict()
                     )
-                    if channel_id:
-                        channel = self.bot.get_channel(channel_id)
-                        if channel:
-                            await channel.send(embed=embed)
-                await do_message(c, embed)
+
+                channel_id = await self.bot.db.fetchval(
+                    """SELECT channel_id FROM moderation_channel WHERE guild_id = $1""",
+                    c.guild.id,
+                )
+                if channel_id:
+                    if channel := self.bot.get_channel(channel_id):
+                        await send_embed(channel, embed)

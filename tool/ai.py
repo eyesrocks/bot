@@ -95,7 +95,7 @@ class AI:
 
 async def test(input: str, model: str):
     response = await AI().generate_response(input, model)
-    print(response)
+    logger.info(response)
     return response
 
 

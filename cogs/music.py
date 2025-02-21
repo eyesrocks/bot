@@ -1,7 +1,7 @@
 from tool.greed import Greed  # type: ignore
 from humanize import naturaldelta
 from datetime import timedelta
-from typing import Optional, Union, Literal
+from typing import Optional, Union, Literal, List, Dict, Any
 from tool import expressions as regex
 import discord
 import pomice
@@ -15,7 +15,8 @@ from discord.ext.commands import Context
 from tuuid import tuuid
 from loguru import logger
 from contextlib import suppress
-# Emojis
+
+
 play_emoji = "<:greed_play:1207661064096063599>"
 skip_emoji = "<:greed_skip:1207661069938589716>"
 pause_emoji = "<:greed_pause:1207661063093620787>"
@@ -154,88 +155,6 @@ async def replay(bot: Greed, interaction: discord.Interaction):
 def chunk_list(data: list, amount: int) -> list:
     return [list(chunk) for chunk in zip(*[iter(data)] * amount)]
 
-class MusicInterface(discord.ui.View):
-    def __init__(self, bot):
-        super().__init__(timeout=None)
-        self.bot = bot
-
-    @discord.ui.button(style=discord.ButtonStyle.grey, emoji=replay_emoji, custom_id="music:replay")
-    async def replay_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await replay(self.bot, interaction)
-
-    @discord.ui.button(style=discord.ButtonStyle.grey, emoji="<:previous:1318975789777162329>", custom_id="music:back")
-    async def back_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        player = self.bot.node.get_player(interaction.guild.id)
-        if not player:
-            return await interaction.response.send_message("No active player found", ephemeral=True)
-        
-        previous_track = await player.get_previous_track()
-        if not previous_track:
-            return await interaction.response.send_message("No previous track found", ephemeral=True)
-
-        if player.current:
-            player.track_history.append(player.current)
-            await player.insert(player.current, bump=True)
-        
-        await player.play(previous_track)
-        embed = discord.Embed(
-            description=f"**Playing previous track:** [**{previous_track.title}**]({previous_track.uri})", 
-            color=0x2D2B31
-        )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-    @discord.ui.button(style=discord.ButtonStyle.blurple, emoji=play_emoji, custom_id="music:playpause")
-    async def playpause_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        player = self.bot.node.get_player(interaction.guild.id)
-        if not player:
-            return await interaction.response.send_message("No active player found", ephemeral=True)
-
-        if player.is_paused:
-            await player.set_pause(False)
-            button.emoji = pause_emoji
-            embed = discord.Embed(description="**Resumed** this track", color=0x2D2B31)
-        else:
-            await player.set_pause(True)
-            button.emoji = play_emoji
-            embed = discord.Embed(description="**Paused** this track", color=0x2D2B31)
-            
-        await interaction.response.edit_message(view=self)
-        await interaction.followup.send(embed=embed, ephemeral=True)
-
-    @discord.ui.button(style=discord.ButtonStyle.grey, emoji=skip_emoji, custom_id="music:skip")
-    async def skip_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await skip(self.bot, interaction)
-
-    @discord.ui.button(style=discord.ButtonStyle.grey, emoji=queue_emoji, custom_id="music:queue")
-    async def queue_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        player = self.bot.node.get_player(interaction.guild.id)
-        if not player:
-            return await interaction.response.send_message("No active player found", ephemeral=True)
-
-        if not player.queue._queue:
-            return await interaction.response.send_message("Queue is empty", ephemeral=True)
-
-        queue_list = []
-        for idx, track in enumerate(list(player.queue._queue)[:10], 1):
-            duration = format_duration(track.length)
-            queue_list.append(f"`{idx}.` [{track.title}]({track.uri}) - `{duration}`")
-        
-        embed = discord.Embed(title="Current Queue", color=0x2D2B31)
-        if player.current:
-            position = format_duration(player.position)
-            total = format_duration(player.current.length)
-            embed.add_field(
-                name="Now Playing",
-                value=f"[{player.current.title}]({player.current.uri})\n`{position}/{total}`",
-                inline=False
-            )
-        
-        embed.description = "\n".join(queue_list)
-        if len(player.queue._queue) > 10:
-            embed.set_footer(text=f"And {len(player.queue._queue) - 10} more tracks...")
-            
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
 class Plural:
     def __init__(self, value: int, bold: bool = False, code: bool = False):
         self.value = value
@@ -252,6 +171,13 @@ class Plural:
         plural = plural or f"{singular}s"
         return f"{formatted} {plural if abs(v) != 1 else singular}"
 
+# Utility Functions
+def fmtseconds(seconds: Union[int, float], unit: str = "microseconds") -> str:
+    return naturaldelta(timedelta(seconds=seconds), minimum_unit=unit)
+
+def chunk_list(data: list, amount: int) -> list:
+    return [list(chunk) for chunk in zip(*[iter(data)] * amount)]
+
 def shorten(value: str, length: int = 20) -> str:
     return value[:length-2] + ".." if len(value) > length else value
 
@@ -267,155 +193,120 @@ def format_duration(duration: int, ms: bool = True) -> str:
     parts.append(f"{seconds:02d}")
     return ":".join(parts) if parts else "00:00"
 
+# Player Class
 class Player(pomice.Player):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.bound_channel: Optional[discord.TextChannel] = None
+        self.bound_channel: Optional[discord.abc.MessageableChannel] = None
         self.message: Optional[discord.Message] = None
         self.track: Optional[pomice.Track] = None
         self.context: Optional[Context] = None
         self.queue: asyncio.Queue = asyncio.Queue()
         self.waiting: bool = False
         self.loop: Union[str, bool] = False
-        self.last_track: Optional[pomice.Track] = None
-        self.track_history: list[pomice.Track] = []
-
-    def _format_socket_track(self, track: pomice.Track):
-        return {
-            "url": track.uri,
-            "title": track.title,
-            "author": track.author,
-            "length": track.length,
-            "image": track.thumbnail,
-        }
-
-    def _format_socket_channel(self):
-        voice = {
-            "id": self.channel.id,
-            "name": self.channel.name,
-            "members": [
-                {
-                    "id": member.id,
-                    "name": str(member),
-                    "avatar": member.display_avatar.url if member.display_avatar else None,
-                }
-                for member in self.channel.members if not member.bot
-            ],
-        } if self.channel else None
-        text = {"id": self.bound_channel.id, "name": self.bound_channel.name} if self.bound_channel else None
-        return {"voice": voice, "text": text}
+        self._volume: int = 65
 
     @property
     def get_percentage(self) -> int:
+        if not self.current:
+            return 0
         pos_seconds = self.position // 1000 if self.position else 0
-        total_seconds = self.current.length // 1000 if self.current else 1
+        total_seconds = self.current.length // 1000
         return min(int((pos_seconds / total_seconds) * 100), 100)
 
     @property
     def progress(self) -> str:
-        bar = "██"
-        empty = "  "
+        bar_length = 10
         filled = self.get_percentage // 10
-        return bar * filled + empty * (10 - filled)
+        return "██" * filled + "  " * (bar_length - filled)
 
     @property
     def volume_bar(self) -> str:
-        filled_slots = self.volume // 10
-        return "<a:CatJam:1304239102257922148>" * filled_slots + "<a:CatJam:1304239102257922148>" * (10 - filled_slots)
+        filled_slots = self._volume // 10
+        empty_slots = 10 - filled_slots
+        return "<a:CatJam:1304239102257922148>" * filled_slots + "<a:CatJam:1304239102257922148>" * empty_slots
 
-    async def play(self, track: pomice.Track):
-        if self.current:
-            self.last_track = self.current
-            if not self.track_history or self.track_history[-1] != self.current:
-                self.track_history.append(self.current)
-                if len(self.track_history) > 10:
-                    self.track_history.pop(0)
-                logger.info(f"Added {self.current.title} to track history. History size: {len(self.track_history)}")
+    async def play(self, track: pomice.Track) -> Optional[bool]:
         try:
             return await super().play(track)
-        except pomice.exceptions.TrackLoadError:
+        except pomice.exceptions.TrackLoadError as e:
+            logger.error(f"Failed to play track {track.title}: {str(e)}")
             if self.context:
                 await self.context.fail(f"Could not play **[{track.title}]({track.uri})**")
             if self.queue._queue:
                 try:
                     self.queue._queue.remove(track)
-                    await self.play(self.queue._queue[0])
-                except IndexError:
+                    next_track = self.queue._queue[0]
+                    await self.play(next_track)
+                except (IndexError, ValueError):
                     await self.teardown()
-            logger.info(f"Failed to play {track}. Queue size: {len(self.queue._queue)}")
-        return None
+            logger.info(f"Queue size after error: {len(self.queue._queue)}")
+            return None
 
-    async def get_tracks(
-        self,
-        query: str,
-        *,
-        ctx: Optional[commands.Context] = None,
-        search_type: Optional[pomice.SearchType] = None,
-    ):
-        if ctx:
-            self.context = ctx
-        return await super().get_tracks(query=query, ctx=ctx, search_type=search_type or pomice.SearchType.scsearch)
-
-    async def insert(self, track: pomice.Track, filter: bool = True, bump: bool = False):
+    async def insert(self, track: pomice.Track, filter: bool = True, bump: bool = False) -> bool:
         if filter and track.info.get("sourceName") == "youtube":
-            async with self.bot.session.get("https://metadata-filter.vercel.app/api/youtube", params={"track": track.title}) as response:
-                data = await response.json()
-                if data.get("status") == "success":
-                    track.title = data["data"].get("track", track.title)
+            try:
+                async with self.bot.session.get(
+                    "https://metadata-filter.vercel.app/api/youtube",
+                    params={"track": track.title}
+                ) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        if data.get("status") == "success":
+                            track.title = data["data"].get("track", track.title)
+            except Exception as e:
+                logger.error(f"Failed to filter track metadata: {e}")
+
         if bump:
             self.queue._queue.insert(0, track)
         else:
             await self.queue.put(track)
         return True
 
-    async def next_track(self, ignore_playing: bool = False):
+    async def next_track(self, ignore_playing: bool = False) -> Optional[pomice.Track]:
         if not ignore_playing and (self.is_playing or self.waiting):
-            return
+            return None
+
         self.waiting = True
-        track = self.track if self.loop == "track" else None
-        if not track:
-            try:
+        try:
+            track = self.track if self.loop == "track" else None
+            if not track:
                 async with async_timeout.timeout(300):
                     track = await self.queue.get()
                     if self.loop == "queue":
                         await self.queue.put(track)
-            except (asyncio.TimeoutError, asyncio.CancelledError):
-                self.waiting = False
-                return await self.teardown()
-                
-        
-        if not track:
-            self.waiting = False
-            return await self.teardown()
-            
 
-        self.track = track
-        if track and track not in self.track_history:
-            self.track_history.append(track)
-            if len(self.track_history) > 10:
-                self.track_history.pop(0)
-            logger.info(f"Added {track.title} to track history from next_track")
-        
-        try:
+            self.track = track
             await self.play(track)
-        except Exception as e:
-            logger.error(f"Error playing track: {e}")
-            self.waiting = False
-            with suppress(KeyError):
-                return await self.teardown()
-            
 
-        self.waiting = False
-        if self.bound_channel:
-            try:
-                if self.message:
-                    await self.message.delete()
-                embed = discord.Embed(description=f"> **Now playing** [**{track.title}**]({track.uri})")
-                embed.set_image(url=track.thumbnail) if track.track_type == pomice.TrackType.YOUTUBE else embed.set_thumbnail(url=track.thumbnail)
-                self.message = await self.bound_channel.send(embed=embed, view=MusicInterface(self.bot))
-            except Exception:
-                self.bound_channel = None
-        return track
+            if self.bound_channel:
+                await self._update_now_playing_message(track)
+
+            return track
+
+        except asyncio.TimeoutError:
+            await self.teardown()
+            return None
+        finally:
+            self.waiting = False
+
+    async def _update_now_playing_message(self, track: pomice.Track):
+        try:
+            if self.message:
+                await self.message.delete()
+            
+            embed = discord.Embed(
+                description=f"> **Now playing** [**{track.title}**]({track.uri})"
+            )
+            if track.track_type == pomice.TrackType.YOUTUBE:
+                embed.set_image(url=track.thumbnail)
+            else:
+                embed.set_thumbnail(url=track.thumbnail)
+                
+            self.message = await self.bound_channel.send(embed=embed)
+        except Exception as e:
+            logger.error(f"Failed to update now playing message: {e}")
+            self.bound_channel = None
 
     async def skip(self):
         if self.is_paused:
@@ -428,51 +319,63 @@ class Player(pomice.Player):
     async def set_loop(self, state: Union[str, bool]):
         self.loop = state
 
-
     async def teardown(self):
-        """Safely cleanup the player"""
-        try:
-            self.queue._queue.clear()
-            await self.reset_filters()
-            try:
-                if self.guild.id in self._node._players:
-                    await self.destroy()
-            except (KeyError, AttributeError):
-                pass
-        except Exception as e:
-            logger.error(f"Error during player teardown: {e}")
+        self.queue._queue.clear()
+        self.bound_channel = None
+        await self.reset_filters()
+        with suppress(KeyError):
+            await self.destroy()
 
-    async def get_previous_track(self) -> Optional[pomice.Track]:
-        """Get the previous track from history"""
-        if self.track_history:
-            previous = self.track_history.pop()
-            if self.track_history:
-                return self.track_history[-1]
-            self.track_history.append(previous)
-        return None
-
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<Player guild={self.guild.id} connected={self.is_connected} playing={self.is_playing}>"
 
-class MusicError(commands.CommandError):
-    def __init__(self, message: str, **kwargs):
-        super().__init__(message)
-        self.kwargs = kwargs
-
-async def auto_disconnect(bot: Greed, player: Player):
-    await asyncio.sleep(60)
-    if player.is_paused or not player.is_playing and not player.current and not player.queue._queue:
-        await player.teardown()
-
-class Music(commands.Cog):
+# Music Interface
+class MusicInterface(discord.ui.View):
     def __init__(self, bot):
+        super().__init__(timeout=None)
         self.bot = bot
+
+    @discord.ui.button(style=discord.ButtonStyle.grey, emoji=replay_emoji, custom_id="music:replay")
+    async def replay_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await replay(self.bot, interaction)
+
+    @discord.ui.button(style=discord.ButtonStyle.gray, emoji=pause_emoji, custom_id="music:pause")
+    async def pause_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await pause(self.bot, interaction)
+
+    @discord.ui.button(style=discord.ButtonStyle.blurple, emoji=play_emoji, custom_id="music:play")
+    async def play_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await play(self.bot, interaction)
+
+    @discord.ui.button(style=discord.ButtonStyle.grey, emoji=skip_emoji, custom_id="music:skip")
+    async def skip_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await skip(self.bot, interaction)
+
+    @discord.ui.button(style=discord.ButtonStyle.grey, emoji=queue_emoji, custom_id="music:queue")
+    async def queue_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        player = self.bot.node.get_player(interaction.guild.id)
+        if player and player.queue._queue:
+            queue = [f"[{t.title}]({t.uri})" for t in player.queue._queue[:5]]
+            description = "\n".join(queue)
+        else:
+            description = "no tracks found in queue"
+        embed = discord.Embed(description=description, color=self.bot.color)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+# Music Cog
+class Music(commands.Cog):
+    def __init__(self, bot: Greed):
+        self.bot = bot
+        self.node = None
         self.music_autodisconnect.start()
+
+    def cog_unload(self):
+        self.music_autodisconnect.cancel()
 
     async def check_node(self):
         logger.info("Initializing LavaLink Node Pool....")
         spotify = self.bot.config.get("spotify")
-        self.bot.node = await pomice.NodePool().create_node(
+        self.node = await pomice.NodePool().create_node(
             bot=self.bot,
             host="[2602:fa48:0:3:9edc:71ff:fec7:cbc0]",
             port=2333,
@@ -486,17 +389,34 @@ class Music(commands.Cog):
 
     @tasks.loop(minutes=5)
     async def music_autodisconnect(self):
-        if hasattr(self.bot, "node"):
-            for player in list(self.bot.node.players.values()):
+        if self.node:
+            for player in list(self.node.players.values()):
                 if not player.is_playing and player.is_paused:
                     await player.teardown()
         else:
             await self.check_node()
 
     @commands.Cog.listener()
-    async def on_pomice_track_end(self, player: pomice.Player, track: pomice.Track, reason: str):
+    async def on_pomice_track_end(self, player: Player, track: pomice.Track, reason: str):
+        track = await player.next_track()
+        if not track:
+            await asyncio.sleep(60)
+            if not player.is_playing and not player.is_paused:
+                await player.teardown()
+
+    @commands.Cog.listener()
+    async def on_pomice_track_stuck(self, player: Player, track: pomice.Track, threshold: int):
         await player.next_track()
 
+    @commands.Cog.listener()
+    async def on_pomice_track_exception(self, player: Player, track: pomice.Track, exception: Exception):
+        logger.error(f"Track exception: {exception}")
+        try:
+            await player.bound_channel.send(f"An error occurred while playing **{track.title}**")
+        except Exception:
+            pass
+        await player.next_track()
+    
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, reaction: discord.RawReactionActionEvent):
         data = await self.bot.redis.get(f"lfnp:{reaction.message_id}")
@@ -525,45 +445,56 @@ class Music(commands.Cog):
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
         if before.channel and self.bot.user in before.channel.members:
-            player = self.bot.node.get_player(member.guild.id)
+            player = self.node.get_player(member.guild.id)  # Update to use self.node
             if player and len(player.channel.members) == 1:
                 await player.teardown()
         if member.id != self.bot.user.id:
             return
-        player = self.bot.node.get_player(member.guild.id) if hasattr(self.bot, "node") else None
+        player = self.node.get_player(member.guild.id) if self.node else None  # Update to use self.node
         if player and not after.channel:
-            await player.destroy()
+            await player.teardown()
 
     async def get_player(self, ctx: Context, *, connect: bool = True, check_connected: bool = True) -> Optional[Player]:
-        if not hasattr(self.bot, "node"):
-            raise commands.CommandError("The **Lavalink** node hasn't been **initialized** yet")
+        if not self.node:  
+            raise commands.CommandError("The **Lavalink** node hasn't been **initialized** yet.")
 
         user_voice = ctx.author.voice
         bot_voice = ctx.guild.me.voice
 
         if not user_voice:
             if check_connected:
-                raise commands.CommandError("You're not **connected** to a voice channel")
+                raise commands.CommandError("You're not **connected** to a voice channel.")
             return None
 
         if bot_voice and bot_voice.channel != user_voice.channel:
-            raise commands.CommandError("I'm **already** connected to another voice channel")
+            raise commands.CommandError("I'm **already** connected to another voice channel.")
 
-        player = self.bot.node.get_player(ctx.guild.id)
+        player = self.node.get_player(ctx.guild.id)
+        
         if not player or not bot_voice:
             if not connect:
-                if ctx.voice_client:
-                    await ctx.voice_client.disconnect()
-                    return None
-                raise commands.CommandError("I'm not **connected** to a voice channel")
-            await user_voice.channel.connect(cls=Player, self_deaf=True)
-            player = self.bot.node.get_player(ctx.guild.id)
+                return None
+                
+            try:
+                await user_voice.channel.connect(cls=Player, self_deaf=True)
+                player = self.node.get_player(ctx.guild.id)
+                if not player:
+                    raise commands.CommandError("Failed to initialize player.")
+                player.bound_channel = ctx.channel
+                await ctx.guild.voice_client.set_volume(65)
+            except discord.ClientException:
+                await ctx.fail("Failed to connect to voice channel")
+                return None
+            except Exception as e:
+                await ctx.fail(f"An error occurred: {str(e)}")
+                return None
+
+        if player and not player.bound_channel:
             player.bound_channel = ctx.channel
-            await ctx.voice_client.set_volume(65)
 
         return player
 
-    async def get_tracks(self, ctx: Context, player: Player, query: str, search_type: Optional[pomice.SearchType] = None):
+    async def get_tracks(self, ctx: Context, player: Player, query: str, search_type: Optional[pomice.SearchType] = None) -> list[pomice.Track]:
         try:
             return await player.get_tracks(query=query, ctx=ctx, search_type=search_type)
         except Exception:
@@ -606,7 +537,7 @@ class Music(commands.Cog):
                     return await ctx.send_help(ctx.command.qualified_name)
         player: Player = await self.get_player(ctx)
         if not query:
-            player = self.bot.node.get_player(ctx.guild.id)
+            player = self.node.get_player(ctx.guild.id)
             if not player.current:
                 return await ctx.fail("There isn't an active **track**")
             embeds = []
@@ -657,6 +588,8 @@ class Music(commands.Cog):
                     f"Added **{Plural(tracks.track_count):track}** from [**{tracks.name}**]({tracks.uri}) to the queue",
                     emoji=queue_emoji,
                 )
+                if not player.is_playing and not player.is_paused:
+                    await player.next_track()
             else:
                 track = tracks[0]
                 await player.insert(track, bump=ctx.parameters.get("bump"))
@@ -752,8 +685,12 @@ class Music(commands.Cog):
     @commands.command(name="disconnect", aliases=["dc", "stop"], brief="Disconnect from voice channel", example=",disconnect")
     async def disconnect(self, ctx: Context):
         player: Player = await self.get_player(ctx, connect=False)
+        if not player:
+            if ctx.voice_client:
+                await ctx.voice_client.disconnect()
         await player.teardown()
         await ctx.success("**Disconnected** from the voice channel")
+
 
     @commands.group(
         name="presets",
@@ -893,6 +830,7 @@ class Music(commands.Cog):
             await ctx.warning("That filter is not in use")
         except Exception as e:
             await ctx.fail(f"Failed to remove filter: {str(e)}")
+
 
 async def setup(bot):
     await bot.add_cog(Music(bot))

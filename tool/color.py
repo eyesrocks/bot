@@ -15,7 +15,7 @@ import discord
 
 def log(message: str):
     logger.info(message)
-    print(message)
+    logger.info(message)
 
 
 @dc

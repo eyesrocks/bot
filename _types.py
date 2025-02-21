@@ -196,27 +196,27 @@ def asDict(obj, max_depth=5) -> dict:
 #     __int["positive"] = positive_
 #     n = int(1500)
 #     number = float(1000.0)
-#     print(f"{isinstance(number, float)}")
+#     logger.info(f"{isinstance(number, float)}")
 #     negative_number = float(-1.0)
 #     if isinstance(n, int):
-#         print("it is an integer")
-#         print(", ".join(m for m in dir(n) if not m.startswith("__")))
-#     else: print(f"not an integer its a {type(n)}")
+#         logger.info("it is an integer")
+#         logger.info(", ".join(m for m in dir(n) if not m.startswith("__")))
+#     else: logger.info(f"not an integer its a {type(n)}")
 
-#     print(f"positive float: {number}\nnegative float: {negative_number}\n\nmaximum set: 500.0\nminimum set: 1200.0")
-#     print(f"float.maximum testing: {number.maximum(500.0)}\n")
-#     print(f"float.positive testing: {negative_number.positive}\n")
-#     print(f"float.minimum testing: {number.minimum(1200.0)}")
+#     logger.info(f"positive float: {number}\nnegative float: {negative_number}\n\nmaximum set: 500.0\nminimum set: 1200.0")
+#     logger.info(f"float.maximum testing: {number.maximum(500.0)}\n")
+#     logger.info(f"float.positive testing: {negative_number.positive}\n")
+#     logger.info(f"float.minimum testing: {number.minimum(1200.0)}")
 
 #     percentage = 10.0
 #     total = 100.0
-#     print(f"chance of winning {percentage}/{total}")
+#     logger.info(f"chance of winning {percentage}/{total}")
 #     runs = []
 #     for i in range(int(percentage)+1):
 #         runs.append(calculate(percentage, total))
 
 #     r = "".join(f"run {i}: {'lost' if v is False else 'won'}\n" for i, v in enumerate(runs, start = 1))
-#     print(r)
+#     logger.info(r)
 
 # if __name__ == "__main__":
 #     test()

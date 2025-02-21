@@ -17,7 +17,8 @@ from collections import defaultdict
 from typing import Optional, Union
 from contextlib import suppress
 from loguru import logger
-
+from tool.greed import Greed
+import random
 
 def trusted():
     async def predicate(ctx: Context):
@@ -58,12 +59,13 @@ def get_action(e: Union[AuditLogAction, AuditLogEntry]) -> str:
         )
 
 
-class AntiNuke(Cog):
+class Antinuke(Cog):
     """A class that implements an anti-nuke system to protect a guild from malicious actions."""
 
-    def __init__(self, bot):
+    def __init__(self, bot: Greed):
         self.bot = bot
         self.locks = defaultdict(Lock)
+        self.user_locks = defaultdict(Lock)
         self.punishments = {}
         self.guilds = {}
         self.thresholds = {}
@@ -165,28 +167,36 @@ class AntiNuke(Cog):
         return True
 
     async def do_punishment(self, guild: Guild, user: Union[User, Member], reason: str):
-        punishment = await self.bot.db.fetchval(
-            """SELECT punishment FROM antinuke WHERE guild_id = $1""", guild.id
-        )
-        if punishment is None:
-            punishment = "ban"
-        if user.bot:
-            if not guild.me.guild_permissions.ban_members:
-                return
-            await self.do_ban(guild, user, reason)
-        elif punishment.lower() == "ban":
-            if not guild.me.guild_permissions.ban_members:
-                return
-            await self.do_ban(guild, user, reason)
-        elif punishment.lower() == "kick":
-            if not guild.me.guild_permissions.kick_members:
-                return
-            await self.do_kick(guild, user, reason)
-        else:
-            if not guild.me.guild_permissions.manage_roles:
-                return
-            await self.do_strip(guild, user, reason)
-        return
+        # Consolidated punishment rate limit
+        if await self.bot.glory_cache.ratelimited(
+            f"punish:{guild.id}:{user.id}", 
+            2,  # Allow 2 punishments
+            10  # Every 10 seconds
+        ):
+            return
+
+        async with self.user_locks[user.id]:
+            punishment = await self.bot.db.fetchval(
+                """SELECT punishment FROM antinuke WHERE guild_id = $1""", guild.id
+            )
+            if punishment is None:
+                punishment = "ban"
+            if user.bot:
+                if not guild.me.guild_permissions.ban_members:
+                    return
+                await self.do_ban(guild, user, reason)
+            elif punishment.lower() == "ban":
+                if not guild.me.guild_permissions.ban_members:
+                    return
+                await self.do_ban(guild, user, reason)
+            elif punishment.lower() == "kick":
+                if not guild.me.guild_permissions.kick_members:
+                    return
+                await self.do_kick(guild, user, reason)
+            else:
+                if not guild.me.guild_permissions.manage_roles:
+                    return
+                await self.do_strip(guild, user, reason)
 
     async def check_entry(self, guild: Guild, entry: AuditLogEntry):
         if entry.user is not None:
@@ -207,16 +217,14 @@ class AntiNuke(Cog):
                 or (hasattr(entry.user, "top_role") and entry.user.top_role >= guild.me.top_role)
             ):
                 return True
+            # More specific rate limit key
+            rl_key = f"antinuke:{guild.id}:{entry.user.id}:{get_action(entry.action)}"
             rl = await self.bot.glory_cache.ratelimited(
-                f"antinuke-{entry.user.id}-{entry.guild.id}-{str(entry.action)}",
-                threshold,
-                60,
+                rl_key,
+                max(threshold, 1),  # Ensure at least 1
+                10  # 10 second window
             )
-            if (
-                rl == 0
-                and "bot" not in str(entry.action).lower()
-                and "guild_update" not in str(entry.action).lower()
-            ):
+            if rl == 0:
                 return True
             else:
                 logger.info(
@@ -235,6 +243,10 @@ class AntiNuke(Cog):
         return False
 
     async def get_audit(self, guild: Guild, action: AuditLogAction = None):
+        cache_key = f"audit_{guild.id}_{action}"
+        if cached := await self.bot.glory_cache.get(cache_key):
+            return cached
+        
         try:
             if not guild.me.guild_permissions.view_audit_log:
                 return None
@@ -263,6 +275,7 @@ class AntiNuke(Cog):
                         logger.info(
                             f"user {str(audit.user)} invoked an event for {audit.action} on {str(audit.target)}"
                         )
+            await self.bot.glory_cache.set(cache_key, audit, 5)  # Cache for 5 seconds
             return audit
         except Exception:
             return None
@@ -282,13 +295,24 @@ class AntiNuke(Cog):
 
     async def attempt_cleanup(self, guild_id: int, action: callable, *args, **kwargs):
         """Helper method to attempt cleanup actions with retries"""
-        for _ in range(5):  # Try up to 5 times
-            if await self.bot.glory_cache.ratelimited(f"cleanup-{guild_id}", 1, 10) == 0:
-                try:
+        base_delay = 1.2
+        for attempt in range(5):
+            try:
+                if await self.bot.glory_cache.ratelimited(
+                    f"cleanup:{guild_id}", 
+                    3,  # 3 attempts 
+                    5   # per 5 seconds
+                ) == 0:
                     return await action(*args, **kwargs)
-                except Exception:
-                    pass
-            await sleep(2)  # Wait 2 seconds before next attempt
+            except discord.HTTPException as e:
+                if e.status == 429:
+                    retry_after = e.retry_after or base_delay * (2 ** attempt)
+                    await sleep(retry_after + random.uniform(0, 0.5))
+                else:
+                    break
+            except Exception:
+                break
+            await sleep(base_delay * (2 ** attempt) + random.uniform(0, 0.5))
         return None
 
     @Cog.listener("on_audit_log_entry_create")
@@ -1102,6 +1126,8 @@ class AntiNuke(Cog):
     @trusted()
     @has_permissions(ban_members=True)
     async def hardban(self, ctx: Context, user: Union[User, Member]):
+        if not await self.bot.hierarchy(ctx, user):
+            return await ctx.fail("User is higher or equal to you in the hierarchy")
         res = await self.bot.db.fetchval(
             """SELECT user_id FROM hardban WHERE guild_id = $1 AND user_id = $2""",
             ctx.guild.id,
@@ -1144,4 +1170,4 @@ class AntiNuke(Cog):
 
 
 async def setup(bot):
-    return await bot.add_cog(AntiNuke(bot))
+    return await bot.add_cog(Antinuke(bot))

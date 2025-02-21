@@ -20,7 +20,7 @@ def run():
     parser.add_argument(
         "--version",
         action="store_true",
-        help="print the version"
+        help="logger.info the version"
     )
     args = parser.parse_args()
 
@@ -32,9 +32,9 @@ def run():
         raise ValueError("port should be an integer between range 1-65535")
     host=args.host
     if args.version:
-        print('rival version: unknown')
+        logger.info('rival version: unknown')
     else:
-        print("Starting server at port: ", port)
+        logger.info("Starting server at port: ", port)
         server = Server(host=host,port=port)
         server.start()
 

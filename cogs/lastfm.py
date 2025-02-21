@@ -1,7 +1,11 @@
 import asyncio
 from typing import Generator, List
-
+from PIL import Image
+from io import BytesIO
 import aiohttp
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
+import aiohttp
+from io import BytesIO
 import discord
 import orjson
 from discord.ext import commands, menus
@@ -9,6 +13,47 @@ from typing import Any, Union
 from tool.important import Context  # type: ignore
 from tool.greed import Greed  # type: ignore
 from tool.emotes import EMOJIS
+from PIL import ImageDraw, ImageFont
+from tool.worker import offloaded
+import requests
+
+@offloaded
+def generate_collage(track_info):
+    size = 300  # Size of each image in the collage
+    collage_size = 900  # 3x3 collage grid (9 images)
+    
+    collage = Image.new("RGB", (collage_size, collage_size))
+    draw = ImageDraw.Draw(collage)
+    
+    try:
+        font = ImageFont.truetype("arial.ttf", 15)
+    except:
+        font = ImageFont.load_default()
+
+    with requests.Session() as session:
+        for i, info in enumerate(track_info):
+            response = session.get(info['url'])
+            if response.status_code == 200:
+                image_data = BytesIO(response.content)
+                img = Image.open(image_data).resize((size, size))
+                x = (i % 3) * size
+                y = (i // 3) * size
+                collage.paste(img, (x, y))
+
+                text = f"{shorten(info['title'], 30)} {info['plays']}"
+                text_width = draw.textlength(text, font=font)
+                text_x = x + (size - text_width) / 2
+                text_y = y + size - 20
+
+                draw.rectangle([text_x-2, text_y-2, text_x+text_width+2, text_y+15],
+                    fill='black')
+                draw.text((text_x, text_y), text, fill='white', font=font)
+
+    output = BytesIO()
+    collage.save(output, format="PNG")
+    output.seek(0)
+    return output
+
 
 class plural:
     def __init__(self, value: int, bold: bool = False, code: bool = False):
@@ -346,7 +391,7 @@ class LastFM(commands.Cog):
                 "SELECT * FROM lastfm.conf WHERE user_id = $1", ctx.author.id
             )
         ):
-            return await ctx.fail("You do **not** have a Last.FM account linked.")
+            return await ctx.fail("You do **not** have a **Last.FM account linked** to link an account do ,lf set")
         artists, tracks = await asyncio.gather(
             *[
                 self.requester.get(method="user.gettopartists", user=conf.username),
@@ -421,15 +466,6 @@ class LastFM(commands.Cog):
     async def nowplaying(self, ctx: Context, *, user: discord.Member = None):
         if user is None:
             user = ctx.author
-        #  if hasattr(self.bot, "node"):
-        #     if player := self.bot.node.get_player(ctx.guild.id):
-        #        if player.current:
-        #           if user in player.channel.members:
-        #              embed = discord.Embed(
-        #                 title=f"Currently playing..", color=0x2B2D31
-        #            )
-        #           embed.description = f"> **Duration:** `{format_duration(player.position)}/{format_duration(player.current.length)}`\n> **Playing:** [**{shorten(player.current.title, 23)}**]({player.current.uri})\n> **Requested by:** {player.current.requester.mention}\n"
-        #          return await ctx.send(embed=embed)
         if not (
             conf := await self.bot.db.fetchrow(
                 "SELECT * FROM lastfm.conf WHERE user_id = $1", user.id
@@ -558,6 +594,102 @@ class LastFM(commands.Cog):
             )
             return await asyncio.gather(*[m.add_reaction(r) for r in reacts])
 
+
+
+    @lastfm.command(
+        name="collage",
+        aliases=["lc"],
+        brief="Generate a Last.FM collage",
+        example=",lastfm collage [timespan]",
+    )
+    @commands.cooldown(1, 5, commands.BucketType.guild)
+    async def lastfm_recentartists(self, ctx: commands.Context, timespan: str = "overall"):
+        user = ctx.author
+        if not (
+            conf := await self.bot.db.fetchrow(
+                "SELECT * FROM lastfm.conf WHERE user_id = $1", user.id
+            )
+        ):
+            return await ctx.fail("You do **not** have a **Last.FM account linked** to link an account do ,lf set")
+
+        period_map = {
+            "7d": "7day",
+            "1m": "1month",
+            "3m": "3month",
+            "6m": "6month",
+            "1y": "12month",
+            "overall": "overall",
+            "lifetime": "overall",
+            "alltime": "overall"
+        }
+        
+        period = period_map.get(timespan.lower(), "overall")
+
+        if period not in period_map.values():
+            return await ctx.fail("Invalid timespan. Valid options are 7d, 1m, 3m, 6m, 1y, and lifetime.")
+
+        data = await self.requester.get(
+            method="user.gettoptracks", 
+            user=conf.username, 
+            limit=9,  # Only request what we need
+            period=period
+        )
+        message = await ctx.normal("Generating collage...")
+        
+        if "error" in data:
+            return await ctx.fail("Invalid username.")
+
+        tracks = data.get("toptracks", {}).get("track", [])
+        if not tracks:
+            return await ctx.fail("No tracks found for this timespan.")
+
+        default_image_url = "https://images-ext-1.discordapp.net/external/YawEMwFRVUV20mHDlBf8IXRcqTOUbOGcUwUfmeYIsww/https/lastfm.freetls.fastly.net/i/u/300x300/2a96cbd8b46e442fc41c2b86b821562f.png"
+
+        # Process tracks directly from the top tracks response
+        track_info = []
+        for track in tracks[:9]:  # Limit to 9 tracks
+            # Get album info to fetch higher quality images
+            album_data = await self.requester.get(
+            method="track.getInfo",
+            track=track['name'],
+            artist=track['artist']['name'],
+            username=conf.username
+            )
+            
+            # Try to get image from album info first, then fallback to track images
+            image_url = None
+            if 'track' in album_data and 'album' in album_data['track']:
+                images = album_data['track']['album'].get('image', [])
+                image_url = next((img.get("#text") for img in images if img.get("size") == "large" and img.get("#text")), None)
+                
+            if not image_url:
+                image_url = next((img.get("#text") for img in track.get("image", []) if img.get("size") == "large" and img.get("#text")), None)
+            
+            track_info.append({
+            'url': image_url or default_image_url,
+            'title': f"{track['artist']['name']} - {track['name']}",
+            'plays': f"({track['playcount']} plays)"
+            })
+
+        # Fill remaining slots if needed
+        while len(track_info) < 9:
+            track_info.append({
+            'url': default_image_url,
+            'title': "No track",
+            'plays': ""
+            })
+
+        # Generate the collage with text
+        collage = await generate_collage(track_info)
+        file = discord.File(collage, "top_tracks_collage.png")
+
+        timespan_display = timespan.lower() if timespan.lower() != "overall" else "all time"
+        embed = discord.Embed(
+            title=f"{user.display_name}'s Top Tracks - {timespan_display}",
+            color=0x2B2D31,
+        ).set_image(url="attachment://top_tracks_collage.png")
+
+        await message.edit(content=None, attachments=[file], embed=embed)
     @lastfm.command(
         name="reaction",
         aliases=["react", "reacts"],
@@ -622,7 +754,7 @@ class LastFM(commands.Cog):
         if not await self.bot.db.fetchrow(
             "SELECT * FROM lastfm.conf WHERE user_id = $1", ctx.author.id
         ):
-            return await ctx.fail("You do **not** have a **Last.FM account linked**")
+            return await ctx.fail("You do **not** have a **Last.FM account linked** to link an account do ,lf set")
 
         if code in ["clear", "reset", "delete", "remove"]:
             await self.bot.db.execute(
@@ -670,7 +802,7 @@ class LastFM(commands.Cog):
         if not await self.bot.db.fetchrow(
             "SELECT * FROM lastfm.conf WHERE user_id = $1", ctx.author.id
         ):
-            return await ctx.fail("You do **not** have a **Last.FM account linked**")
+            return await ctx.fail("You do **not** have a **Last.FM account linked** to link an account do ,lf set")
 
         if command in ["clear", "reset", "delete", "remove"]:
             await self.bot.db.execute(
@@ -699,7 +831,7 @@ class LastFM(commands.Cog):
                 "SELECT * FROM lastfm.conf WHERE user_id = $1", ctx.author.id
             )
         ):
-            return await ctx.fail("You do **not** have a **Last.FM account linked**")
+            return await ctx.fail("You do **not** have a **Last.FM account linked** to link an account do ,lf set")
 
         if not artist:
             data = (
@@ -849,8 +981,7 @@ class LastFM(commands.Cog):
                 "SELECT * FROM lastfm.conf WHERE user_id = $1", ctx.author.id
             )
         ):
-            return await ctx.fail("You do **not** have a **Last.FM account linked**")
-
+            return await ctx.fail("You do **not** have a **Last.FM account linked** to link an account do ,lf set")
         if not artist_name:
             data = await self.requester.get(
                 method="user.getrecenttracks", user=conf.username
@@ -922,7 +1053,7 @@ class LastFM(commands.Cog):
         if not (conf := await self.bot.db.fetchrow(
             "SELECT * FROM lastfm.conf WHERE user_id = $1", ctx.author.id
         )):
-            return await ctx.fail("You do **not** have a **Last.FM account linked**")
+            return await ctx.fail("You do **not** have a **Last.FM account linked** to link an account do ,lf set")
 
         if not artist_name:
             data = await self.requester.get(
@@ -1001,7 +1132,7 @@ class LastFM(commands.Cog):
                 "SELECT * FROM lastfm.conf WHERE user_id = $1", user.id
             )
         ):
-            return await ctx.fail("You do **not** have a **Last.FM account linked**")
+            return await ctx.fail("You do **not** have a **Last.FM account linked** to link an account do ,lf set")
 
         data = await self.requester.get(
             method="user.gettopartists", user=conf.username
@@ -1027,6 +1158,7 @@ class LastFM(commands.Cog):
 
         return await ctx.paginate(embeds)
 
+
     @lastfm.command(
         name="toptracks",
         aliases=["tt"],
@@ -1040,7 +1172,7 @@ class LastFM(commands.Cog):
                 "SELECT * FROM lastfm.conf WHERE user_id = $1", user.id
             )
         ):
-            return await ctx.fail("You do **not** have a **Last.FM account linked**")
+            return await ctx.fail("You do **not** have a **Last.FM account linked** to link an account do ,lf set")
 
         data = await self.requester.get(
             method="user.gettoptracks", user=conf.username
@@ -1079,7 +1211,7 @@ class LastFM(commands.Cog):
                 "SELECT * FROM lastfm.conf WHERE user_id = $1", user.id
             )
         ):
-            return await ctx.fail("You do **not** have a **Last.FM account linked**")
+            return await ctx.fail("You do **not** have a **Last.FM account linked** to link an account do ,lf set")
 
         data = await self.requester.get(
             method="user.gettopalbums", user=conf.username

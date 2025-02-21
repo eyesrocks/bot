@@ -20,16 +20,19 @@ EXCLUDED_METHODS = [
 ]
 
 NON_METHODS = ["roundtrip", "setup"]
+
 class IPC:
     def __init__(self, bot: Client):
         self.bot = bot
         self.transformers = Transformers(self.bot)
-        self.shards_per_cluster = self.bot.shard_count / 3
-        self.chunks = utils.chunk_list([i for i in range(self.bot.shard_count)], round(self.bot.shard_count / 3))
+        # Use integer division so shards_per_cluster is an int
+        self.shards_per_cluster = self.bot.shard_count // 3
+        # Divide the shard list into chunks of size equal to round(bot.shard_count/3)
+        self.chunks = utils.chunk_list(list(range(self.bot.shard_count)), round(self.bot.shard_count / 3))
         shard_ids = list(self.bot.shards.keys())
         self.cluster_id = next((i for i, chunk in enumerate(self.chunks) if any(shard_id in chunk for shard_id in shard_ids)), 0)
-        self.bot.connection = Connection(local_name = f"cluster{str(self.cluster_id + 1)}", host = "127.0.0.1", port = 13254)
-        self.sources = [f"cluster{str(i)}" for i, chunk in enumerate(self.chunks, start = 1)][:3]
+        self.bot.connection = Connection(local_name=f"cluster{str(self.cluster_id + 1)}", host="127.0.0.1", port=13254)
+        self.sources = [f"cluster{str(i)}" for i, chunk in enumerate(self.chunks, start=1)][:3]
         self.max_retries = 3
         self.retry_delay = 1
 
@@ -44,9 +47,8 @@ class IPC:
         return True
 
     def get_coroutine_names_with_kwarg(self, kwarg_name: str):
-        # Get all members of the class
+        # Get all members of this class that are coroutine functions
         members = getmembers(self, predicate=iscoroutinefunction)
-        # Extract the names of coroutine methods that have the specific keyword argument
         coroutine_names = []
         for name, func in members:
             sig = signature(func)
@@ -72,16 +74,17 @@ class IPC:
         """Send a message to the IPC server and return the response with retry logic"""
         coro = getattr(self, method)
         
-        # Try to ensure connection is ready
+        # Ensure connection is ready
         if not await self.wait_for_connection():
             raise RuntimeError("IPC connection is not ready")
 
         for attempt in range(self.max_retries):
             try:
                 tasks = [
-                    self.bot.connection.request(method, s, *args, **kwargs) 
+                    self.bot.connection.request(method, s, *args, **kwargs)
                     for s in self.sources if s != self.bot.connection.local_name
                 ]
+                # Also execute the local version of the method
                 tasks.append(coro(self.bot.connection.local_name, *args, **kwargs))
 
                 if method == "get_shards":
@@ -91,20 +94,21 @@ class IPC:
                         d.extend(i)
                     return d
                 elif method not in EXCLUDED_METHODS:
-                    data = chain(await gather(*tasks))
+                    gathered = await gather(*tasks)
+                    # Convert chain iterator to list before returning
+                    data = list(chain(*gathered))
                 else:
-                    return await gather(*tasks)
+                    data = await gather(*tasks)
                 
                 return data
 
             except Exception as e:
                 if attempt == self.max_retries - 1:
                     raise
-                
                 logger.warning(f"IPC request failed (attempt {attempt + 1}/{self.max_retries}): {str(e)}")
                 await asyncio.sleep(self.retry_delay * (attempt + 1))
                 
-                # Try to reconnect if needed
+                # Attempt reconnection if needed
                 if not self.bot.connection.authorized:
                     try:
                         await self.bot.connection.start()
@@ -115,18 +119,14 @@ class IPC:
         data = []
         for shard_id, shard in self.bot.shards.items():
             guilds = [g for g in self.bot.guilds if g.shard_id == shard_id]
-            users = sum([len(g.members) for g in guilds])
-            data.append(
-                {
-                    "uptime": self.bot.startup_time.timestamp(),
-                    "latency": round(shard.latency * 1000),
-                    "servers": len(
-                        [g for g in self.bot.guilds if g.shard_id == shard_id]
-                    ),
-                    "users": users,
-                    "shard": shard_id,
-                }
-            )
+            users = sum(len(g.members) for g in guilds)
+            data.append({
+                "uptime": self.bot.startup_time.timestamp(),
+                "latency": round(shard.latency * 1000),
+                "servers": len([g for g in self.bot.guilds if g.shard_id == shard_id]),
+                "users": users,
+                "shard": shard_id,
+            })
         return data
 
     async def get_guild_count(self, source: str):
@@ -161,7 +161,7 @@ class IPC:
             await cog.restart_instance(token, user_id)
             return True
         return False
-    
+
     async def get_instance(self, source: str, user_id: int):
         cog = self.bot.get_cog("Instances")
         if cog:
@@ -175,12 +175,10 @@ class IPC:
         else:
             return 0
     
-    async def ipc_get_user_from_cache(
-        self, source, user: Union[User, int]
-    ):
+    async def ipc_get_user_from_cache(self, source, user: Union[User, int]):
         try:
             u = await UserConverter().convert(self.bot, user)
-        except:
+        except Exception:
             return None
         if u:
             return u._to_minimal_user_json()
@@ -188,44 +186,47 @@ class IPC:
             return None
         
     async def get_guild(self, source: str, guild_id: int):
-        if guild := self.bot.get_guild(guild_id):
+        guild = self.bot.get_guild(guild_id)
+        if guild:
             return self.transformers.transform_guild(guild)
         else:
             return None
         
     async def leave_guild(self, source: str, guild_id: int):
-        if guild := self.bot.get_guild(guild_id):
+        guild = self.bot.get_guild(guild_id)
+        if guild:
             await guild.leave()
             return True
         return False
         
     async def get_member(self, source: str, guild_id: int, user_id: int):
-        if guild := self.bot.get_guild(guild_id):
-            if member := guild.get_member(user_id):
+        guild = self.bot.get_guild(guild_id)
+        if guild:
+            member = guild.get_member(user_id)
+            if member:
                 return self.transformers.transform_member(member)
         return None
     
     async def get_user_mutuals(self, source: str, user_id: int, count: Optional[bool] = False):
-        if not (user := self.bot.get_user(user_id)):
-            if count:
-                return 0
-            else:
-                return []
+        user = self.bot.get_user(user_id)
+        if not user:
+            return 0 if count else []
         if count:
             return len(user.mutual_guilds)
         else:
             return [asDict(guild) for guild in user.mutual_guilds]
 
-
     async def get_channel(self, source: str, channel_id: int):
         channel = self.bot.get_channel(channel_id)
         if channel:
-            return {self.transformers.transform_channel(channel)}
+            # Return a dictionary mapping a key to the transformed channel
+            return {"channel": self.transformers.transform_channel(channel)}
         else:
             return {}
 
     async def send_message(self, source: str, channel_id: int, content: Optional[str] = None, embed: Optional[dict] = None):
-        """Send a message to one or multiple channels.
+        """
+        Send a message to one or multiple channels.
         
         Args:
             source: IPC source identifier
@@ -243,16 +244,16 @@ class IPC:
         messages = {}
         
         for cid in channel_ids:
-            if channel := self.bot.get_channel(cid):
-                if channel.permissions_for(channel.guild.me).send_messages:
-                    try:
-                        msg = await channel.send(content=content, embed=embed_obj)
-                        messages[str(cid)] = {
-                            "id": msg.id,
-                            "content": msg.content,
-                            "embeds": [e.to_dict() for e in msg.embeds]
-                        }
-                    except Exception as e:
-                        logger.error(f"Failed to send message to channel {cid}: {e}")
+            channel = self.bot.get_channel(cid)
+            if channel and channel.permissions_for(channel.guild.me).send_messages:
+                try:
+                    msg = await channel.send(content=content, embed=embed_obj)
+                    messages[str(cid)] = {
+                        "id": msg.id,
+                        "content": msg.content,
+                        "embeds": [e.to_dict() for e in msg.embeds]
+                    }
+                except Exception as e:
+                    logger.error(f"Failed to send message to channel {cid}: {e}")
                         
         return messages

@@ -69,7 +69,7 @@ class Script:
                 ),
                 "{guild.boost_tier}": str(user.guild.premium_tier),
                 "{guild.icon}": user.guild.icon.url if user.guild.icon else "",
-                "{guild.vanity}": user.guild.vanity_url,
+                "{guild.vanity}": user.guild.vanity_url_code,
                 "{track}": lastfm_data.get("track", ""),
                 "{track.duration}": lastfm_data.get("duration", ""),
                 "{artist}": lastfm_data.get("artist", ""),

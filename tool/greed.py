@@ -46,7 +46,7 @@ from tool.important.subclasses.parser import Script  # type: ignore
 from tool.important.subclasses.context import NonRetardedCache, MSG, reskin  # type: ignore
 from tool.important.runner import RebootRunner  # type: ignore
 from tool.snipe import Snipe  # type: ignore
-from tool.views import GiveawayView, PrivacyConfirmation  # type: ignore
+from tool.views import GiveawayView  # type: ignore
 from tool.important.subclasses.interaction import GreedInteraction  # type: ignore # noqa: F401
 # from tool import MemberConverter
 from rival_tools import ratelimit, lock  # type: ignore
@@ -128,6 +128,7 @@ for i in ips:
 class Greed(Bot):
     def __init__(self, config: Dict[str, Any], *args, **kwargs) -> None:
         super().__init__(
+            
             command_prefix=self.get_prefix,
             allowed_mentions=discord.AllowedMentions(
                 users=True, roles=False, everyone=False
@@ -135,7 +136,7 @@ class Greed(Bot):
             activity=discord.Activity(
                 type=discord.ActivityType.custom,
                     name=" ",
-                    state="🔗greed.wtf",
+                    state="🔗 /greedbot",
             ),
             strip_after_prefix=True,
             intents=config["intents"],
@@ -165,14 +166,14 @@ class Greed(Bot):
         self.rival = RivalAPI(self)
         self.snipes = Snipe(self)
         self.avatar_limit = 50
-        self.color = 0x9eafbf
+        self.color = 0x2f4672
         self.afks = {}
         self.command_dict = None
         self._closing_task = None
         self.transformers = Transformers(self)
         self.process = Process(os.getpid())
-        self.domain = "https://greed.wtf"
-        self.support_server = "https://discord.gg/pomice"
+        self.domain = "https://greed.rocks"
+        self.support_server = "https://discord.gg/greedbot"
         self.author_only_message = "**only the `author` can use this**"
         self.cache = NonRetardedCache(self)
         self.http.iterate_local_addresses = False
@@ -370,6 +371,7 @@ class Greed(Bot):
         ) as params:
             data = await state.http.send_message(channel_id, params=params, **kwargs)
 
+        channel = self.get_channel(channel_id)
         ret = state.create_message(channel=channel, data=data)
         if view and not view.is_finished():
             state.store_view(view, ret.id)
@@ -757,63 +759,7 @@ class Greed(Bot):
                 await ctx.fail(f"you have one of the following roles {mention} and cannot use this command")
                 return False
 
-        retry_after = None
-        if ctx.command.qualified_name == "reset":
-            if retry_after := await ctx.bot.glory_cache.ratelimited(
-                f"rl:user_commands{ctx.author.id}", 2, 4
-            ):
-                if retry_after:
-                    raise commands.CommandOnCooldown(None, retry_after, None)
             return True
-
-        if not await self.db.fetchval(
-            """SELECT state FROM terms_agreement WHERE user_id = $1""", ctx.author.id
-        ):
-            message = None
-            try:
-                view = PrivacyConfirmation(self, ctx.author)
-                message = await ctx.send(
-                    embed=discord.Embed(
-                        description=f"{self.user.name} bot will store your data (user ids / guild ids to work correctly) **By continuing to use our services**, you agree to our **[policy]({self.domain}/tos)**"
-                    ),
-                    view=view
-                )
-                await view.wait()                
-                state = bool(view.value)                
-                await self.db.execute(
-                    """INSERT INTO terms_agreement (user_id, state) VALUES ($1, $2) 
-                       ON CONFLICT (user_id) DO UPDATE SET state = $2;""",
-                    ctx.author.id,
-                    state,
-                )
-
-                if not state:
-                    decline_embed = discord.Embed(
-                        description=f"> {ctx.author.mention} has **declined our privacy policy** and as a result you have been **blacklisted from using any {self.user.name} command or feature**. Feel free to accept our [**policy**]({self.domain}/tos) using `{ctx.prefix}reset`",
-                        color=self.color,
-                    )
-                    
-                    try:
-                        if message:
-                            await message.edit(embed=decline_embed, view=None)
-                        else:
-                            await ctx.send(embed=decline_embed)
-                    except discord.NotFound:
-                        await ctx.send(embed=decline_embed)
-                    return False
-                else:
-                    result = True
-                    with suppress(discord.NotFound, discord.HTTPException):
-                        if message:
-                            await message.delete()
-                    return result
-                    
-            except Exception as e:
-                logger.error(f"Privacy confirmation error: {str(e)}")
-                if message:
-                    with suppress(discord.NotFound, discord.HTTPException):
-                        await message.delete()
-                return False
 
         data = await self.db.fetchrow(
             """SELECT command, channels FROM disabled_commands WHERE guild_id = $1 AND command = $2""",
@@ -981,13 +927,14 @@ class Greed(Bot):
             await self.runner.start()
             self.loaded = True
         #await self.check_guilds()
+        await self.load_extension("tool.important.subclasses.web")
         log.info("Loaded all cogs")
 
     async def load_cog(self, cog: str):
         try:
             await self.load_extension(f"cogs.{cog}")
         except Exception:
-            traceback.print_exc()
+            traceback.logger.info_exc()
 
     @lock("fetch_message:{channel.id}")
     @ratelimit("rl:fetch_message:{channel.id}", 2, 5, True)
@@ -1002,7 +949,7 @@ class Greed(Bot):
         return message
 
     async def setup_dask(self):
-        self.dask = await start_dask(self, "127.0.0.1:8787")
+        self.dask = await start_dask("greed", "127.0.0.1:8787")
         await self.setup_emojis()
 
     async def setup_hook(self) -> None:
@@ -1028,7 +975,6 @@ class Greed(Bot):
         os.environ["JISHAKU_NO_UNDERSCORE"] = "True"
         os.environ["JISHAKU_RETAIN"] = "True"
         await self.load_extension("jishaku")
-        await self.load_extension("tool.important.subclasses.web")
 
     async def create_embed(self, code: str, **kwargs):
         builder = Script(code, **kwargs)
@@ -1188,7 +1134,7 @@ class Greed(Bot):
                         f"https://discord.gg/{invite_link.code}",
                     )
             return await ctx.normal(
-                f"[**Guild Prefix**]({invite_link}) is set to ``{server_prefix or ','}``\nYour **Selfprefix** is set to `{user_prefix}`"
+                f"<:info:1336901763235581992> **Greed prefix** is  `{server_prefix or ','}`\n-# <:line:1336409552786161724> selfprefix is set to **{user_prefix}**"
             )
         await self.process_commands(message)
 
@@ -1202,10 +1148,10 @@ class Greed(Bot):
             if channel.permissions_for(guild.me).send_messages is True
         ]
 
-        if len(channels) == 0:
+        if len(channels) < 5:
             try:
                 return await guild.owner.send(embed = discord.Embed(
-                    description="> Left due to the guild not having over **10 members**",
+                    description="> Left due to the guild not having over **5 members**",
                     color=self.color,
                 ))
             except Exception:
@@ -1213,7 +1159,7 @@ class Greed(Bot):
         try:
             return await channels[0].send(
                 embed=discord.Embed(
-                    description="> Left due to the guild not having over **10 members**",
+                    description="> Left due to the guild not having over **5 members**",
                     color=self.color,
                 )
             )
@@ -1275,7 +1221,7 @@ class Greed(Bot):
         if guild == self.get_guild(1305757833064611860):
             return         
             
-        if len(guild.members) < 1:
+        if len(guild.members) < 3:
             # if len(guild.members) < 75:
             #     if owner := guild.owner:
             #         try:
@@ -1316,7 +1262,7 @@ class Greed(Bot):
         self,
         ctx: Context, 
         member: Union[discord.Member, discord.User],
-        author: bool = False,
+        allow_self: bool = False,
     ) -> bool:
 
         bot_member = ctx.guild.me
@@ -1330,7 +1276,7 @@ class Greed(Bot):
             return False
 
         if author.id == member.id:
-            if not author:
+            if not allow_self:
                 await ctx.warning("You cannot use this command on yourself") 
                 return False
             return True
