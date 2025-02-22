@@ -633,53 +633,78 @@ class Events(commands.Cog):
                 p.append(t)
         return p
 
-    async def do_autoresponse(self, trigger: str, message: discord.Message):
-        if await self.bot.glory_cache.ratelimited(f"ar:{message.guild.id}:{trigger}", 1, 1) == 0:
-            if (
-                await self.bot.glory_cache.ratelimited(
-                    f"ar:{message.guild.id}:{trigger}", 2, 4
-                )
-                != 0
-            ):
+    async def check_message(self, message: discord.Message):
+        """Check message for autoresponses with improved efficiency"""
+        if await self.bot.glory_cache.ratelimited(f"check_msg:{message.guild.id}", 1, 1) != 0:
+            return
+
+        try:
+            data = self.bot.cache.autoresponders.get(message.guild.id)
+            if not data:
                 return
+
+            content = message.content.lower()
+            for trigger, response in data.items():
+                # Skip empty triggers
+                if not trigger or not response:
+                    continue
+
+                trigger = trigger.lower()
+                matched = False
+
+                # Check for wildcard matches first
+                if trigger.endswith("*"):
+                    base = trigger.strip("*")
+                    if base in content:
+                        matched = True
+                # Then check for exact/word boundary matches
+                else:
+                    trigger = trigger.strip()
+                    if (
+                        content.startswith(f"{trigger} ") or
+                        content == trigger or
+                        f" {trigger} " in content or
+                        content.endswith(f" {trigger}") or
+                        trigger in content.split()
+                    ):
+                        matched = True
+
+                if matched:
+                    await self.do_autoresponse(trigger, message)
+                    break  # Stop after first match
+
+        except Exception as e:
+            logger.error(f"Error in check_message: {e}")
+
+    async def do_autoresponse(self, trigger: str, message: discord.Message):
+        """Handle autoresponse with improved rate limiting"""
+        # Check channel-specific rate limit
+        if await self.bot.glory_cache.ratelimited(f"ar:{message.channel.id}:{trigger}", 1, 1) != 0:
+            return
+        
+        # Check guild-wide rate limit
+        if await self.bot.glory_cache.ratelimited(f"ar:{message.guild.id}:{trigger}", 2, 4) != 0:
+            return
+
+        try:
             response = self.bot.cache.autoresponders[message.guild.id][trigger]
-            if response.lower().startswith(
-                "{embed}"
-            ):  # if any(var in response.lower() for var in variables):
-                # Do something if any of the variables are found in the message content
-                return await self.bot.send_embed(
-                    message.channel, response, user=message.author, guild=message.guild
+            
+            if response.lower().startswith("{embed}"):
+                await self.bot.send_embed(
+                    message.channel, 
+                    response, 
+                    user=message.author, 
+                    guild=message.guild
                 )
             else:
-                return await message.channel.send(response)
-
-    async def check_message(self, message: discord.Message):
-        if await self.bot.glory_cache.ratelimited(f"check_msg:{message.guild.id}", 1, 1) == 0:
-            if data := self.bot.cache.autoresponders.get(message.guild.id):
-                for trigger, response in data.items():  # type: ignore
-                    if trigger.endswith("*"):
-                        if trigger.strip("*").lower() in message.content.lower():
-                            await self.do_autoresponse(trigger, message)
-                    else:
-                        trigger = trigger.strip()
-                        content = message.content
-                        if (
-                            content.lower().startswith(f"{trigger.lower()} ")
-                            or content.lower() == trigger.lower()
-                        ):
-                            return await self.do_autoresponse(trigger, message)
-                        if (
-                            f"{trigger.lower()} " in content.lower()
-                            or f" {trigger.lower()}" in content.lower()
-                        ):
-                            return await self.do_autoresponse(trigger, message)
-                        if (
-                            trigger.lower() in content.lower().split()
-                            or f"{trigger.lower()} " in content.lower()
-                            or content.lower().startswith(f"{trigger.lower()} ")
-                            or content.lower().endswith(f" {trigger.lower()}")
-                        ):
-                            await self.do_autoresponse(trigger, message)
+                await message.channel.send(
+                    response,
+                    allowed_mentions=discord.AllowedMentions(
+                        users=True,
+                    )
+                )
+        except Exception as e:
+            logger.error(f"Error in do_autoresponse: {e}")
 
     @commands.Cog.listener("on_message")
     async def autoresponder_event(self, message: discord.Message):
@@ -692,10 +717,65 @@ class Events(commands.Cog):
                 return
         except discord.errors.ClientException:
             pass
-        ctx = await self.bot.get_context(message)
-        if ctx.valid:
+
+        # Handle both autoresponses and autoreacts
+        await asyncio.gather(
+            self.check_message(message),  # Autoresponses
+            self.handle_autoreacts(message)  # Autoreacts
+        )
+
+    async def handle_autoreacts(self, message: discord.Message):
+        """Handle automatic reactions to messages"""
+        if not self.bot.cache.autoreacts.get(message.guild.id):
             return
-        await self.check_message(message)
+
+        try:
+            # Handle keyword-based reactions
+            keywords_covered = []
+            for keyword, reactions in self.bot.cache.autoreacts[message.guild.id].items():
+                if keyword not in ["spoilers", "images", "emojis", "stickers"]:
+                    if keyword.lower() in message.content.lower():
+                        if await self.bot.glory_cache.ratelimited(f"autoreact:{message.guild.id}:{keyword}", 1, 2):
+                            continue
+                        await self.add_reaction(message, reactions)
+                        keywords_covered.append(keyword)
+
+            # Handle event-based reactions
+            event_types = await self.get_event_types(message)
+            if not event_types:
+                return
+
+            tasks = []
+            for event_type in event_types:
+                if event_type == "images" and any(
+                    attachment.content_type and attachment.content_type.startswith(("image/", "video/"))
+                    for attachment in message.attachments
+                ):
+                    tasks.append(self.add_event_reaction(message, "images"))
+                
+                elif event_type == "spoilers" and message.content.count("||") >= 2:
+                    tasks.append(self.add_event_reaction(message, "spoilers"))
+                
+                elif event_type == "emojis" and find_emojis(message.content):
+                    tasks.append(self.add_event_reaction(message, "emojis"))
+                
+                elif event_type == "stickers" and message.stickers:
+                    tasks.append(self.add_event_reaction(message, "stickers"))
+
+            if tasks:
+                await asyncio.gather(*tasks)
+
+        except Exception as e:
+            logger.error(f"Error in handle_autoreacts: {e}")
+
+    async def add_event_reaction(self, message: discord.Message, event_type: str):
+        """Add reactions for specific event types with rate limiting"""
+        if await self.bot.glory_cache.ratelimited(f"autoreact:{message.guild.id}:{event_type}", 1, 2):
+            return
+        
+        reactions = self.bot.cache.autoreacts[message.guild.id].get(event_type)
+        if reactions:
+            await self.add_reaction(message, reactions)
 
     async def do_afk(
         self, message: discord.Message, context: commands.Context, afk_data: Any
@@ -811,25 +891,122 @@ class Events(commands.Cog):
             return True
         return False
 
-    async def add_reaction(
-        self, message: discord.Message, reactions: list | str | bytes
-    ):
-        if message.author.name == "aiohttp":
-            logger.info(reactions)
-            # else:
-        # if isinstance(reactions, list):
-        # reactions = [(b64decode(reaction.encode()).decode() if len(tuple(reaction)) > 1 else reaction) for reaction in reaction]
-        if isinstance(reactions, list):
-            pass
-        else:
-            reactions = [reactions]
-            # reactions = [(b64decode(reaction.encode()).decode() if len(tuple(reaction)) > 1 else reaction) for reaction in reactions]
-        for reaction in reactions:
-            try:
-                await message.add_reaction(reaction)
-            except Exception:
-                pass
-        return
+    async def add_reaction(self, message: discord.Message, reactions: list | str | bytes):
+        """Add reactions with validation and cleanup."""
+        try:
+            if isinstance(reactions, (str, bytes)):
+                reactions = [reactions]
+                
+            for reaction in reactions:
+                try:
+                    if await self.bot.glory_cache.ratelimited(f"reaction:{message.channel.id}", 1, 2):
+                        await asyncio.sleep(1)
+                        
+                    # Validate reaction before adding
+                    if not await self.validate_reaction(reaction):
+                        # Schedule cleanup if invalid
+                        asyncio.create_task(self.clean_invalid_reactions(message.guild.id))
+                        continue
+                        
+                    await message.add_reaction(reaction)
+                    await asyncio.sleep(0.2)
+                    
+                except discord.NotFound:
+                    break  # Message was deleted
+                except discord.Forbidden:
+                    break  # No permission
+                except Exception as e:
+                    logger.error(f"Error adding reaction {reaction}: {e}")
+                    # Schedule cleanup on error
+                    asyncio.create_task(self.clean_invalid_reactions(message.guild.id))
+                    continue
+
+        except Exception as e:
+            logger.error(f"Error in add_reaction: {e}")
+
+    async def validate_reaction(self, reaction: str) -> bool:
+        """Validate if a reaction emoji is valid and available."""
+        try:
+            # Handle custom emoji format
+            if reaction.startswith('<') and reaction.endswith('>'):
+                # Extract emoji ID
+                emoji_id = int(reaction.split(':')[-1].rstrip('>'))
+                try:
+                    # Try to fetch the emoji
+                    await self.bot.fetch_emoji(emoji_id)
+                    return True
+                except (discord.NotFound, discord.HTTPException):
+                    return False
+            
+            # Handle unicode emoji
+            if reaction.strip():  # Ensure not empty/whitespace
+                try:
+                    # Try to encode/decode to validate unicode emoji
+                    reaction.encode('utf-8').decode('utf-8')
+                    return True
+                except UnicodeError:
+                    return False
+                    
+            return False
+        except Exception:
+            return False
+
+    async def clean_invalid_reactions(self, guild_id: int) -> None:
+        """Remove invalid reactions from the database."""
+        try:
+            # Get all autoreact data for the guild
+            autoreacts = self.bot.cache.autoreacts.get(guild_id, {})
+            if not autoreacts:
+                return
+
+            invalid_keywords = []
+            updates = []
+
+            for keyword, reactions in autoreacts.items():
+                if not isinstance(reactions, (list, tuple)):
+                    continue
+                    
+                valid_reactions = []
+                for reaction in reactions:
+                    if await self.validate_reaction(reaction):
+                        valid_reactions.append(reaction)
+                    else:
+                        logger.info(f"Removing invalid reaction {reaction} for keyword {keyword} in guild {guild_id}")
+
+                if not valid_reactions and keyword not in ["spoilers", "images", "emojis", "stickers"]:
+                    invalid_keywords.append(keyword)
+                elif valid_reactions != reactions:
+                    updates.append((keyword, valid_reactions))
+
+            # Remove entries with no valid reactions
+            if invalid_keywords:
+                await self.bot.db.execute(
+                    """
+                    DELETE FROM autoreact 
+                    WHERE guild_id = $1 AND keyword = ANY($2)
+                    """,
+                    guild_id, invalid_keywords
+                )
+
+            # Update entries with filtered valid reactions
+            for keyword, valid_reactions in updates:
+                await self.bot.db.execute(
+                    """
+                    UPDATE autoreact 
+                    SET reaction = $1 
+                    WHERE guild_id = $2 AND keyword = $3
+                    """,
+                    valid_reactions, guild_id, keyword
+                )
+
+            # Update cache
+            for keyword in invalid_keywords:
+                self.bot.cache.autoreacts[guild_id].pop(keyword, None)
+            for keyword, valid_reactions in updates:
+                self.bot.cache.autoreacts[guild_id][keyword] = valid_reactions
+
+        except Exception as e:
+            logger.error(f"Error cleaning invalid reactions for guild {guild_id}: {e}")
 
     # def uwu_catgirl_mode(self, text: str):
     #     # Define emotive faces and replacements

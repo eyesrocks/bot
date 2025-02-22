@@ -2855,6 +2855,7 @@ class Moderation(Cog):
     @commands.bot_has_permissions(manage_messages=True)
     @commands.has_permissions(manage_messages=True)
     async def botclear(self, ctx: Context, amount: int = 100):
+        await ctx.message.delete()
         return await self.cleanup_bot_messages(ctx, amount)
 
     @commands.group(

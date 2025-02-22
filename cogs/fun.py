@@ -1385,10 +1385,9 @@ class Fun(commands.Cog):
 
             # Select a random message
             messages = [
-                "The FitnessGram Pacer Test is a multistage aerobic capacity test that progressively gets more difficult as it continues. ",
+                "Sometimes its okay to not be yourself.",
                 "Damn, that's a lot of racism in one area.",
                 "Even cavemen have more of a dignity than you do.",
-                "You might wanna lawyer up.",
                 "Once you go black you never go back i guess.",
                 "I didn't know white people had the balls to say it",
                 "Your future employers are watching it's over for you.",
@@ -1401,7 +1400,7 @@ class Fun(commands.Cog):
             embed = discord.Embed(
                 description=(
                     f"{ctx.author.mention} has said the n-word **{general_count}** times\n"
-                    f"The **Hard R** was present **{hard_r_count}** times\n"
+                    f"{ctx.author.mention} has also said the forbidden word **{hard_r_count}** times\n"
                     f"{random_message}"
                 ),
                 color=self.bot.color

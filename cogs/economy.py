@@ -1185,6 +1185,7 @@ class Economy(commands.Cog):
         brief="Show your wallet, bank, lab earnings, and rank on the leaderboard",
         example=",balance",
     )
+    @commands.cooldown(2, 15, commands.BucketType.guild)
     async def balance(self, ctx: commands.Context, member: discord.Member = None):
         """Shows the user's balance, bank, lab earnings, and rank."""
         member = member or ctx.author
@@ -1284,6 +1285,7 @@ class Economy(commands.Cog):
         example=",withdraw 200",
     )
     @account()
+    @commands.cooldown(1, 30, commands.BucketType.user)
     async def withdraw(self, ctx: Context, amount: BankAmount):
         if str(amount).startswith("-"):
             return await ctx.warning("You **Cannot use negatives**")
@@ -1479,7 +1481,7 @@ class Economy(commands.Cog):
         brief="Roll against the bot. If you roll higher, you win!",
         example=",gamble 500",
     )
-    @commands.cooldown(1, 15, commands.BucketType.user)  # 7-second cooldown per user
+    @commands.cooldown(1, 30, commands.BucketType.user)
     async def gamble(self, ctx: commands.Context, amount: GambleAmount):
         """User rolls a number against the bot. If the user rolls higher, they win."""
         
@@ -1994,7 +1996,7 @@ class Economy(commands.Cog):
         brief="Earn some money by working random jobs.",
         example=",work"
     )
-    @commands.cooldown(1, 5, commands.BucketType.user)  # Cooldown of 30 seconds per user
+    @commands.cooldown(1, 30, commands.BucketType.user)
     async def work(self, ctx):
         """Command to simulate working a random job and earning money."""
 

@@ -1891,34 +1891,11 @@ class Information(commands.Cog):
 
         await ctx.send(embed=embed, view=view)
 
-    @commands.command()
-    async def donate(self, ctx):
-        """Send an embed with purchase options and buttons."""
-        
-        # Create the embed
-        embed = discord.Embed(
-            title="Donate Here",
-            description=(
-                "Purchase donator here and gain access to exclusive commands.\n"
-                "Along with also being able to whitelist wrath in 2 servers instead of 1\n"
-                "Please do not ask to pay with Discord Nitro, or to negotiate the price. "
-            ),
-            color=self.bot.color,
-        )
 
-
-        donate_button = Button(label="Donate $10", style=discord.ButtonStyle.green, url="https://buy.stripe.com/3csaIx2xWfcXaGI7sY")
-
-
-        view = View()
-        view.add_item(donate_button)
-
-
-        await ctx.send(embed=embed, view=view)
 
 
     @commands.command()
-    async def wrath(self, ctx):
+    async def buy(self, ctx):
         """Send an embed with purchase options and buttons."""
         
         # Create the embed
@@ -1937,7 +1914,7 @@ class Information(commands.Cog):
 
 
         monthly_button = Button(label="Monthly - $3.50", style=discord.ButtonStyle.green, url="https://buy.stripe.com/aEUdUJc8w3uf6qsfZ7")
-        lifetime_button = Button(label="Lifetime - $10", style=discord.ButtonStyle.blurple, url="https://buy.stripe.com/dR6bMBa0ogh1dSUaEE")
+        lifetime_button = Button(label="Lifetime - $10", style=discord.ButtonStyle.blurple, url="https://buy.stripe.com/3cseYN7Sg4yj3eg3cL")
         transfer_button = Button(label="Transfers - $3", style=discord.ButtonStyle.blurple, url="https://buy.stripe.com/cN29Et0pOd4P3eg4gu")
 
 

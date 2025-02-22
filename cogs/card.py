@@ -86,6 +86,7 @@ class Card(commands.Cog):
 
 
     @commands.command(name="usercard")
+    @commands.is_owner()
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def user_card(self, ctx, member: discord.Member = None):
         """Generates and displays a user card with avatar, status, and banner."""

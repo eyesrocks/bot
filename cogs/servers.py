@@ -1951,7 +1951,7 @@ class Servers(Cog):
         log.info(emojis)
         msg = None
         remaining = ctx.guild.emoji_limit - len(ctx.guild.emojis)
-        e = emojis[:remaining]
+        e = emojis[:remaining] if isinstance(emojis, list) else [emojis]  # Handle single emoji case
         log.info(f"{e} {remaining}")
         for emoji in e:
             await sleep(0.001)
@@ -1976,7 +1976,7 @@ class Servers(Cog):
             str(emoji) for emoji in created_emojis
         )  # Concatenate created emojis
 
-        if len(created_emojis) != len(emojis):
+        if len(created_emojis) != len(e):
             return await ctx.success(f"**Could only create** {created_emoji_str}")
         if msg is not None:
             return await msg.edit(

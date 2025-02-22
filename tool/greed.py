@@ -598,28 +598,53 @@ class Greed(Bot):
 
     async def get_channels(self, channel_id: int) -> list[discord.TextChannel]:
         """Get channels from all clusters via IPC and return valid TextChannel objects"""
+        if not isinstance(channel_id, int):
+            raise TypeError(f"channel_id must be int, not {type(channel_id)}")
+        
         channels = []
         try:
             responses = await self.ipc.roundtrip("get_channel", channel_id=channel_id)
+            
+            # Log the raw responses for debugging
+            logger.debug(f"Got channel responses: {responses}")
+            
             if not responses:
+                logger.debug(f"No responses for channel {channel_id}")
                 return channels
                 
             for channel_data in responses:
-                if not channel_data:
-                    continue
-                    
-                if isinstance(channel_data, dict):
-                    guild = self.get_guild(channel_data.get('guild_id'))
-                    if guild:
+                try:
+                    if not channel_data:
+                        logger.debug(f"Empty channel data in response")
+                        continue
+                        
+                    if isinstance(channel_data, dict):
+                        guild_id = channel_data.get('guild_id')
+                        guild = self.get_guild(guild_id)
+                        
+                        if not guild:
+                            logger.debug(f"Could not find guild {guild_id}")
+                            continue
+                            
                         channel = guild.get_channel(channel_data.get('id'))
                         if isinstance(channel, discord.TextChannel):
                             channels.append(channel)
-                elif isinstance(channel_data, discord.TextChannel):
-                    channels.append(channel_data)
-                    
+                        else:
+                            logger.debug(f"Channel {channel_data.get('id')} is not TextChannel: {type(channel)}")
+                            
+                    elif isinstance(channel_data, discord.TextChannel):
+                        channels.append(channel_data)
+                    else:
+                        logger.debug(f"Unexpected channel data type: {type(channel_data)}")
+                        
+                except Exception as e:
+                    logger.error(f"Error processing channel data {channel_data}: {e}")
+                    continue
+                
         except Exception as e:
             logger.error(f"Failed to get channels from IPC: {e}")
-            
+            raise  # Re-raise to handle at higher level
+        
         return channels
 
     @property
@@ -795,15 +820,22 @@ class Greed(Bot):
         return True
 
     async def get_statistics(self, force: bool = False) -> Statistics:
-        if not hasattr(self, "stats"):
-            self.stats = await get_stats(self)
-        if force is True:
-            self.stats = await get_stats(self)
-        stats = self.stats.copy()
-        stats["uptime"] = str(discord.utils.format_dt(self.startup_time, style="R"))
-        _ = Statistics(**stats)
-        del stats
-        return _
+        try:
+            if not hasattr(self, "stats") or force:
+                self.stats = await asyncio.wait_for(
+                    get_stats(self),
+                    timeout=5.0  # 5 second timeout
+                )
+            stats = self.stats.copy()
+            stats["uptime"] = str(discord.utils.format_dt(self.startup_time, style="R"))
+            return Statistics(**stats)
+        
+        except asyncio.TimeoutError:
+            logger.error("Timeout getting statistics")
+            raise
+        except Exception as e:
+            logger.error(f"Error getting statistics: {e}")
+            raise
 
     async def paginate(
         self, ctx: Context, embed: discord.Embed, rows: list, per_page: int = 10
@@ -1327,3 +1359,25 @@ class Greed(Bot):
         await self.redis.expire(key, 10)
         
         return False, 0
+
+    async def check_guild_count(self) -> int:
+        """Get total guild count across all clusters"""
+        try:
+            counts = await self.ipc.roundtrip("get_guild_count")
+            if not counts:
+                logger.warning("Received no guild counts from clusters")
+                return 0
+            
+            # Filter out None values and log them
+            valid_counts = []
+            for i, count in enumerate(counts):
+                if count is None:
+                    logger.warning(f"Cluster {i} returned None for guild count")
+                else:
+                    valid_counts.append(count)
+                
+            return sum(valid_counts)
+        
+        except Exception as e:
+            logger.error(f"Failed to get guild counts: {e}")
+            return 0

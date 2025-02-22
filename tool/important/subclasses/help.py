@@ -213,7 +213,7 @@ class HelpView(discord.ui.View):
 class MyHelpCommand(commands.HelpCommand):
     async def send_bot_help(self, mapping: Optional[Mapping[str, commands.Command]]):
         if retry_after := await self.context.bot.glory_cache.ratelimited(f"rl:help:{self.context.author.id}", 1, 5):
-            raise commands.CommandOnCooldown(None, retry_after, None)
+            raise commands.CommandOnCooldown(commands.BucketType.user, retry_after, 1)
 
         embed = discord.Embed(
             title="Menu",
@@ -236,13 +236,15 @@ class MyHelpCommand(commands.HelpCommand):
 
     async def send_group_help(self, group):
         if retry_after := await self.context.bot.glory_cache.ratelimited(f"rl:ghelp:{self.context.author.id}", 1, 5):
-            raise commands.CommandOnCooldown(None, retry_after, None)
+            raise commands.CommandOnCooldown(commands.BucketType.user, retry_after, 1)
+        
         embed = Embed(color=0x9eafbf, timestamp=datetime.datetime.now())
         ctx = self.context
-        commands = [c for c in group.walk_commands()] + [group]
-        commands = [c for c in commands if check_command(c)]
+        group_commands = [c for c in group.walk_commands()] + [group]
+        group_commands = [c for c in group_commands if check_command(c)]
         embeds = {}
-        for i, command in enumerate(commands, start=1):
+        
+        for i, command in enumerate(group_commands, start=1):
             embed = Embed(color=0x9eafbf, timestamp=datetime.datetime.now())
             brief = command.brief or generate(ctx, command)
             params = ", ".join(f"{c}" for c in command.clean_params.keys()).replace("_", ", ")
@@ -265,7 +267,7 @@ class MyHelpCommand(commands.HelpCommand):
                         d.append(f" ```ruby\n{flag_name.title()}: {f}{flag_value} {m}```")
                 embed.add_field(name="Flags", value="".join(f"{_}\n" for _ in d), inline=True)
             aliases = ", ".join(f"{a}" for a in command.aliases) or "N/A"
-            embed.set_footer(text=f"Aliases: {aliases}・Module: {command.cog_name.replace('.py','')}・{i}/{len(commands)}")
+            embed.set_footer(text=f"Aliases: {aliases}・Module: {command.cog_name.replace('.py','')}・{i}/{len(group_commands)}")
             embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
             embeds[command.qualified_name] = {"embed": embed, "name": command.qualified_name, "description": command.brief}
         

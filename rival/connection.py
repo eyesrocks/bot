@@ -244,9 +244,21 @@ class Connection:
                 uuid=_uuid
             )
 
+            # Register the listener before sending the message
+            future = asyncio.get_event_loop().create_future()
+            self.listeners[_uuid] = future
+
             await self.send_message(payload)
-            recv = await self.__get_response(_uuid, asyncio.get_event_loop(), timeout=timeout)
-            return recv
+            try:
+                recv = await asyncio.wait_for(future, timeout=timeout)
+                return recv
+            except asyncio.TimeoutError:
+                logger.warning(f"Request timed out for UUID {_uuid}")
+                raise
+            finally:
+                # Only remove the listener if we got a response or timed out
+                if _uuid in self.listeners:
+                    self.listeners.pop(_uuid)
 
         else:
             await self.start()
@@ -443,6 +455,8 @@ class Connection:
         payload = MessagePayload().from_message(message)
         payload.type = Payloads.response
         payload.id = self.local_name
+        payload.destination = message.id  # Send back to original requester
+        payload.uuid = message.uuid  # Keep the same UUID
 
         try:
             payload.data = await func(message.destination, **data)
@@ -481,17 +495,20 @@ class Connection:
         _uuid = msg.uuid
         if _uuid is None:
             raise MissingUUIDError('UUID is missing.')
-        if _uuid not in self.listeners:
-            raise UUIDNotFoundError(f"UUID {_uuid} not found in listeners.")
-
-        future: asyncio.Future = self.listeners[_uuid]
-        if not msg.type.error:
-            if msg.pseudo_object:
-                future.set_result(responseObject(self, msg.id, data))
+        
+        try:
+            future: asyncio.Future = self.listeners[_uuid]
+            if not msg.type.error:
+                if msg.pseudo_object:
+                    future.set_result(responseObject(self, msg.id, data))
+                else:
+                    future.set_result(data)
             else:
-                future.set_result(data)
-        else:
-            future.set_exception(
-                ClientRuntimeError(msg.data)
-            )
-        del self.listeners[_uuid]
+                future.set_exception(
+                    ClientRuntimeError(msg.data)
+                )
+        except KeyError:
+            # Log the issue but don't raise an error
+            logger.warning(f"Received response for UUID {_uuid} but no listener found. Message type: {msg.type}")
+            logger.debug(f"Current listeners: {list(self.listeners.keys())}")
+            return
