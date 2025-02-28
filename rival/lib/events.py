@@ -93,7 +93,7 @@ class Events:
             await coro(*args, **kwargs)
         except Exception:
             # TODO
-            traceback.logger.info_exc()
+            self._logger.error(f"Error in event: {traceback.format_exc()}")
 
     def event(self, func: Coroutine, /) -> Coroutine:
         """

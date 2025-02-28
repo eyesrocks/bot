@@ -651,7 +651,7 @@ class Context(commands.Context):
             return None
 
     async def success(self, text, **kwargs):
-        emoji = "<:check:1336689145216766015>"
+        emoji = "<:yes:1342777287615057931>"
         if config := await self.bot.db.fetchrow(
             """SELECT success_emoji, success_color FROM context WHERE guild_id = $1""",
             self.guild.id,
@@ -661,9 +661,9 @@ class Context(commands.Context):
             if config.get("success_color"):
                 color = discord.Color.from_str(config["success_color"])
             else:
-                color = 0x2f4672
+                color = 0x42B37F
         else:
-            color = 0x2f4672
+            color = 0x42B37F
 
         embed = discord.Embed(
             color=color, description=f"{emoji} {self.author.mention}: {text}"
@@ -788,7 +788,7 @@ class Context(commands.Context):
         return sum([1 for e in self.guild.emojis if e.animated])
 
     async def fail(self, text, **kwargs):
-        emoji = ""
+        emoji = "<:nope:1342777327964131348>"
         if config := await self.bot.db.fetchrow(
             """SELECT fail_emoji, fail_color FROM context WHERE guild_id = $1""",
             self.guild.id,
@@ -801,7 +801,6 @@ class Context(commands.Context):
                 color = 0xa00000
         else:
             color = 0xa00000
-            emoji = EMOJIS["UB_X_Icon"]
         embed = discord.Embed(
             color=color, description=f"{emoji} {self.author.mention}: {text}"
         )
@@ -862,8 +861,11 @@ class Context(commands.Context):
     # misc
 
     async def send(self, *args, **kwargs):
-        if isinstance(self.channel, discord.TextChannel) and not self.channel.permissions_for(self.guild.me).send_messages:
-            return
+        if isinstance(self.channel, discord.TextChannel):
+            if not self.guild or not self.guild.me:
+                return
+            if not self.channel.permissions_for(self.guild.me).send_messages:
+                return
         reskin = await self.reskin()
         if reskin:
             webhook = reskin["webhook"]
@@ -997,7 +999,7 @@ class Context(commands.Context):
 
     async def confirm(self, text: str, timeout: int = 60) -> bool:
         con = Confirm(self, timeout=timeout)
-        msg = await self.send(text, view=con)
+        msg = await self.send(embed=discord.Embed(description="> " + text), view=con)
         
         await con.wait()
         with contextlib.suppress(discord.NotFound):

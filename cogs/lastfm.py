@@ -16,43 +16,101 @@ from tool.emotes import EMOJIS
 from PIL import ImageDraw, ImageFont
 from tool.worker import offloaded
 import requests
+from PIL import ImageOps
 
 @offloaded
 def generate_collage(track_info):
-    size = 300  # Size of each image in the collage
-    collage_size = 900  # 3x3 collage grid (9 images)
+    size = 300
+    collage_size = 900
+    padding = 2
+    text_height = 20
     
-    collage = Image.new("RGB", (collage_size, collage_size))
-    draw = ImageDraw.Draw(collage)
+    total_size = collage_size + padding * 4
+    collage = Image.new("RGB", (total_size, total_size), color="black")
     
     try:
         font = ImageFont.truetype("arial.ttf", 15)
     except:
-        font = ImageFont.load_default()
+        try:
+            font_paths = ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"]  # Linux
+            for font_path in font_paths:
+                try:
+                    font = ImageFont.truetype(font_path, 15)
+                    break
+                except:
+                    continue
+        except:
+            font = ImageFont.load_default()
 
     with requests.Session() as session:
         for i, info in enumerate(track_info):
-            response = session.get(info['url'])
-            if response.status_code == 200:
-                image_data = BytesIO(response.content)
-                img = Image.open(image_data).resize((size, size))
-                x = (i % 3) * size
-                y = (i // 3) * size
-                collage.paste(img, (x, y))
+            try:
+                x = (i % 3) * (size + padding) + padding
+                y = (i // 3) * (size + padding) + padding
+                
+                response = session.get(info['url'], timeout=5)
+                if response.status_code == 200:
+                    try:
+                        image_data = BytesIO(response.content)
+                        img = Image.open(image_data).convert('RGB')
+                        
+                        img_w, img_h = img.size
+                        ratio = min(size/img_w, size/img_h)
+                        new_size = (int(img_w*ratio), int(img_h*ratio))
+                        
+                        img = img.resize(new_size, Image.Resampling.LANCZOS)
+                        
+                        new_img = Image.new('RGB', (size, size), 'black')
+                        paste_x = (size - new_size[0]) // 2
+                        paste_y = (size - new_size[1]) // 2
+                        new_img.paste(img, (paste_x, paste_y))
+                        
+                        collage.paste(new_img, (x, y))
+                        
+                        draw = ImageDraw.Draw(collage)
+                        text = f"{shorten(info['title'], 30)} {info['plays']}"
+                        
+                        text_width = draw.textlength(text, font=font)
+                        text_x = x + (size - text_width) / 2
+                        text_y = y + size - text_height - 5
+                        
+                        bg_padding = 6
+                        draw.rectangle(
+                            [
+                                text_x - bg_padding,
+                                text_y - bg_padding/2,
+                                text_x + text_width + bg_padding,
+                                text_y + text_height + bg_padding/2
+                            ],
+                            fill='black'
+                        )
+                        
+                        outline_color = 'black'
+                        for adj in range(-1, 2):
+                            for adj2 in range(-1, 2):
+                                draw.text((text_x+adj, text_y+adj2), text, font=font, fill=outline_color)
+                        draw.text((text_x, text_y), text, font=font, fill='white')
+                        
+                    except Exception as e:
+                        print(f"Error processing image {i}: {e}")
+                        draw = ImageDraw.Draw(collage)
+                        draw.rectangle([x, y, x+size, y+size], fill='#2F3136', outline='#202225')
+                        
+            except Exception as e:
+                print(f"Error fetching image {i}: {e}")
+                draw = ImageDraw.Draw(collage)
+                draw.rectangle([x, y, x+size, y+size], fill='#2F3136', outline='#202225')
 
-                text = f"{shorten(info['title'], 30)} {info['plays']}"
-                text_width = draw.textlength(text, font=font)
-                text_x = x + (size - text_width) / 2
-                text_y = y + size - 20
-
-                draw.rectangle([text_x-2, text_y-2, text_x+text_width+2, text_y+15],
-                    fill='black')
-                draw.text((text_x, text_y), text, fill='white', font=font)
-
-    output = BytesIO()
-    collage.save(output, format="PNG")
-    output.seek(0)
-    return output
+    try:
+        final_collage = ImageOps.expand(collage, border=2, fill='#202225')
+        
+        output = BytesIO()
+        final_collage.save(output, format="PNG", quality=95, optimize=True)
+        output.seek(0)
+        return output
+    except Exception as e:
+        print(f"Error in final processing: {e}")
+        return None
 
 
 class plural:
@@ -1265,5 +1323,217 @@ class LastFM(commands.Cog):
     async def globalwhoknows(self, ctx: Context, *, artist_name: str = None):
         return await self.lastfm_whoknows_global(ctx, artist_name=artist_name)
     
+    @lastfm.command(
+        name="taste",
+        brief="Compare your music taste with another user",
+        example=",lastfm taste @user [period]",
+    )
+    async def lastfm_taste(
+        self, 
+        ctx: Context, 
+        member: discord.Member,
+        period: str = "overall"
+    ):
+        if member.id == ctx.author.id:
+            return await ctx.fail("You cannot compare your taste with yourself")
+
+        configs = await self.bot.db.fetch(
+            """SELECT * FROM lastfm.conf WHERE user_id = any($1::bigint[])""",
+            [ctx.author.id, member.id]
+        )
+        
+        if len(configs) != 2:
+            return await ctx.fail(
+                f"{'You' if not any(c.user_id == ctx.author.id for c in configs) else member.display_name} does not have a LastFM account linked"
+            )
+
+        period_map = {
+            "7d": "7day",
+            "1m": "1month",
+            "3m": "3month",
+            "6m": "6month",
+            "1y": "12month",
+            "overall": "overall",
+            "lifetime": "overall",
+            "alltime": "overall"
+        }
+        
+        period = period_map.get(period.lower(), "overall")
+        
+        if period not in period_map.values():
+            return await ctx.fail("Invalid period. Valid options are: 7d, 1m, 3m, 6m, 1y, and overall")
+
+        async with ctx.typing():
+            tasks = [
+                self.requester.get(
+                    method="user.gettopartists",
+                    user=conf.username,
+                    period=period,
+                    limit=1000
+                ) for conf in configs
+            ]
+            
+            data = await asyncio.gather(*tasks)
+            
+            artists_data = []
+            for i, response in enumerate(data):
+                if "error" in response:
+                    return await ctx.fail(f"Failed to fetch data for {configs[i].username}")
+                
+                artists = {}
+                for artist in response["topartists"]["artist"]:
+                    artists[artist["name"]] = int(artist["playcount"])
+                artists_data.append(artists)
+
+            user1_artists = set(artists_data[0].keys())
+            user2_artists = set(artists_data[1].keys())
+            common_artists = user1_artists & user2_artists
+
+            comparisons = []
+            for artist in common_artists:
+                plays1 = artists_data[0][artist]
+                plays2 = artists_data[1][artist]
+                if plays1 > plays2:
+                    comparisons.append((artist, plays1, plays2))
+
+            comparisons.sort(key=lambda x: x[1] - x[2], reverse=True)
+
+            if not comparisons:
+                return await ctx.fail("No common artists found in the specified period")
+
+            formatted_comparisons = []
+            for artist, plays1, plays2 in comparisons[:14]:
+                name = artist[:15] + "..." if len(artist) > 15 else artist.ljust(15)
+                formatted_comparisons.append(f"{name} {plays1:,} > {plays2:,}")
+
+            description = (
+                f"You both have {len(common_artists):,} artists in common\n\n"
+                f"```\n"
+                f"{chr(10).join(formatted_comparisons)}\n"
+                f"```"
+            )
+
+            embed = discord.Embed(
+                title=f"Taste comparison - {ctx.author.display_name} v {member.display_name}",
+                description=description,
+                color=0x2B2D31
+            )
+
+            return await ctx.send(embed=embed)
+
+    @commands.command(
+        name="taste",
+        brief="Compare your music taste with another user",
+        example=",taste @user [period]"
+    )
+    async def taste(self, ctx: Context, member: discord.Member, period: str = "overall"):
+        return await self.lastfm_taste(ctx, member, period)
+
+    @lastfm.command(
+        name="milestone",
+        brief="See what track your given number scrobble was",
+        example=",lastfm milestone 1000",
+    )
+    async def lastfm_milestone(self, ctx: Context, number: int):
+        if not (
+            conf := await self.bot.db.fetchrow(
+                "SELECT * FROM lastfm.conf WHERE user_id = $1", ctx.author.id
+            )
+        ):
+            return await ctx.fail("You do **not** have a **Last.FM account linked** to link an account do ,lf set")
+
+        if number <= 0:
+            return await ctx.fail("Please provide a positive number")
+
+        # Get user info to check total scrobbles
+        user_info = await self.requester.get(method="user.getinfo", user=conf.username)
+        
+        if "error" in user_info:
+            return await ctx.fail("Failed to fetch user information")
+            
+        total_scrobbles = int(user_info["user"]["playcount"])
+        
+        if number > total_scrobbles:
+            return await ctx.fail(f"You only have {total_scrobbles:,} scrobbles in total")
+            
+        # Calculate the page and index
+        page_size = 200  # Last.fm API returns max 200 tracks per page
+        page = (total_scrobbles - number) // page_size + 1
+        index = (total_scrobbles - number) % page_size
+        
+        async with ctx.typing():
+            try:
+                # Fetch the specific page of recent tracks
+                recent_tracks = await self.requester.get(
+                    method="user.getrecenttracks",
+                    user=conf.username,
+                    limit=page_size,
+                    page=page
+                )
+                
+                if "error" in recent_tracks:
+                    return await ctx.fail("Failed to fetch track information")
+                
+                tracks = recent_tracks["recenttracks"]["track"]
+                
+                if not tracks or len(tracks) <= index:
+                    return await ctx.fail("Could not find the track for this milestone")
+                
+                milestone_track = tracks[index]
+                
+                # Get additional track info
+                track_info = await self.requester.get(
+                    method="track.getInfo",
+                    artist=milestone_track["artist"]["#text"],
+                    track=milestone_track["name"],
+                    username=conf.username
+                )
+                
+                # Create embed
+                embed = discord.Embed(
+                    title=f"Milestone #{number:,}",
+                    description=f"**[{milestone_track['name']}]({milestone_track['url']})** by **[{milestone_track['artist']['#text']}](https://www.last.fm/music/{milestone_track['artist']['#text'].replace(' ', '+')})** was your {number:,} scrobble",
+                    color=0x2B2D31
+                )
+                
+                # Add album if available
+                if "album" in milestone_track and milestone_track["album"]["#text"]:
+                    embed.add_field(
+                        name="Album",
+                        value=milestone_track["album"]["#text"],
+                        inline=True
+                    )
+                
+                # Add date if available
+                if "date" in milestone_track and milestone_track["date"]["#text"]:
+                    embed.add_field(
+                        name="Date",
+                        value=milestone_track["date"]["#text"],
+                        inline=True
+                    )
+                
+                # Add thumbnail if available
+                if milestone_track["image"] and milestone_track["image"][-1]["#text"]:
+                    embed.set_thumbnail(url=milestone_track["image"][-1]["#text"])
+                
+                # Add user info in footer
+                embed.set_footer(
+                    text=f"{conf.username} • Total Scrobbles: {total_scrobbles:,}",
+                    icon_url=ctx.author.display_avatar.url
+                )
+                
+                return await ctx.send(embed=embed)
+                
+            except Exception as e:
+                return await ctx.fail(f"An error occurred: {str(e)}")
+
+    @commands.command(
+        name="milestone",
+        brief="See what track your given number scrobble was",
+        example=",milestone 1000",
+    )
+    async def milestone(self, ctx: Context, number: int):
+        return await self.lastfm_milestone(ctx, number)
+
 async def setup(bot):
     await bot.add_cog(LastFM(bot))

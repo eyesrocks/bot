@@ -57,7 +57,7 @@ class Vanity(commands.Cog):
          
          return await ctx.success("**Vanity channel** has been unset.")
 
-    @commands.Cog.listener("on_vanity_change")
+    @commands.Cog.listener("vanity_change")
     async def notify_vanity_channels(self, vanity: str):
         if not (rows := await self.bot.db.fetch("""SELECT channel_id, message FROM vanity WHERE guild_id = ANY($1::BIGINT[])""", [g.id for g in self.bot.guilds])):
             return

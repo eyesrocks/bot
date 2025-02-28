@@ -38,6 +38,7 @@ import dns.resolver
 from base64 import b64encode
 import json
 from loguru import logger
+from cashews import cache
 
 
 def generate(img: bytes) -> bytes:
@@ -46,7 +47,6 @@ def generate(img: bytes) -> bytes:
 if typing.TYPE_CHECKING:
     from tool.greed import Greed  # type: ignore
 from pydantic import BaseModel
-from cashews import cache
 
 DEBUG = True
 cache.setup("mem://")
@@ -63,25 +63,30 @@ async def get_donator(ctx: Context, user_id: int) -> bool:
     Returns:
         bool: True if user is a donator, False otherwise
     """
-    if await ctx.bot.db.fetchrow(
-        "SELECT 1 FROM boosters WHERE user_id = $1", user_id
-    ):
-        return True
-        
     try:
-        url = f"https://top.gg/api/bots/{ctx.bot.user.id}/check?userId={user_id}"
-        headers = {
-            "Authorization": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjExNDk1MzU4MzQ3NTY4NzQyNTAiLCJib3QiOnRydWUsImlhdCI6MTczODEzODM1MH0.HQRfKRPwsZ6RlPuXWyt7pK2tEwYGgZI22_YwulNdt8I"
-        }
-        
-        async with ctx.bot.session.get(url, headers=headers, timeout=5.0) as response:
+        if await ctx.bot.db.fetchval(
+            "SELECT 1 FROM boosters WHERE user_id = $1", user_id
+        ):
+            return True
+
+        async with ctx.bot.session.get(
+            f"https://top.gg/api/bots/{ctx.bot.user.id}/check",
+            params={"userId": user_id},
+            headers={
+                "Authorization": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjExNDk1MzU4MzQ3NTY4NzQyNTAiLCJib3QiOnRydWUsImlhdCI6MTczODEzODM1MH0.HQRfKRPwsZ6RlPuXWyt7pK2tEwYGgZI22_YwulNdt8I"
+            },
+            timeout=3.0
+        ) as response:
             if response.status == 200:
                 data = await response.json()
-                return data.get("voted", 0) == 1
-                
+                if data.get("voted", 0) == 1:
+                    return True
+
+    except asyncio.TimeoutError:
+        logger.warning(f"Timeout checking top.gg vote status for user {user_id}")
     except Exception as e:
-        logger.error(f"Error checking top.gg vote status: {e}")
-        
+        logger.error(f"Error checking donator status for user {user_id}: {e}")
+
     return False
 
 
@@ -205,8 +210,9 @@ class Miscellaneous(Cog):
 
         self.file_processor = FileProcessing(self.bot)
         self.queue = defaultdict(Lock)
-    #     self.auto_destroy.start()
+        self.uwu_queue = defaultdict(list)  # New: Queue for uwu messages
         self.check_reminds.start()
+        self.process_uwu_queue.start()  # New: Start the uwu queue processor
         
 
     async def cog_load(self):
@@ -222,6 +228,7 @@ class Miscellaneous(Cog):
 
     def cog_unload(self):
         self.check_reminds.cancel()
+        self.process_uwu_queue.cancel()
 
     # @tasks.loop(minutes = 10)
     # async def auto_destroy(self):
@@ -384,12 +391,54 @@ class Miscellaneous(Cog):
             else:
                 await channel.send(message)
 
+    @tasks.loop(seconds=3)
+    async def process_uwu_queue(self):
+        """Process queued uwu messages every 3 seconds."""
+        try:
+            # Process each guild's queue
+            for guild_id, messages in self.uwu_queue.items():
+                if not messages:
+                    continue
+                
+                # Get the first message in queue
+                message_data = messages[0]
+                
+                try:
+                    async with aiohttp.ClientSession() as session:
+                        webhook = discord.Webhook.from_url(
+                            message_data["webhook_url"], 
+                            session=session
+                        )
+                        await webhook.send(
+                            content=message_data["content"],
+                            username=message_data["username"],
+                            avatar_url=message_data["avatar_url"]
+                        )
+                    
+                    # Remove processed message from queue
+                    self.uwu_queue[guild_id].pop(0)
+                    
+                except Exception as e:
+                    logger.error(f"Error processing uwu message: {e}")
+                    # Remove failed message to prevent queue blocking
+                    self.uwu_queue[guild_id].pop(0)
+                
+                # Small delay between messages
+                await asyncio.sleep(0.5)
+                
+        except Exception as e:
+            logger.error(f"Error in uwu queue processor: {e}")
 
-
+    @process_uwu_queue.before_loop
+    async def before_uwu_processor(self):
+        await self.bot.wait_until_ready()
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         """Listener to transform messages from uwulocked users into uwu-speak."""
         if message.author.bot:
+            return
+
+        if not message.guild:
             return
 
         data = await self.bot.db.fetchrow(
@@ -400,15 +449,26 @@ class Miscellaneous(Cog):
         )
 
         if data:
-            await message.delete()
+            if await self.bot.glory_cache.ratelimited(f"uwulock:{message.guild.id}", 5, 3):
+                return
+                
+            if await self.bot.glory_cache.ratelimited(f"uwulock_user:{message.author.id}", 2, 3):
+                return
+                
+            if await self.bot.glory_cache.ratelimited(f"uwulock_channel:{message.channel.id}", 3, 3):
+                return
 
-            async with aiohttp.ClientSession() as session:
-                webhook = discord.Webhook.from_url(data["webhook_url"], session=session)
-                await webhook.send(
-                    self.uwuify(message.content),
-                    username=message.author.display_name,
-                    avatar_url=message.author.display_avatar.url,
-                )
+            await message.delete()
+            
+            if message.guild.id not in self.uwu_queue:
+                self.uwu_queue[message.guild.id] = []
+                
+            self.uwu_queue[message.guild.id].append({
+                "webhook_url": data["webhook_url"],
+                "content": self.uwuify(message.content),
+                "username": message.author.display_name,
+                "avatar_url": message.author.display_avatar.url
+            })
 
     # @commands.command(
     #     name="valorant",
@@ -489,6 +549,7 @@ class Miscellaneous(Cog):
         example=",snipe 4",
         breif="Retrive a recently deleted message",
     )
+    @commands.cooldown(1, 7, commands.BucketType.user)
     async def snipe(self, ctx: Context, index: int = 1):
         if not (
             snipe := await self.bot.snipes.get_entry(
@@ -556,6 +617,7 @@ class Miscellaneous(Cog):
         example=",editsnipe 2",
         brief="Retrieve a messages original text before edited",
     )
+    @commands.cooldown(1, 7, commands.BucketType.user)
     async def editsnipe(self, ctx: Context, index: int = 1):
         if not (
             snipe := await self.bot.snipes.get_entry(
@@ -620,6 +682,7 @@ class Miscellaneous(Cog):
         brief="Retrieve a deleted reaction from a message",
         example=",reactionsipe 2",
     )
+    @commands.cooldown(1, 7, commands.BucketType.user)
     async def reactionsnipe(self, ctx: Context, index: int = 1):
         if not (
             snipe := await self.bot.snipes.get_entry(
@@ -646,6 +709,7 @@ class Miscellaneous(Cog):
         brief="Clear all deleted messages from greed",
         example=",clearsnipe",
     )
+    @commands.cooldown(1, 7, commands.BucketType.user)
     @commands.has_permissions(manage_messages=True)
     async def clearsnipes(self, ctx: Context):
         await self.bot.snipes.clear_entries(ctx.channel)
@@ -771,6 +835,7 @@ class Miscellaneous(Cog):
           example=",selfpurge 100",
           brief="Clear your messages from a chat",
      )
+    @commands.cooldown(1, 7, commands.BucketType.user)
     @commands.bot_has_permissions(manage_messages=True)
     async def selfpurge(self, ctx, amount: int):
           amount = amount + 1  # Adjust for the command message itself

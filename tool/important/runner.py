@@ -54,10 +54,19 @@ class RebootRunner:
         return file_path.stem
 
     def get_dotted_path(self, file_path: Path) -> str:
-        """Generates the dotted module path for a cog."""
+        """Generates the dotted module path for a cog.
+        
+        If file is in a subdirectory, returns the path to the parent directory module
+        Otherwise returns the path to the file directly.
+        """
         try:
-            relative_path: Path = file_path.relative_to(self.path.parent)
-            return ".".join(relative_path.with_suffix("").parts)
+            relative_path = file_path.relative_to(self.path.parent)
+            parts = relative_path.parts
+            
+            if len(parts) > 2:
+                return f"{parts[0]}.{parts[1]}"
+            else:
+                return ".".join(relative_path.with_suffix("").parts)
         except ValueError:
             raise ValueError(f"Invalid path: {file_path} not within {self.path.parent}")
 
@@ -88,20 +97,19 @@ class RebootRunner:
                 if ".git" in str(file_path) or file_path.suffix != ".py" or "custom" in file_path.parts:
                     continue
 
-                # Store the latest change for this file
                 self._pending_changes[str(file_path)] = change_type
 
-                # Cancel existing timer if any
                 if self._debounce_timer and not self._debounce_timer.done():
-                    self._debounce_timer.cancel()
+                    try:
+                        self._debounce_timer.cancel()
+                    except Exception as e:
+                        self.logger.warning(f"Error canceling debounce timer: {e}")
 
-                # Start new debounce timer
                 self._debounce_timer = self.loop.create_task(self._process_pending_changes())
 
     async def _process_pending_changes(self) -> None:
         """Process batched changes after debounce delay."""
         try:
-            # Wait for debounce delay
             await asyncio.sleep(self._debounce_delay)
 
             if await self._is_git_operation():
@@ -109,7 +117,6 @@ class RebootRunner:
                 self._pending_changes.clear()
                 return
 
-            # Process all pending changes
             processed_paths = set()
             for file_path_str, change_type in self._pending_changes.items():
                 file_path = Path(file_path_str)
@@ -118,6 +125,7 @@ class RebootRunner:
 
                 try:
                     cog_path = self.get_dotted_path(file_path)
+                    self.logger.debug(f"Determined cog path '{cog_path}' from file '{file_path}'")
                     
                     if change_type == Change.deleted:
                         await self._unload_cog(cog_path)
@@ -130,7 +138,6 @@ class RebootRunner:
                 except Exception as e:
                     self.logger.error(f"Error processing change {change_type} for {file_path}: {e}")
 
-            # Clear pending changes after processing
             self._pending_changes.clear()
 
         except Exception as e:
@@ -147,7 +154,6 @@ class RebootRunner:
                     git_dir / "HEAD.lock",
                     git_dir / "refs.lock",
                 ]
-                # Use asyncio.gather to check files concurrently
                 exists_results = await asyncio.gather(
                     *[
                         self.loop.run_in_executor(None, lock.exists)
@@ -163,12 +169,10 @@ class RebootRunner:
         """Loads all cogs on startup."""
         self.logger.info("Preloading cogs...")
         try:
-            # Run glob operation in executor to prevent blocking
             files = await self.loop.run_in_executor(
                 None, lambda: list(self.path.rglob("*.py"))
             )
             self.logger.debug(f"Found {len(files)} potential cog files")
-            # Load cogs concurrently in batches
             batch_size = 10
             for i in range(0, len(files), batch_size):
                 batch = files[i:i + batch_size]
@@ -257,8 +261,8 @@ def watch(
         @wraps(func)
         async def wrapper(client: commands.Bot) -> Any:
             runner = RebootRunner(client, **kwargs)
-            await runner.start()  # Attempt to start the runner
-            return await func(client)  # Always call the original function
+            await runner.start()
+            return await func(client)
 
         return wrapper
 

@@ -396,11 +396,18 @@ class starboard(commands.Cog, name="Starboard"):
                     files.append(attachment)
 
         if message.reference and (reference := message.reference.resolved):
-            embed.add_field(
-                name=f"**Replying to {reference.author.display_name}**",
-                value=f"[Jump to reply]({reference.jump_url})",
-                inline=False,
-            )
+            if not isinstance(reference, discord.DeletedReferencedMessage):
+                embed.add_field(
+                    name=f"**Replying to {reference.author.display_name}**",
+                    value=f"[Jump to reply]({reference.jump_url})",
+                    inline=False,
+                )
+            else:
+                embed.add_field(
+                    name="**Replying to deleted message**",
+                    value="Original message was deleted",
+                    inline=False,
+                )
 
         embed.add_field(
             name=f"**#{message.channel}**",

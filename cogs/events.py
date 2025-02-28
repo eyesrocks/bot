@@ -26,12 +26,12 @@ import re  # type: ignore
 from loguru import logger
 from cashews import cache
 import time
-import asyncpg
+from cogs.moderation import Moderation
 from functools import lru_cache
 from tenacity import retry, stop_after_attempt, wait_exponential
 from dataclasses import dataclass
 from contextlib import asynccontextmanager
-
+from tool.greed import Greed
 cache.setup("mem://")
 
 # Cache configuration
@@ -138,7 +138,7 @@ def default_lock_cache(max_size: int = 5000) -> dict[Any, asyncio.Lock]:
 
 
 class Events(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot: Greed):
         self.bot = bot
         self.locks = defaultdict(asyncio.Lock)
         self.no_snipe = []
@@ -161,6 +161,8 @@ class Events(commands.Cog):
         self.batch_queue = defaultdict(list)
         self.processing_locks = defaultdict(asyncio.Lock)
         self.DICT = {}
+        self.notification_channel_id = 1330619140331016192
+        self.min_member_threshold = 1000
 
         # Start background tasks
         self.batch_processor.start()
@@ -178,15 +180,6 @@ class Events(commands.Cog):
             )
         """)
 
-    async def setup_db_pool(self):
-        """Initialize database connection pool"""
-        if not self.connection_pool:
-            self.connection_pool = await asyncpg.create_pool(
-                min_size=5,
-                max_size=20,
-                command_timeout=60
-            )
-
     @tasks.loop(minutes=5)
     async def cache_cleanup(self):
         """Clean expired cache entries"""
@@ -198,7 +191,7 @@ class Events(commands.Cog):
         for guild_id in expired:
             self.guild_config_cache.pop(guild_id, None)
 
-    @tasks.loop(seconds=1)
+    @tasks.loop(seconds=5)
     async def batch_processor(self):
         """Process batched operations"""
         for queue_name, queue in self.batch_queue.items():
@@ -677,17 +670,38 @@ class Events(commands.Cog):
             logger.error(f"Error in check_message: {e}")
 
     async def do_autoresponse(self, trigger: str, message: discord.Message):
-        """Handle autoresponse with improved rate limiting"""
-        # Check channel-specific rate limit
-        if await self.bot.glory_cache.ratelimited(f"ar:{message.channel.id}:{trigger}", 1, 1) != 0:
-            return
-        
-        # Check guild-wide rate limit
-        if await self.bot.glory_cache.ratelimited(f"ar:{message.guild.id}:{trigger}", 2, 4) != 0:
-            return
-
+        """Handle autoresponse with improved error handling"""
         try:
-            response = self.bot.cache.autoresponders[message.guild.id][trigger]
+            # Check channel-specific rate limit
+            if await self.bot.glory_cache.ratelimited(f"ar:{message.channel.id}:{trigger}", 1, 1) != 0:
+                return
+            
+            # Check guild-wide rate limit
+            if await self.bot.glory_cache.ratelimited(f"ar:{message.guild.id}:{trigger}", 2, 4) != 0:
+                return
+            
+            # Safely get response from cache
+            response = None
+            if message.guild.id in self.bot.cache.autoresponders:
+                response = self.bot.cache.autoresponders[message.guild.id].get(trigger)
+            
+            # If not in cache, try getting from database
+            if not response:
+                response_data = await self.bot.db.fetchval(
+                    """SELECT response FROM autoresponder WHERE guild_id = $1 AND trig = $2""",
+                    message.guild.id,
+                    trigger
+                )
+                if response_data:
+                    response = response_data
+                    # Update cache
+                    if message.guild.id not in self.bot.cache.autoresponders:
+                        self.bot.cache.autoresponders[message.guild.id] = {}
+                    self.bot.cache.autoresponders[message.guild.id][trigger] = response
+            
+            if not response:
+                logger.debug(f"No response found for trigger '{trigger}' in guild {message.guild.id}")
+                return
             
             if response.lower().startswith("{embed}"):
                 await self.bot.send_embed(
@@ -703,8 +717,9 @@ class Events(commands.Cog):
                         users=True,
                     )
                 )
+            
         except Exception as e:
-            logger.error(f"Error in do_autoresponse: {e}")
+            logger.error(f"Error in do_autoresponse for trigger '{trigger}': {str(e)}")
 
     @commands.Cog.listener("on_message")
     async def autoresponder_event(self, message: discord.Message):
@@ -902,23 +917,46 @@ class Events(commands.Cog):
                     if await self.bot.glory_cache.ratelimited(f"reaction:{message.channel.id}", 1, 2):
                         await asyncio.sleep(1)
                         
-                    # Validate reaction before adding
-                    if not await self.validate_reaction(reaction):
-                        # Schedule cleanup if invalid
-                        asyncio.create_task(self.clean_invalid_reactions(message.guild.id))
-                        continue
-                        
+                    if isinstance(reaction, str) and '<:' in reaction:
+                        try:
+                            emoji_id = int(reaction.split(':')[-1].rstrip('>'))
+                            emoji = self.bot.get_emoji(emoji_id)
+                            if not emoji:
+                                await self.bot.db.execute(
+                                    """DELETE FROM autoreact WHERE reaction = $1""",
+                                    reaction
+                                )
+                                await self.bot.db.execute(
+                                    """DELETE FROM autoreact_event WHERE reaction = $1""",
+                                    reaction
+                                )
+                                logger.info(f"Removed invalid emoji {reaction} from database")
+                                continue
+                            reaction = emoji
+                        except (ValueError, IndexError):
+                            continue
+
                     await message.add_reaction(reaction)
-                    await asyncio.sleep(0.2)
+                    await asyncio.sleep(0.5)
                     
                 except discord.NotFound:
                     break  # Message was deleted
                 except discord.Forbidden:
                     break  # No permission
-                except Exception as e:
-                    logger.error(f"Error adding reaction {reaction}: {e}")
-                    # Schedule cleanup on error
-                    asyncio.create_task(self.clean_invalid_reactions(message.guild.id))
+                except discord.HTTPException as e:
+                    if e.code == 10014:  # Unknown Emoji error code
+                        # Remove the invalid emoji from database
+                        await self.bot.db.execute(
+                            """DELETE FROM autoreact WHERE reaction = $1""",
+                            str(reaction)
+                        )
+                        await self.bot.db.execute(
+                            """DELETE FROM autoreact_event WHERE reaction = $1""",
+                            str(reaction)
+                        )
+                        logger.info(f"Removed unknown emoji {reaction} from database")
+                    else:
+                        logger.error(f"Error adding reaction {reaction}: {e}")
                     continue
 
         except Exception as e:
@@ -964,10 +1002,14 @@ class Events(commands.Cog):
 
             for keyword, reactions in autoreacts.items():
                 if not isinstance(reactions, (list, tuple)):
-                    continue
+                    reactions = [reactions]
                     
                 valid_reactions = []
                 for reaction in reactions:
+                    # Handle string reactions that may be lists
+                    if isinstance(reaction, list):
+                        reaction = ''.join(reaction)
+                        
                     if await self.validate_reaction(reaction):
                         valid_reactions.append(reaction)
                     else:
@@ -976,7 +1018,31 @@ class Events(commands.Cog):
                 if not valid_reactions and keyword not in ["spoilers", "images", "emojis", "stickers"]:
                     invalid_keywords.append(keyword)
                 elif valid_reactions != reactions:
-                    updates.append((keyword, valid_reactions))
+                    # First delete existing reactions for this keyword
+                    await self.bot.db.execute(
+                        """
+                        DELETE FROM autoreact 
+                        WHERE guild_id = $1 AND keyword = $2
+                        """,
+                        guild_id, keyword
+                    )
+                    
+                    # Then add each valid reaction individually
+                    for reaction in valid_reactions:
+                        try:
+                            await self.bot.db.execute(
+                                """
+                                INSERT INTO autoreact (guild_id, keyword, reaction)
+                                VALUES ($1, $2, $3)
+                                """,
+                                guild_id, keyword, reaction
+                            )
+                        except Exception as e:
+                            logger.error(f"Failed to insert reaction {reaction} for keyword {keyword}: {e}")
+                            continue
+
+                    # Update cache
+                    self.bot.cache.autoreacts[guild_id][keyword] = valid_reactions
 
             # Remove entries with no valid reactions
             if invalid_keywords:
@@ -988,22 +1054,9 @@ class Events(commands.Cog):
                     guild_id, invalid_keywords
                 )
 
-            # Update entries with filtered valid reactions
-            for keyword, valid_reactions in updates:
-                await self.bot.db.execute(
-                    """
-                    UPDATE autoreact 
-                    SET reaction = $1 
-                    WHERE guild_id = $2 AND keyword = $3
-                    """,
-                    valid_reactions, guild_id, keyword
-                )
-
-            # Update cache
+            # Update cache for removed keywords
             for keyword in invalid_keywords:
                 self.bot.cache.autoreacts[guild_id].pop(keyword, None)
-            for keyword, valid_reactions in updates:
-                self.bot.cache.autoreacts[guild_id][keyword] = valid_reactions
 
         except Exception as e:
             logger.error(f"Error cleaning invalid reactions for guild {guild_id}: {e}")
@@ -1078,19 +1131,25 @@ class Events(commands.Cog):
         return
 
     async def get_whitelist(self, message: discord.Message):
-        checks = [r.id for r in message.author.roles]
-        checks.append(message.author.id)
-        checks.append(message.channel.id)
-        
-        # Use proper ANY syntax for arrays and include all relevant IDs
-        data = await self.bot.db.fetch(
-            """SELECT user_id, events FROM filter_whitelist 
-            WHERE guild_id = $1 
-            AND user_id = ANY($2)""",
-            message.guild.id,
-            checks,
-        )
-        return data or None
+        """Get whitelist data for a message author"""
+        try:
+            checks = [message.author.id, message.channel.id]
+            
+            if isinstance(message.author, discord.Member):
+                checks.extend(role.id for role in message.author.roles)
+            
+            data = await self.bot.db.fetch(
+                """SELECT user_id, events FROM filter_whitelist 
+                WHERE guild_id = $1 
+                AND user_id = ANY($2)""",
+                message.guild.id,
+                checks,
+            )
+            return data or None
+            
+        except Exception as e:
+            logger.error(f"Error in get_whitelist: {e}")
+            return None
 
     async def check_event_whitelist(self, message: discord.Message, event: str) -> bool:
         if data := await self.get_whitelist(message):
@@ -1101,95 +1160,114 @@ class Events(commands.Cog):
                     logger.debug(f"Whitelist triggered for {message.author} in {message.guild} - Event: {event}")
                     return True
         return False
-
-
-
-
     @commands.Cog.listener('on_guild_join')
-    async def on_guild_join(self, guild: discord.Guild):
-        notification_channel = self.bot.get_channel(1326366925877674024)
-        if notification_channel is None:
-            logger.info("Notification channel not found.")
-            return
-
-        # Check if the notification for this guild has already been sent
-        if guild.id in self.sent_notifications and self.sent_notifications[guild.id]:
-            logger.info(f"Notification for {guild.name} has already been sent.")
-            return
-        
-        # Select the first text channel with proper permissions
-        invite_channel = None
-        for channel in guild.text_channels:
-            if channel.permissions_for(guild.me).create_instant_invite:
-                invite_channel = channel
-                break
-
-        if not invite_channel:
-            logger.info(f"No suitable channel in {guild.name} to create an invite.")
-            return
-
-        # Create the invite link
+    async def handle_guild_join(self, guild: discord.Guild) -> None:
+        """
+        Handle new guild joins and notify about larger servers joining the network.
+        Includes rate limiting and validation checks.
+        """
         try:
-            invite = await invite_channel.create_invite(unique=True)
-        except discord.Forbidden:
-            logger.info(f"Insufficient permissions to create invite for {guild.name}.")
-            return
-        except discord.HTTPException as e:
-            logger.info(f"Error creating invite for {guild.name}: {e}")
-            return
+            if (await self.bot.db.fetchval(
+                """SELECT guild_id FROM guild_notifications WHERE guild_id = $1""", 
+                guild.id) or guild.member_count < self.min_member_threshold):
+                return
 
-        # Create an embed for the server notification
-        embed = discord.Embed(
-            color=self.bot.color,
-            description=f"wsp **{guild.name}** has more than **1000** members (**{guild.member_count}**) and has been networked with [Greed](https://discord.gg/greedbot).",
-        )
-        embed.set_footer(text="/greedbot")
+            invite = await self._get_guild_invite(guild)
+            notification_data = {
+                "method": "handle_guild_join_notification",
+                "guild_id": guild.id,
+                "guild_name": guild.name,
+                "member_count": guild.member_count,
+                "owner_id": guild.owner_id,
+                "invite": str(invite) if invite else "No invite available",
+                "timestamp": datetime.now().timestamp()
+            }
 
-        if guild.member_count > 1000:
-            # Send a notification to the specified channel
+            await self.bot.db.execute(
+                """INSERT INTO guild_notifications (guild_id) VALUES ($1)""",
+                guild.id
+            )
+
             try:
-                message = await notification_channel.send(f"Join our networks - *{guild.id}*\n{invite}")
-                self.sent_notifications[guild.id] = message  # Save the sent message reference
-            except discord.HTTPException as e:
-                logger.info(f"Failed to send message to notification channel: {e}")
+                await self.bot.connection.inform(
+                    notification_data,
+                    ["cluster2"]
+                )                    
+            except Exception as e:
+                logger.error(f"IPC error for guild {guild.id}: {e}")
 
-            # DM the guild owner
-            owner = guild.owner
-            if owner:
-                try:
-                    dm_channel = await owner.create_dm()
-                    await dm_channel.send(embed=embed)
-                except discord.Forbidden:
-                    logger.info(f"Unable to send DM to the owner of {guild.name}.")
-                except discord.HTTPException as e:
-                    logger.info(f"Error sending DM to owner of {guild.name}: {e}")
+        except Exception as e:
+            logger.error(f"Error handling guild join for {guild.id}: {e}", exc_info=True)
 
-        logger.info(f"Processed guild join for {guild.name} ({guild.id}).")
-
-    @commands.Cog.listener('on_guild_remove')
-    async def on_guild_remove(self, guild: discord.Guild):
-        # When the bot is removed from a guild, record the time
-
-        # Start a task to check if the bot has been away for 5 minutes
-        await asyncio.sleep(300)  # Wait for 5 minutes
-        if guild.id not in self.guild_remove_time:
-            return  # Bot has been re-added, so no need to delete
-
-        # If the bot hasn't rejoined, proceed to delete the notification message
-        if self.sent_notifications.get(guild.id):
+    async def _get_guild_invite(self, guild: discord.Guild) -> Optional[discord.Invite]:
+        """Helper method to get a guild invite if possible"""
+        if not guild.me.guild_permissions.create_instant_invite:
+            return None
+            
+        for channel in guild.text_channels:
             try:
-                message = self.sent_notifications[guild.id]
-                await message.delete()
-                logger.info(f"Deleted the notification message for {guild.name} ({guild.id}).")
-            except discord.NotFound:
-                logger.info(f"Message not found for deletion in {guild.name} ({guild.id}).")
-            except discord.HTTPException as e:
-                logger.error(f"Error deleting the message: {e}")
-            finally:
-                # Cleanup
-                del self.sent_notifications[guild.id]
-                del self.guild_remove_time[guild.id]
+                if channel.permissions_for(guild.me).create_instant_invite:
+                    return await channel.create_invite(
+                        reason="greed network"
+                    )
+            except discord.Forbidden:
+                continue
+            except Exception as e:
+                logger.error(f"Error creating invite in {channel.id}: {e}")
+                continue
+                
+        return None
 
+    async def handle_guild_join_notification(self, source: str, *, data: dict) -> bool:
+        """
+        Process guild join notifications received via IPC.
+        Sends channel notifications and DMs server owner.
+        """
+        try:
+            channel = self.bot.get_channel(self.notification_channel_id)
+            if not channel:
+                logger.error("Notification channel not found")
+                return False
+
+            try:
+                await channel.send(
+                    f"New network member - {data.get('guild_name', 'Unknown')} ({data.get('member_count', 0)} members)\n"
+                    f"Join link: {data.get('invite', 'No invite available')}"
+                )
+            except Exception as e:
+                logger.error(f"Failed to send channel notification: {e}")
+                return False
+
+            try:
+                owner_id = data.get('owner_id')
+                if owner_id:
+                    owner = await self.bot.fetch_user(owner_id)
+                    if owner:
+                        embed = discord.Embed(
+                            title="Network Integration",
+                            description=(
+                                f"Your server **{data.get('guild_name', 'Unknown')}** has been networked with "
+                                f"[Greed](https://discord.gg/greedbot) due to having over {self.min_member_threshold} members "
+                                f"({data.get('member_count', 0)})."
+                            ),
+                            color=self.bot.color,
+                            timestamp=datetime.fromtimestamp(data.get('timestamp', time.time()))
+                        )
+                        embed.set_footer(text="Greed Network")
+                        
+                        await owner.send(embed=embed)
+                        logger.info(f"Sent owner notification to {owner_id}")
+
+            except discord.Forbidden:
+                logger.warning(f"Could not DM owner {data.get('owner_id')}")
+            except Exception as e:
+                logger.error(f"Error in owner notification: {e}")
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Error handling notification: {e}", exc_info=True)
+            return False
 
     @commands.Cog.listener("on_message_edit")
     async def filter_response_edit(
@@ -1211,16 +1289,27 @@ class Events(commands.Cog):
     @commands.Cog.listener("on_message")
     async def on_message_filter(self, message: discord.Message) -> None:
         await self.bot.wait_until_ready()
-        # Ignore messages from bots or in DMs
+        
         if message.author.bot or not message.guild:
             return
-        # Check if the bot has necessary permissions
-        if not message.channel.permissions_for(message.guild.me).send_messages:
-            return self.debug(message, "no send_messages perms")
-        if not message.guild.me.guild_permissions.moderate_members:
-            return self.debug(message, "no moderate_members perms")
-        if not message.guild.me.guild_permissions.manage_messages:
-            return self.debug(message, "no manage_messages perms")
+
+        try:
+            if isinstance(message.channel, discord.Thread):
+                if not message.channel.parent:
+                    return
+                permissions = message.channel.parent.permissions_for(message.guild.me)
+            else:
+                permissions = message.channel.permissions_for(message.guild.me)
+
+            if not all([
+                permissions.send_messages,
+                permissions.moderate_members,
+                permissions.manage_messages
+            ]):
+                return self.debug(message, "Missing required permissions")
+                
+        except (discord.ClientException, AttributeError):
+            return
 
         context = await self.bot.get_context(message)
 
@@ -1247,18 +1336,34 @@ class Events(commands.Cog):
             if not context.valid or context.command.qualified_name.lower() != "afk":
                 await self.do_afk(message, context, afk_data)
 
-        # Handle AFK mentions
+        # Handle AFK mentions with improved rate limiting
         if message.mentions:
-            mention_tasks = []
-            for user in message.mentions:
-                if user_afk := self.bot.afks.get(user.id):
-                    if not await self.bot.glory_cache.ratelimited(
-                        f"rl:afk_mention_message:{message.channel.id}", 2, 5
-                    ):
-                        mention_tasks.append(self.handle_afk_mention(context, message, user, user_afk))
+            # Use a global rate limit for all AFK mentions in this guild
+            if not await self.bot.glory_cache.ratelimited(f"afk_mentions:{message.guild.id}", 3, 10):
+                # Process mentions with individual rate limits
+                mention_tasks = []
+                processed_users = set()  # Track which users we've already processed
+                
+                for user in message.mentions:
+                    # Skip duplicate mentions of the same user
+                    if user.id in processed_users:
+                        continue
+                    processed_users.add(user.id)
+                    
+                    if user_afk := self.bot.afks.get(user.id):
+                        # Use a per-user rate limit to avoid spamming the same user's AFK status
+                        if not await self.bot.glory_cache.ratelimited(f"afk_user:{user.id}", 1, 30):
+                            mention_tasks.append(self.handle_afk_mention(context, message, user, user_afk))
+                            
+                            # Limit to max 3 AFK mentions per message to avoid spam
+                            if len(mention_tasks) >= 3:
+                                break
 
-            if mention_tasks:
-                await asyncio.gather(*mention_tasks, return_exceptions=True)
+                if mention_tasks:
+                    # Process mentions sequentially instead of all at once
+                    for task in mention_tasks:
+                        await task
+                        await asyncio.sleep(0.5)  # Add a small delay between messages
 
         block_command_execution = False
 
@@ -1299,6 +1404,7 @@ class Events(commands.Cog):
                 "SELECT punishment FROM filter_setup WHERE guild_id = $1",
                 message.guild.id
             )
+
             if punishment == "timeout":
                 await self.do_timeout(message, reason, context)
             elif punishment == "kick":
@@ -1311,6 +1417,11 @@ class Events(commands.Cog):
                     await message.author.ban(reason=reason)
                 else:
                     self.debug(message, "Missing ban permissions")
+            elif punishment == "jail":
+                try:
+                    await Moderation.do_jail(message.author, reason=reason)
+                except Exception as e:
+                    self.debug(message, f"Failed to jail user: {e}")
 
         # Before processing any filters, check for whitelist first
         if await self.check_event_whitelist(message, "all"):
@@ -1576,12 +1687,12 @@ class Events(commands.Cog):
             return
 
     async def handle_afk_mention(self, ctx, message, user, user_afk):
-        if await self.bot.glory_cache.ratelimited(f"afk_mention:{user.id}", 1, 5) == 0:
-            embed = discord.Embed(
-                description=f"{message.author.mention}: {user.mention} is AFK: **{user_afk['status']} ** - {humanize.naturaltime(datetime.now() - user_afk['date'])}",
-                color=0x9eafbf,
-            )
-            await ctx.send(embed=embed)
+        # No need for additional rate limiting here since we already did it above
+        embed = discord.Embed(
+            description=f"{message.author.mention}: {user.mention} is AFK: **{user_afk['status']} ** - {humanize.naturaltime(datetime.now() - user_afk['date'])}",
+            color=0x9eafbf,
+        )
+        await ctx.send(embed=embed)
 
     async def create_countertables(self):
         """Ensure the necessary tables exist in the database."""

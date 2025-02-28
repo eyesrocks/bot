@@ -4,6 +4,7 @@ from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageSequence
 import os
 import json
+from loguru import logger
 
 arial_bold_font_path = "/root/greed/data/fonts/arial_bold.ttf"
 
@@ -52,32 +53,58 @@ class Card(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message):
         """Tracks message count and updates rank per server."""
-        if message.author.bot:
+        try:
+            if any([
+                message.author.bot,
+                not message.guild, 
+                not message.author,
+            ]):
+                return
+
+            guild_id = str(message.guild.id)
+            user_id = str(message.author.id)
+
+            if guild_id not in self.message_tracking:
+                self.message_tracking[guild_id] = {}
+
+            if user_id not in self.message_tracking[guild_id]:
+                self.message_tracking[guild_id][user_id] = {
+                    "message_count": 0,
+                    "rank": 1
+                }
+
+            # Update message count
+            try:
+                self.message_tracking[guild_id][user_id]["message_count"] += 1
+            except Exception as e:
+                logger.error(f"Error updating message count: {e}")
+                self.message_tracking[guild_id][user_id] = {
+                    "message_count": 1,
+                    "rank": 1
+                }
+
+            # Update ranks
+            try:
+                # Sort users by message count
+                sorted_users = sorted(
+                    self.message_tracking[guild_id].items(),
+                    key=lambda item: item[1].get("message_count", 0),  # Safely get message count
+                    reverse=True
+                )
+
+                # Update ranks
+                for rank, (uid, data) in enumerate(sorted_users, start=1):
+                    if uid in self.message_tracking[guild_id]:  # Check if user still exists
+                        self.message_tracking[guild_id][uid]["rank"] = rank
+
+            except Exception as e:
+                logger.error(f"Error updating ranks: {e}")
+                # If ranking fails, at least the message count was updated
+
+        except Exception as e:
+            logger.error(f"Error in message tracking: {e}")
+            # Don't raise the exception to prevent breaking the bot
             return
-
-        guild_id = str(message.guild.id)  # Guild ID as a string for uniqueness
-        user_id = str(message.author.id)  # Member ID as a string for uniqueness
-
-        if guild_id not in self.message_tracking:
-            self.message_tracking[guild_id] = {}  # Initialize a new guild entry if not present
-
-        if user_id not in self.message_tracking[guild_id]:
-            self.message_tracking[guild_id][user_id] = {"message_count": 0, "rank": 1}
-
-        # Update message count for the user in the specific guild
-        self.message_tracking[guild_id][user_id]["message_count"] += 1
-
-        # Rank the user based on their message count in the guild
-        sorted_users = sorted(
-            self.message_tracking[guild_id].items(),
-            key=lambda item: item[1]["message_count"],
-            reverse=True
-        )
-
-        # Update the rank of each user based on the sorted order
-        for rank, (user_id, data) in enumerate(sorted_users, start=1):
-            self.message_tracking[guild_id][user_id]["rank"] = rank
-
 
     @commands.group(name="card", invoke_without_command=True)
     async def card_group(self, ctx):

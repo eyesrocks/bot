@@ -291,14 +291,12 @@ class GambleAmount(commands.Converter):
                 try:
                     amount = float(argument)
                 except ValueError:
-                    await ctx.warning("Please provide a valid amount")
                     raise CommandError("Invalid amount")
         else:
             amount = float(argument)
 
         # Ensure amount is positive
         if amount <= 0:
-            await ctx.warning("You can't gamble a non-positive amount")
             raise CommandError("Amount must be positive")
 
         # Cap at maximum allowed gamble amount (convert to float)
@@ -311,7 +309,6 @@ class GambleAmount(commands.Converter):
 
         # Final check for valid amount
         if amount <= 0:
-            await ctx.warning("You don't have enough bucks to gamble")
             raise CommandError("Insufficient funds")
 
         return amount
@@ -2298,8 +2295,14 @@ class Economy(commands.Cog):
                 self.multiplier = 1.0
                 self.collect_button = None
 
+                # Create a more visually appealing grid with emojis directly on buttons
                 for i in range(total_tiles):
-                    btn = Button(style=discord.ButtonStyle.secondary, label="\u200b", row=i//GRID_SIZE)
+                    row = i // GRID_SIZE
+                    btn = Button(
+                        style=discord.ButtonStyle.secondary, 
+                        emoji="🎮", 
+                        row=row
+                    )
                     btn.custom_id = f"bomb:{ctx.author.id}:{i}"
                     
                     async def callback(interaction, tile=btn.custom_id.split(":")[-1]):
@@ -2309,8 +2312,10 @@ class Economy(commands.Cog):
                     self.add_item(btn)
 
                 self.collect_button = Button(
-                    style=discord.ButtonStyle.green, 
-                    label=f"Collect {int(amount * self.multiplier):,} 💵"
+                    style=discord.ButtonStyle.success, 
+                    label=f"Collect ${int(amount * self.multiplier):,}", 
+                    emoji="💰",
+                    row=4
                 )
                 self.collect_button.callback = self.handle_collect
                 self.add_item(self.collect_button)
@@ -2328,34 +2333,27 @@ class Economy(commands.Cog):
                 difficulty = bomb_count / total_tiles
                 return round(1.0 + (difficulty * 5) + (progress * 3), 2)
 
-            def create_embed(self, show_bombs=False):
-                """Generate updated game embed"""
+            def create_embed(self):
+                """Generate updated game embed with better formatting"""
                 revealed_safe = len(self.revealed - bomb_positions)
                 remaining_safe = (total_tiles - bomb_count) - revealed_safe
                 potential_win = int(amount * self.multiplier)
 
                 embed = Embed(
                     title="💣 Bombs Game" + (" (GAME OVER)" if self.game_over else ""),
-                    color=self.bot.color if not self.game_over else 0xff0000
+                    color=0x3498db if not self.game_over else 0xff0000
                 )
+                
                 embed.description = (
-                    f"**Bet:** {amount:,} 💵\n"
-                    f"**Multiplier:** {self.multiplier:.2f}x\n"
-                    f"**Potential Win:** {potential_win:,} 💵\n"
-                    f"**Safe Tiles Left:** {remaining_safe}"
+                    f"**Avoid the bombs and collect your winnings!**\n\n"
+                    f"**Your Bet:** ${amount:,} 💵\n"
+                    f"**Current Multiplier:** {self.multiplier:.2f}x\n"
+                    f"**Potential Win:** ${potential_win:,} 💵\n"
+                    f"**Safe Tiles Remaining:** {remaining_safe}/{total_tiles - bomb_count}"
                 )
                 
-                grid = []
-                for i in range(total_tiles):
-                    if show_bombs and i in bomb_positions:
-                        grid.append("💣")
-                    elif i in self.revealed:
-                        grid.append("💣" if i in bomb_positions else "💰")
-                    else:
-                        grid.append("❔")
-                
-                for i in range(0, total_tiles, GRID_SIZE):
-                    embed.add_field(name="\u200b", value=" ".join(grid[i:i+GRID_SIZE]), inline=False)
+                if not self.game_over:
+                    embed.set_footer(text="Click on tiles to reveal them. Avoid bombs to increase your multiplier!")
                 
                 return embed
 
@@ -2368,13 +2366,21 @@ class Economy(commands.Cog):
 
                 self.revealed.add(tile)
                 
-                if tile in bomb_positions:
-                    self.game_over = True
-                    await self.end_game(interaction, f"**BOOM!** Lost {amount:,} 💵", 0xff0000)
-                    return
-
+                button = next((b for b in self.children if b.custom_id and b.custom_id.endswith(f":{tile}")), None)
+                if button:
+                    if tile in bomb_positions:
+                        button.emoji = "💣"
+                        button.style = discord.ButtonStyle.danger
+                        self.game_over = True
+                        await self.end_game(interaction, f"**BOOM!** Lost {amount:,} 💵", 0xff0000)
+                        return
+                    else:
+                        button.emoji = "💰"
+                        button.style = discord.ButtonStyle.success
+                        button.disabled = True
+                
                 self.multiplier = self.calculate_multiplier()
-                self.collect_button.label = f"Collect {int(amount * self.multiplier):,} 💵"
+                self.collect_button.label = f"Collect ${int(amount * self.multiplier):,}"
                 
                 revealed_safe = len(self.revealed - bomb_positions)
                 remaining_safe = (total_tiles - bomb_count) - revealed_safe
@@ -2399,10 +2405,20 @@ class Economy(commands.Cog):
             async def end_game(self, interaction, description, color):
                 """Cleanup game ending"""
                 self.game_over = True
-                for item in self.children:
-                    item.disabled = True
                 
-                embed = self.create_embed(show_bombs=True)
+                for i, button in enumerate(self.children):
+                    if hasattr(button, 'custom_id') and button.custom_id and button.custom_id.startswith("bomb:"):
+                        tile_id = int(button.custom_id.split(":")[-1])
+                        if tile_id in bomb_positions:
+                            button.emoji = "💣"
+                            button.style = discord.ButtonStyle.danger
+                        elif tile_id not in self.revealed:
+                            button.emoji = "⬜"
+                        button.disabled = True
+                
+                self.collect_button.disabled = True
+                
+                embed = self.create_embed()
                 embed.description = description
                 embed.color = color
                 
@@ -2430,10 +2446,9 @@ class Economy(commands.Cog):
     @commands.command(name="crack", description="Play Crack to unlock the safe and earn money.")
     @commands.cooldown(1, 30, commands.BucketType.guild)
     async def crack(self, ctx):
-        progress = 0.0  # Start with no progress
+        progress = 0.0
         avatar_b64 = base64.b64encode(await ctx.author.display_avatar.read()).decode('utf-8')  # Avatar in base64
 
-        # Game difficulty selection
         difficulty_choices = {
             "easy": self.generate_easy_question,
             "medium": self.generate_medium_question,
@@ -2446,24 +2461,19 @@ class Economy(commands.Cog):
             return msg.author == ctx.author and msg.channel == ctx.channel and msg.content.lower() in difficulty_choices
 
         try:
-            # Wait for the user's difficulty selection
             difficulty_msg = await self.bot.wait_for('message', timeout=10.0, check=check)
             difficulty = difficulty_msg.content.lower()
 
-            # Get random amount in the safe for the selected difficulty
             safe_amount = self.get_random_amount(difficulty)
-            progress_per_question = 1 / 5  # 5 questions per difficulty
+            progress_per_question = 1 / 5
 
-            # Send the first question (this will be the message that gets updated)
             message = await ctx.send("-# Answer the following questions to unlock the safe.")
 
-            # Loop through the questions for the selected difficulty
-            for _ in range(5):  # Each difficulty has 5 questions
+            for _ in range(5):
                 question_func = difficulty_choices[difficulty]
                 question, answer = question_func()
                 await asyncio.sleep(1.8)
 
-                # Edit the message with the current question
                 await message.edit(content=question)
 
                 def answer_check(m):
@@ -2472,23 +2482,20 @@ class Economy(commands.Cog):
                 try:
                     response = await self.bot.wait_for('message', timeout=30.0, check=answer_check)
                     
-                    # Check if the response is valid
                     if response.content.isdigit() and int(response.content) == answer:
-                        progress += progress_per_question  # Increase progress by 20% on correct answer
+                        progress += progress_per_question
 
-                        # Generate and update the pie chart
                         buffer = self.generate_pie_chart(ctx.author.name, progress, avatar_b64)
                         file = discord.File(buffer, filename=f"{ctx.author.name}_safe_progress.png")
 
-                        # Update the message with the new pie chart image and progress
                         await message.edit(content=f"-# Correct! Progress: **{int(progress * 100)}%**", attachments=[file])
 
                     else:
                         incorrect_msg = await ctx.send("-# Incorrect answer, the game has stopped.")
-                        await asyncio.sleep(3)  # Wait 3 seconds before deleting
-                        await incorrect_msg.delete()  # Delete the incorrect message
-                        await message.delete()  # Delete the question message
-                        break  # Exit the loop
+                        await asyncio.sleep(3)
+                        await incorrect_msg.delete()
+                        await message.delete()
+                        break
 
                 except asyncio.TimeoutError:
                     timeout_msg = await ctx.send("-# Time's up! The game has stopped.")
@@ -2793,6 +2800,218 @@ class Economy(commands.Cog):
         await ctx.send(embed=embed)
 
 
+
+    @commands.command(
+        name="scratch",
+        brief="Buy a scratch card and test your luck",
+        example=",scratch 1000",
+    )
+    @commands.cooldown(1, 30, commands.BucketType.user)
+    @account()
+    async def scratch(self, ctx: commands.Context, amount: GambleAmount):
+        """
+        Buy a scratch card with 9 covered squares.
+        Match 3 symbols to win: 
+        - 💎 (10x) 
+        - 💰 (5x) 
+        - 🎲 (3x) 
+        - 🎯 (2x)
+        """
+        balance = await self.bot.db.fetchval(
+            "SELECT balance FROM economy WHERE user_id = $1", ctx.author.id
+        )
+        
+        if balance < amount:
+            return await ctx.fail(f"You don't have enough money! Your balance is ${balance:,}")
+        
+        await self.update_balance(ctx.author, "Take", amount)
+        
+        symbols = {
+            "💎": 10,
+            "💰": 5, 
+            "🎲": 3, 
+            "🎯": 2  
+        }
+        
+        grid_symbols = []
+        symbol_list = list(symbols.keys())
+        
+        winning_symbol = None
+        will_win = random.random() < 0.2
+        
+        if will_win:
+            winning_symbol = random.choice(symbol_list)
+            winning_positions = random.sample(range(9), 3)
+            
+            for i in range(9):
+                if i in winning_positions:
+                    grid_symbols.append(winning_symbol)
+                else:
+                    random_symbol = random.choice(symbol_list)
+                    while random_symbol == winning_symbol and grid_symbols.count(winning_symbol) >= 2:
+                        random_symbol = random.choice(symbol_list)
+                    grid_symbols.append(random_symbol)
+        else:
+            for i in range(9):
+                available_symbols = symbol_list.copy()
+                
+                for symbol in symbol_list:
+                    if grid_symbols.count(symbol) >= 2:
+                        if symbol in available_symbols:
+                            available_symbols.remove(symbol)
+                
+                if not available_symbols:
+                    symbol_counts = {s: grid_symbols.count(s) for s in symbol_list}
+                    min_count = min(symbol_counts.values())
+                    least_common = [s for s, c in symbol_counts.items() if c == min_count]
+                    grid_symbols.append(random.choice(least_common))
+                else:
+                    grid_symbols.append(random.choice(available_symbols))
+        
+        class ScratchCardView(discord.ui.View):
+            def __init__(self, ctx, bot, grid_symbols, amount, symbols):
+                super().__init__(timeout=60)
+                self.ctx = ctx
+                self.bot = bot
+                self.grid_symbols = grid_symbols
+                self.amount = amount
+                self.symbols = symbols
+                self.scratched = [False] * 9
+                self.message = None
+                self.game_ended = False
+                
+                for i in range(9):
+                    row = i // 3
+                    button = discord.ui.Button(
+                        label="❓", 
+                        style=discord.ButtonStyle.secondary,
+                        row=row, 
+                        custom_id=str(i)
+                    )
+                    button.callback = self.scratch_callback
+                    self.add_item(button)
+                
+
+            async def scratch_callback(self, interaction: discord.Interaction):
+                if interaction.user != self.ctx.author:
+                    return await interaction.response.send_message("This isn't your scratch card!", ephemeral=True)
+                
+                if self.game_ended:
+                    return await interaction.response.defer()
+                
+                button_idx = int(interaction.data["custom_id"])
+                
+                self.scratched[button_idx] = True
+                
+                await self.update_view(interaction)
+                
+                await self.check_win(interaction)
+            
+            async def update_view(self, interaction):
+                for i, (button, scratched) in enumerate(zip(self.children[:9], self.scratched)):
+                    if scratched:
+                        button.label = self.grid_symbols[i]
+                        button.disabled = True
+                
+                await interaction.response.edit_message(embed=self.get_embed(), view=self)
+            
+            async def check_win(self, interaction=None):
+                if self.game_ended:
+                    return
+                
+                symbol_counts = {}
+                for i, scratched in enumerate(self.scratched):
+                    if scratched:
+                        symbol = self.grid_symbols[i]
+                        symbol_counts[symbol] = symbol_counts.get(symbol, 0) + 1
+                
+                for symbol, count in symbol_counts.items():
+                    if count >= 3:
+                        self.game_ended = True
+                        multiplier = self.symbols[symbol]
+                        winnings = int(self.amount * multiplier)
+                        
+                        await self.bot.db.execute(
+                            "UPDATE economy SET balance = balance + $1 WHERE user_id = $2",
+                            winnings, self.ctx.author.id
+                        )
+                        
+                        for button in self.children:
+                            button.disabled = True
+                        
+                        self.scratched = [True] * 9
+                        for i, button in enumerate(self.children[:9]):
+                            button.label = self.grid_symbols[i]
+                        
+                        win_embed = discord.Embed(
+                            title="🎊 Scratch Card Winner! 🎊",
+                            description=f"You matched 3 {symbol} symbols and won **${winnings:,}**!\n"
+                                       f"Multiplier: {multiplier}x",
+                            color=0x2ecc71
+                        )
+                        
+                        if interaction:
+                            await interaction.edit_original_response(embed=win_embed, view=self)
+                        elif self.message:
+                            await self.message.edit(embed=win_embed, view=self)
+                        return True
+                
+                if all(self.scratched) and not self.game_ended:
+                    self.game_ended = True
+                    for button in self.children:
+                        button.disabled = True
+                    
+                    loss_embed = discord.Embed(
+                        title="❌ Scratch Card - No Match",
+                        description=f"You didn't match 3 symbols. Better luck next time!\n"
+                                   f"You lost **${self.amount:,}**.",
+                        color=0xe74c3c
+                    )
+                    
+                    if interaction:
+                        await interaction.edit_original_response(embed=loss_embed, view=self)
+                    elif self.message:
+                        await self.message.edit(embed=loss_embed, view=self)
+                    return False
+                
+                return False
+            
+            def get_embed(self):
+                embed = discord.Embed(
+                    title="🎫 Scratch Card",
+                    description=f"Scratch to reveal symbols. Match 3 to win!\n"
+                               f"Cost: **${self.amount:,}**\n\n"
+                               f"Rewards:\n"
+                               f"- 💎 = 10x\n"
+                               f"- 💰 = 5x\n"
+                               f"- 🎲 = 3x\n"
+                               f"- 🎯 = 2x",
+                    color=self.ctx.bot.color
+                )
+                return embed
+            
+            async def on_timeout(self):
+                if not self.game_ended:
+                    for button in self.children:
+                        button.disabled = True
+                    
+                    timeout_embed = discord.Embed(
+                        title="⏰ Scratch Card - Timed Out",
+                        description="The scratch card game timed out. All squares have been revealed.",
+                        color=0xf39c12
+                    )
+                    
+                    self.scratched = [True] * 9
+                    for i, button in enumerate(self.children[:9]):
+                        button.label = self.grid_symbols[i]
+                    
+                    await self.message.edit(embed=timeout_embed, view=self)
+                    
+                    await self.check_win()
+        
+        view = ScratchCardView(ctx, self.bot, grid_symbols, amount, symbols)
+        embed = view.get_embed()
+        view.message = await ctx.send(embed=embed, view=view)
 
 
 

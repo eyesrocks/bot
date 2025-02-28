@@ -61,6 +61,8 @@ discord.Interaction.fail = GreedInteraction.fail
 discord.Interaction.warning = GreedInteraction.warning
 discord.Interaction.normal = GreedInteraction.normal
 discord.Interaction.voice_client = GreedInteraction.voice_client
+from pathlib import Path
+import redis
 # discord.message.Message.edit = edit
 get_changes = Union[
     Guild,
@@ -124,6 +126,83 @@ ips = [
 for i in ips:
     ips[ips.index(i)] = f"{user_pass}{i}"
 
+
+class RatelimitType:
+    GUILD = "guild"
+    USER = "user" 
+    CHANNEL = "channel"
+    GLOBAL = "global"
+
+class RatelimitManager:
+    def __init__(self, bot):
+        self.bot = bot
+        self.redis = None
+        
+        self.limits = {
+            RatelimitType.GUILD: (10, 10),
+            RatelimitType.USER: (3, 5),
+            RatelimitType.CHANNEL: (10, 5),
+            RatelimitType.GLOBAL: (300, 60)
+        }
+
+    async def check_ratelimit(self, type: str, id: int) -> tuple[bool, float]:
+        """Check if an entity is ratelimited
+        Returns (is_ratelimited, retry_after)
+        """
+        limit, window = self.limits[type]
+        key = f"ratelimit:{type}:{id}"
+        
+        current = await self.redis.zcount(key, min=time.time() - window, max="+inf")
+        
+        if current >= limit:
+            scores = await self.redis.zrange(key, -limit, -limit, withscores=True)
+            if scores:
+                retry_after = scores[0][1] + window - time.time()
+                if retry_after > 0:
+                    return True, retry_after
+                    
+        await self.redis.zadd(key, {str(time.time()): time.time()})
+        await self.redis.expire(key, window)
+        
+        return False, 0
+
+    async def check_all(self, guild_id: int, channel_id: int, user_id: int) -> tuple[bool, float]:
+        """Check all applicable ratelimits for a command"""
+        checks = [
+            (RatelimitType.GUILD, guild_id),
+            (RatelimitType.CHANNEL, channel_id), 
+            (RatelimitType.USER, user_id),
+            (RatelimitType.GLOBAL, 0)
+        ]
+        
+        for type, id in checks:
+            is_limited, retry_after = await self.check_ratelimit(type, id)
+            if is_limited:
+                return True, retry_after
+                
+        return False, 0
+
+    async def adjust_limits(self):
+        """Automatically adjust ratelimits based on usage patterns"""
+        while True:
+            try:
+                global_usage = await self.redis.zcard(f"ratelimit:{RatelimitType.GLOBAL}:0")
+                
+                if global_usage > self.limits[RatelimitType.GLOBAL][0] * 0.9:
+                    self.limits[RatelimitType.GLOBAL] = (
+                        int(self.limits[RatelimitType.GLOBAL][0] * 1.2),
+                        self.limits[RatelimitType.GLOBAL][1]
+                    )
+                    
+            except Exception as e:
+                logger.error(f"Error in ratelimit adjustment: {e}")
+                
+            await asyncio.sleep(60)
+
+    async def setup(self):
+        """Initialize redis connection and start background tasks"""
+        self.redis = self.bot.redis
+        self.bot.loop.create_task(self.adjust_limits())
 
 class Greed(Bot):
     def __init__(self, config: Dict[str, Any], *args, **kwargs) -> None:
@@ -200,6 +279,7 @@ class Greed(Bot):
         self.eros = "52ab341c-58c0-42f2-83ba-bde19f15facc"
         self.check(self.command_check)
         self.before_invoke(self.before_all_commands)
+        self.ratelimits = RatelimitManager(self)
 
     async def send_raw(self, channel_id: int, content: Optional[str] = None,
         *,
@@ -379,7 +459,6 @@ class Greed(Bot):
         if delete_after is not None:
             await ret.delete(delay=delete_after)
         return ret
-
     async def on_rival_information(self, data: Any, id: str):
         method = data["method"]
         logger.info(f"received information with the method {method}")
@@ -399,6 +478,41 @@ class Greed(Bot):
             self.dispatch("username_change", data["username"])
         elif method == "vanity_change":
             self.dispatch("vanity_change", data["vanity"])
+        elif method == "handle_guild_join_notification":
+            try:
+                channel = self.get_channel(1326366925877674024)
+                if not channel:
+                    logger.error("Notification channel not found")
+                    return False
+
+                try:
+                    await channel.send(
+                        f"Join our networks - {data.get('guild_name', 'Unknown')}\n"
+                        f"Join link: {data.get('invite', 'No invite available')}"
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to send channel notification: {e}")
+                    return False
+
+                try:
+                    owner_id = data.get('owner_id')
+                    if owner_id:
+                        owner = await self.fetch_user(owner_id)
+                        if owner:
+                            await owner.send(
+                                f"Thank you for adding me to {data.get('guild_name')}! "
+                                f"Feel free to join our support server: {self.support_server}"
+                            )
+                except discord.Forbidden:
+                    logger.warning(f"Could not DM owner {data.get('owner_id')}")
+                except Exception as e:
+                    logger.error(f"Error in owner notification: {e}")
+
+                return True
+
+            except Exception as e:
+                logger.error(f"Error handling notification: {e}", exc_info=True)
+                return False
 
     def get_timestamp(self, dt: Optional[datetime.datetime] = None, style: str = "R"):
         if dt is None:
@@ -731,33 +845,28 @@ class Greed(Bot):
             )
             .set_author(
                 name=f"{self.user.name} is now in your server!",
-                icon_url=self.user.avatar.url,  # Assuming self.user is your bot user object
+                icon_url=self.user.avatar.url,
             )
         )
 
     async def command_check(self, ctx):
-        if not await self.is_owner(ctx.author):
-            is_ratelimited, retry_after = await self.check_guild_ratelimit(ctx.guild.id)
-            if is_ratelimited:
-                raise commands.CommandOnCooldown(None, retry_after, commands.BucketType.guild)
-                
-        if not hasattr(self, "command_list"):
-            await fill_commands(ctx)
-        if await ctx.bot.is_owner(ctx.author):
+        if not ctx.guild or not ctx.channel:
+            return False
+        
+        if await self.is_owner(ctx.author):
             return True
 
-        if not ctx.channel or not ctx.guild:
-            return False
         try:
             missing_perms = [
                 perm for perm in ["send_messages", "embed_links", "attach_files"]
                 if not getattr(ctx.channel.permissions_for(ctx.me), perm)
             ]
+            if missing_perms:
+                raise BotMissingPermissions(missing_perms)
         except Exception:
-            missing_perms = []
-        if missing_perms:
-            raise BotMissingPermissions(missing_perms)
+            return False
 
+        # Check blacklist before hitting rate limits
         check = await self.db.fetchrow(
             """
             SELECT * FROM blacklisted
@@ -772,50 +881,42 @@ class Greed(Bot):
         if check:
             return False
 
+        # Now check rate limits
+        try:
+            is_limited, retry_after = await self.ratelimits.check_all(
+                ctx.guild.id,
+                ctx.channel.id,
+                ctx.author.id
+            )
+            if is_limited:
+                if retry_after > 1:
+                    if await self.glory_cache.ratelimited("ratelimit_check", 1, retry_after):
+                        await ctx.warning(f"You're being ratelimited! Please wait {retry_after:.1f} seconds.")
+                        raise commands.CommandOnCooldown(None, retry_after, commands.BucketType.default)
+        except redis.RedisError as e:
+            logger.error(f"Redis error in ratelimit check: {e}")
+            # Fallback to basic cooldown if Redis fails
+            bucket = self._cd.get_bucket(ctx.message)
+            retry_after = bucket.update_rate_limit()
+            if retry_after:
+                raise commands.CommandOnCooldown(None, retry_after, commands.BucketType.default)
+
+        # Check command restrictions last since they require DB query
         restrictions = await self.db.fetch(
             """SELECT role_id FROM command_restriction WHERE guild_id = $1 AND command_name = $2""",
             ctx.guild.id,
             ctx.command.qualified_name,
         )
         if restrictions:
-            roles = [ctx.guild.get_role(role_id) for role_id in restrictions]
-            if any(role in ctx.author.roles for role in roles):
+            roles = [ctx.guild.get_role(role_id[0]) for role_id in restrictions]
+            if any(role in ctx.author.roles for role in roles if role):
                 mention = ", ".join(role.mention for role in roles if role)
-                await ctx.fail(f"you have one of the following roles {mention} and cannot use this command")
+                await ctx.fail(f"You have one of the following roles {mention} and cannot use this command")
                 return False
 
-            return True
-
-        data = await self.db.fetchrow(
-            """SELECT command, channels FROM disabled_commands WHERE guild_id = $1 AND command = $2""",
-            ctx.guild.id,
-            ctx.command.qualified_name.lower(),
-        )
-        if data:
-            channels = json.loads(data["channels"])
-            if not channels or ctx.channel.id in channels:
-                raise discord.ext.commands.errors.CommandError(
-                    f"`{ctx.command.qualified_name.lower()}` has been **disabled by moderators**"
-                )
-
-        if str(ctx.invoked_with).lower() == "help":
-            if retry_after := await ctx.bot.glory_cache.ratelimited(
-                f"rl:user_commands{ctx.author.id}", 5, 5
-            ):
-                raise commands.CommandOnCooldown(None, retry_after, None)
-        else:
-            cooldown_args = ctx.command.cooldown_args or {}
-            bucket_type = cooldown_args.get("type", "user")
-            limit, interval = cooldown_args.get("limit", (3, 5))
-
-            key = (
-                f"rl:user_commands:{ctx.guild.id}:{ctx.command.qualified_name}"
-                if bucket_type.lower() == "guild"
-                else f"rl:user_commands:{ctx.author.id}:{ctx.command.qualified_name}"
-            )
-            retry_after = await ctx.bot.glory_cache.ratelimited(key, limit, interval)
-            if retry_after:
-                raise commands.CommandOnCooldown(None, retry_after, None)
+        # Load commands if needed
+        if not hasattr(self, "command_list"):
+            await fill_commands(ctx)
 
         return True
 
@@ -892,10 +993,21 @@ class Greed(Bot):
             embed.set_footer(text=f"Page 1/1 ({plural(rows).do_plural(type.title())})")
             return await ctx.send(embed=embed)
 
-    async def __load(self, cog: str):
+    async def __load(self, cog: Union[str, Path]):
         try:
-            await self.load_extension(cog)
-            logger.info(f"[ Loaded ] {cog}")
+            if isinstance(cog, Path):
+                # Get relative path from cogs/ and convert to module path
+                rel_path = cog.relative_to('cogs')
+                # Remove .py extension and convert path separators to dots
+                module_path = f"cogs.{str(rel_path.with_suffix('')).replace('/', '.')}"
+                # If it's a submodule like cogs.economy.shop, change to cogs.economy
+                if module_path.count('.') > 1:
+                    module_path = '.'.join(module_path.split('.')[:2])
+            else:
+                module_path = cog
+
+            await self.load_extension(module_path)
+            logger.info(f"[ Loaded ] {module_path}")
         except commands.errors.ExtensionAlreadyLoaded:
             pass
         except Exception as e:
@@ -907,12 +1019,14 @@ class Greed(Bot):
             return
         from pathlib import Path
 
-        cogs = [
-            f'cogs.{str(c).split("/")[-1].split(".")[0]}'
-            for c in Path("cogs/").glob("*.py")
-        ]
-        if self.user.name != "greed":
-            cogs = [c for c in cogs if not c == "cogs.instances"]
+        cogs_path = Path("cogs/")
+        cogs = []
+
+        for path in cogs_path.rglob("*.py"):
+            if self.user.name != "greed" and "instances" in str(path):
+                continue
+            cogs.append(path)
+
         await asyncio.gather(*[self.__load(c) for c in cogs])
         self.loaded = True
 
@@ -953,7 +1067,6 @@ class Greed(Bot):
                 await self.request_invite(self.user.id)
         if not self.loaded:
             await self.levels.setup(self)
-            await self.load_cogs()
             self.runner = RebootRunner(self, "cogs")
             await self.load_cogs()
             await self.runner.start()
@@ -995,11 +1108,11 @@ class Greed(Bot):
             self.db: Database = Database()
             await self.db.connect()
             self.loop.create_task(self.cache.setup_cache())
+            await self.ratelimits.setup()  # Initialize redis after connection
         self.session = ClientSession()
         self._connection.db = self.db
         self._connection.botstate = self
         self.levels = Level(0.5, self)
-    #    await self.levels.setup(self)
         self.add_view(VmButtons(self))
         self.add_view(VoicemasterInterface(self))
         self.add_view(GiveawayView())
@@ -1182,12 +1295,15 @@ class Greed(Bot):
 
         if len(channels) < 5:
             try:
-                return await guild.owner.send(embed = discord.Embed(
-                    description="> Left due to the guild not having over **5 members**",
-                    color=self.color,
-                ))
+                return await guild.owner.send(
+                    embed=discord.Embed(
+                        description="> Left due to the guild not having over **5 members**",
+                        color=self.color,
+                    )
+                )
             except Exception:
-                return
+                return None
+
         try:
             return await channels[0].send(
                 embed=discord.Embed(
@@ -1196,7 +1312,7 @@ class Greed(Bot):
                 )
             )
         except Exception:
-            return
+            return None
 
     @cache(key = "emojis", ttl = "300")
     async def get_emojis(self):

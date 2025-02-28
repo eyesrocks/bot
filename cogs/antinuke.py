@@ -19,7 +19,7 @@ from contextlib import suppress
 from loguru import logger
 from tool.greed import Greed
 import random
-
+import discord
 def trusted():
     async def predicate(ctx: Context):
         if ctx.author.id in ctx.bot.owner_ids:
@@ -80,6 +80,16 @@ class Antinuke(Cog):
             "webhooks",
         ]
 
+
+        self.rl_settings = {
+            'guild_action': (20, 10),
+            'user_action': (5, 10),
+            'global_action': (100, 10),
+            'cleanup': (3, 5),
+            'punishment': (2, 10),
+            'cache_ttl': 30
+        }
+
     async def cog_load(self):
         await self.bot.db.execute(
             """CREATE TABLE IF NOT EXISTS antinuke_threshold (guild_id BIGINT PRIMARY KEY, bot_add BIGINT DEFAULT 0, role_update BIGINT DEFAULT 0, channel_update BIGINT DEFAULT 0, guild_update BIGINT DEFAULT 0, kick BIGINT DEFAULT 0, ban BIGINT DEFAULT 0, member_prune BIGINT DEFAULT 0, webhooks BIGINT DEFAULT 0)"""
@@ -114,16 +124,14 @@ class Antinuke(Cog):
                     guild.id,
                 )
                 if threshold is not None:
-                    return int(threshold) if int(threshold) != 1 else 0  # Check and return 0 if threshold is 1
+                    return int(threshold)
 
                 if _ac in self.thresholds[guild.id]:
-                    thres = self.thresholds[guild.id].get(_ac)
-                    return thres if thres != 1 else 0 # Check and return 0 if threshold is 1
+                    return self.thresholds[guild.id].get(_ac)
 
             else:
                 if action in self.thresholds[guild.id]:
-                    thres = self.thresholds[guild.id].get(action, 0)
-                    return thres if thres != 1 else 0 # Check and return 0 if threshold is 1
+                    return self.thresholds[guild.id].get(action, 0)
         return 0
 
     async def do_ban(self, guild: Guild, user: Union[User, Member], reason: str):
@@ -167,15 +175,26 @@ class Antinuke(Cog):
         return True
 
     async def do_punishment(self, guild: Guild, user: Union[User, Member], reason: str):
-        # Consolidated punishment rate limit
-        if await self.bot.glory_cache.ratelimited(
-            f"punish:{guild.id}:{user.id}", 
-            2,  # Allow 2 punishments
-            10  # Every 10 seconds
-        ):
-            return
+        async with self.locks[guild.id], self.user_locks[user.id]:
+            # Add rate limiting for punishments
+            if await self.bot.glory_cache.ratelimited(
+                f"antinuke_punish_global", 
+                *self.rl_settings['global_action']
+            ):
+                return
 
-        async with self.user_locks[user.id]:
+            if await self.bot.glory_cache.ratelimited(
+                f"antinuke_punish_guild:{guild.id}",
+                *self.rl_settings['guild_action']
+            ):
+                return
+
+            if await self.bot.glory_cache.ratelimited(
+                f"antinuke_punish_user:{user.id}",
+                *self.rl_settings['punishment']
+            ):
+                return
+
             punishment = await self.bot.db.fetchval(
                 """SELECT punishment FROM antinuke WHERE guild_id = $1""", guild.id
             )
@@ -204,33 +223,51 @@ class Antinuke(Cog):
                 threshold = await self.get_thresholds(guild, entry.action)
             except Exception:
                 threshold = 0
-            if await self.bot.db.fetchval(
+
+            # Check whitelist and permissions first to avoid unnecessary rate limit checks
+            if (await self.bot.db.fetchval(
                 "SELECT user_id FROM antinuke_whitelist WHERE user_id = $1 AND guild_id = $2",
                 entry.user.id,
                 guild.id,
+            ) or
+                entry.user.id == guild.owner_id or
+                entry.user.id == self.bot.user.id or
+                entry.user.id in self.bot.owner_ids or
+                (hasattr(entry.user, "top_role") and entry.user.top_role >= guild.me.top_role)
             ):
                 return True
-            if (
-                entry.user.id == guild.owner_id
-                or entry.user.id == self.bot.user.id
-                or entry.user.id in self.bot.owner_ids
-                or (hasattr(entry.user, "top_role") and entry.user.top_role >= guild.me.top_role)
+
+            # Global rate limit check
+            if await self.bot.glory_cache.ratelimited(
+                "antinuke_global",
+                *self.rl_settings['global_action']
             ):
                 return True
-            # More specific rate limit key
-            rl_key = f"antinuke:{guild.id}:{entry.user.id}:{get_action(entry.action)}"
-            rl = await self.bot.glory_cache.ratelimited(
-                rl_key,
-                max(threshold, 1),  # Ensure at least 1
-                10  # 10 second window
+
+            # Guild-specific rate limit
+            if await self.bot.glory_cache.ratelimited(
+                f"antinuke_guild:{guild.id}",
+                *self.rl_settings['guild_action']
+            ):
+                return True
+
+            # User-specific rate limit for this action
+            action_key = f"antinuke:{guild.id}:{entry.user.id}:{get_action(entry.action)}"
+            exceeded = await self.bot.glory_cache.ratelimited(
+                action_key,
+                threshold,  # Use the actual threshold without forcing minimum
+                10
             )
-            if rl == 0:
-                return True
-            else:
+            
+            if exceeded:
                 logger.info(
-                    f"user {entry.user.name} passed the threshold of {threshold} with {entry.action}"
+                    f"User {entry.user.name} exceeded threshold of {threshold} for {entry.action}"
                 )
-        return False
+                return False  # Only return False (trigger punishment) when threshold is exceeded
+            
+            return True  # Return True if threshold not exceeded
+
+        return True
 
     def check_guild(self, guild: Guild, action: Union[AuditLogAction, str]):
         if guild.id in self.guilds:
@@ -243,6 +280,14 @@ class Antinuke(Cog):
         return False
 
     async def get_audit(self, guild: Guild, action: AuditLogAction = None):
+        # Add rate limiting for audit log fetches
+        if await self.bot.glory_cache.ratelimited(
+            f"audit_fetch:{guild.id}",
+            10,  # 10 fetches
+            5    # per 5 seconds
+        ):
+            return None
+
         cache_key = f"audit_{guild.id}_{action}"
         if cached := await self.bot.glory_cache.get(cache_key):
             return cached
@@ -275,7 +320,7 @@ class Antinuke(Cog):
                         logger.info(
                             f"user {str(audit.user)} invoked an event for {audit.action} on {str(audit.target)}"
                         )
-            await self.bot.glory_cache.set(cache_key, audit, 5)  # Cache for 5 seconds
+            await self.bot.glory_cache.set(cache_key, audit, self.rl_settings['cache_ttl'])
             return audit
         except Exception:
             return None
@@ -294,24 +339,27 @@ class Antinuke(Cog):
         return False
 
     async def attempt_cleanup(self, guild_id: int, action: callable, *args, **kwargs):
-        """Helper method to attempt cleanup actions with retries"""
+        """Helper method to attempt cleanup actions with rate limiting and retries"""
+        if await self.bot.glory_cache.ratelimited(
+            f"cleanup:{guild_id}", 
+            *self.rl_settings['cleanup']
+        ):
+            return None
+
         base_delay = 1.2
         for attempt in range(5):
             try:
-                if await self.bot.glory_cache.ratelimited(
-                    f"cleanup:{guild_id}", 
-                    3,  # 3 attempts 
-                    5   # per 5 seconds
-                ) == 0:
-                    return await action(*args, **kwargs)
+                return await action(*args, **kwargs)
             except discord.HTTPException as e:
                 if e.status == 429:
                     retry_after = e.retry_after or base_delay * (2 ** attempt)
                     await sleep(retry_after + random.uniform(0, 0.5))
                 else:
-                    break
-            except Exception:
-                break
+                    logger.error(f"Cleanup failed: {str(e)}")
+                    return None
+            except Exception as e:
+                logger.error(f"Unexpected error in cleanup: {str(e)}")
+                return None
             await sleep(base_delay * (2 ** attempt) + random.uniform(0, 0.5))
         return None
 

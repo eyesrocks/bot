@@ -222,7 +222,7 @@ class MyHelpCommand(commands.HelpCommand):
         )
         embed.set_author(name=self.context.bot.user.name, icon_url=self.context.bot.user.avatar)
         
-        categories = {command.cog_name for command in self.context.bot.walk_commands() if command.cog_name and command.cog_name.lower() not in ["owner", "jishaku", "errors", "webserver"]}
+        categories = {command.cog_name for command in self.context.bot.walk_commands() if command.cog_name and command.cog_name not in ["Owner", "Jishaku", "errors", "webserver"]}
         view = HelpView(self.context.bot, sorted(categories), self.context)
         await self.context.send(embed=embed, view=view)
 
@@ -235,6 +235,8 @@ class MyHelpCommand(commands.HelpCommand):
         raise InvalidSubCommand(f'**Command** "{command.qualified_name}" **has** `no subcommands.`')
 
     async def send_group_help(self, group):
+        if group.cog_name in ["Owner", "Jishaku"]:
+            return
         if retry_after := await self.context.bot.glory_cache.ratelimited(f"rl:ghelp:{self.context.author.id}", 1, 5):
             raise commands.CommandOnCooldown(commands.BucketType.user, retry_after, 1)
         
@@ -285,6 +287,9 @@ class MyHelpCommand(commands.HelpCommand):
             )
 
     async def send_command_help(self, command):
+        if command.cog_name in ["Owner", "Jishaku"]:
+            return
+
         if retry_after := await self.context.bot.glory_cache.ratelimited(f"rl:chelp:{self.context.author.id}", 1, 5):
             raise commands.CommandOnCooldown(None, retry_after, None)
         embed = Embed(color=0x2f4672, timestamp=datetime.datetime.now())
@@ -323,7 +328,7 @@ class MyHelpCommand(commands.HelpCommand):
         ex = f"{self.context.prefix}{command.qualified_name} "
         for key, value in command.clean_params.items():
             if "user" in repr(value).lower() or "member" in repr(value).lower():
-                ex += "@lim "
+                ex += "@b1o5 "
             elif "role" in repr(value).lower():
                 ex += "@mod "
             elif "image" in repr(value).lower() or "attachment" in repr(value).lower():

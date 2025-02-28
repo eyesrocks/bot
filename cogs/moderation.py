@@ -14,7 +14,7 @@ from discord.ext.commands import Cog, CommandError
 from contextlib import suppress
 from discord import Member, Embed, NotFound, Thread, User
 from collections import defaultdict
-from typing import Union, List, Type, Optional, Callable, List, Dict, Any
+from typing import Union, List, Type, Optional, Callable, List, Dict, Any, Literal
 from tool.important import Context  # type: ignore
 from tool.important.subclasses.command import (  # type: ignore
     Role,
@@ -37,6 +37,7 @@ from pydantic import BaseModel
 import uuid
 from asyncpg import exceptions
 from tool.important.subclasses.parser import EmbedConverter
+from datetime import timedelta
 
 class ModerationStatistics(BaseModel):
     bans: Optional[int] = 0
@@ -202,15 +203,6 @@ class Moderation(Cog):
         self.user_id = 977036206179233862
         self.locks = defaultdict(asyncio.Lock)
         self.tasks = {}
-
-    async def cog_load(self):
-        await self.bot.db.execute(
-            """CREATE TABLE IF NOT EXISTS jail_config (
-                guild_id BIGINT PRIMARY KEY,
-                role_id BIGINT,
-                channel_id BIGINT
-            )"""
-        )
 
     async def invoke_msg(self, ctx: Context, member: Union[User, Member], message: Optional[discord.Message] = None):
         """Send a custom invoke message if configured, return True if sent, False otherwise"""
@@ -1129,10 +1121,10 @@ class Moderation(Cog):
         message = await ctx.send(
             embed=discord.Embed(
                 description=f"removing {role.mention} from all bots... this may take a while...",
-                color=self.bot.color,
+                color=0x42B37F,
             )
         )
-        await self.moderator_logs(ctx, f"removed {role.mention} from all bots")
+        await self.moderator_logs(ctx, f"<:yes:1342777287615057931> removed {role.mention} from all bots")
         await self.role_all_task(ctx, message, role, True, False, True)
         return
 
@@ -1154,8 +1146,8 @@ class Moderation(Cog):
         role = role[0]
         message = await ctx.send(
             embed=discord.Embed(
-                description=f"giving {role.mention} to all humans... this may take a while...",
-                color=self.bot.color,
+                description=f"<:yes:1342777287615057931> giving {role.mention} to all humans... this may take a while...",
+                color=0x42B37F,
             )
         )
         await self.moderator_logs(ctx, f"gave {role.mention} to all humans")
@@ -1174,8 +1166,8 @@ class Moderation(Cog):
         role = role[0]
         message = await ctx.send(
             embed=discord.Embed(
-                description=f"removing {role.mention} from all humans... this may take a while...",
-                color=self.bot.color,
+                description=f"<:yes:1342777287615057931> removing {role.mention} from all humans... this may take a while...",
+                color=0x42B37F,
             )
         )
         await self.moderator_logs(ctx, f"took {role.mention} from all humans")
@@ -2058,14 +2050,22 @@ class Moderation(Cog):
         )
 
         if not stored_roles:
-            raise CommandError(f"No stored roles found for {member.mention}")
+            await member.remove_roles(jailed)
+            await self.bot.db.execute(
+                """DELETE FROM jailed WHERE guild_id = $1 AND user_id = $2""",
+                ctx.guild.id,
+                member.id,
+            )
+            await self.moderator_logs(ctx, f"unjailed **{member.name}**")
+            return True
 
         try:
             roles_to_add = []
-            for role_id in stored_roles.split(","):
-                if role := ctx.guild.get_role(int(role_id)):
-                    if role.is_assignable():
-                        roles_to_add.append(role)
+            if stored_roles:  # Only process if there are stored roles
+                for role_id in stored_roles.split(","):
+                    if role := ctx.guild.get_role(int(role_id)):
+                        if role.is_assignable():
+                            roles_to_add.append(role)
 
             current_roles = [
                 r for r in member.roles if r != jailed and not r.is_default()
@@ -2120,7 +2120,7 @@ class Moderation(Cog):
 
         if role.position > ctx.guild.me.top_role.position:
             return await ctx.fail("**jailed** role is higher than my **top role**")
-        if role.position > ctx.author.top_role.position:
+        if role.position > ctx.author.top_role.position and ctx.author != ctx.guild.owner:
             return await ctx.fail("**jailed** role is higher than your **top role**")
         if role in member.roles:
             return await ctx.fail(f"{member.mention} is already **jailed**")
@@ -2441,57 +2441,61 @@ class Moderation(Cog):
             return await ctx.fail(f"you aren't higher then {member.mention} is")
         if member == ctx.guild.owner:
             return await ctx.fail("you can't forcenick the owner")
-        if name is None:
-            if guild_data := self.bot.cache.forcenick.get(ctx.guild.id):
-                if guild_data.get(member.id):  # type: ignore
-                    await self.bot.db.execute(
-                        """DELETE FROM forcenick WHERE guild_id = $1 AND user_id = $2""",
-                        ctx.guild.id,
-                        member.id,
-                    )
-                    self.bot.cache.forcenick[ctx.guild.id].pop(member.id)
-                    await member.edit(nick=None, reason="forcenicked")
-                    return await ctx.success(
-                        f"**Unlocked** {member.mention}'s nickname"
-                    )
-            else:
-                return await ctx.fail(f"theres no forcenick entry for {member.mention}")
+        
+        try:
+            if name is None:
+                if guild_data := self.bot.cache.forcenick.get(ctx.guild.id):
+                    if guild_data.get(member.id):  # type: ignore
+                        await self.bot.db.execute(
+                            """DELETE FROM forcenick WHERE guild_id = $1 AND user_id = $2""",
+                            ctx.guild.id,
+                            member.id,
+                        )
+                        self.bot.cache.forcenick[ctx.guild.id].pop(member.id)
+                        await member.edit(nick=None, reason="forcenicked")
+                        return await ctx.success(
+                            f"**Unlocked** {member.mention}'s nickname"
+                        )
+                else:
+                    return await ctx.fail(f"theres no forcenick entry for {member.mention}")
 
-        else:
-            if guild_data := self.bot.cache.forcenick.get(ctx.guild.id):
-                if guild_data.get(member.id):  # type: ignore
-                    await self.bot.db.execute(
-                        """INSERT INTO forcenick (guild_id,user_id,nick) VALUES($1,$2,$3) ON CONFLICT (guild_id,user_id) DO UPDATE SET nick = excluded.nick""",
-                        ctx.guild.id,
-                        member.id,
-                        name,
-                    )
-                    self.bot.cache.forcenick[ctx.guild.id][member.id] = name
-                    ogname = member.display_name
-                    await member.edit(nick=name, reason="forcenicked")
-                    return await ctx.success(
-                        f"**{ogname}** has been **locked** to `{name}`"
-                    )
-        if name is None:
+            else:
+                if guild_data := self.bot.cache.forcenick.get(ctx.guild.id):
+                    if guild_data.get(member.id):  # type: ignore
+                        await self.bot.db.execute(
+                            """INSERT INTO forcenick (guild_id,user_id,nick) VALUES($1,$2,$3) ON CONFLICT (guild_id,user_id) DO UPDATE SET nick = excluded.nick""",
+                            ctx.guild.id,
+                            member.id,
+                            name,
+                        )
+                        self.bot.cache.forcenick[ctx.guild.id][member.id] = name
+                        ogname = member.display_name
+                        await member.edit(nick=name, reason="forcenicked")
+                        return await ctx.success(
+                            f"**{ogname}** has been **locked** to `{name}`"
+                        )
+            if name is None:
+                await self.bot.db.execute(
+                    """DELETE FROM forcenick WHERE guild_id = $1 AND user_id = $2""",
+                    ctx.guild.id,
+                    member.id,
+                )
+                return await ctx.success(f"**Unlocked** {member.mention}'s forced nickname")
             await self.bot.db.execute(
-                """DELETE FROM forcenick WHERE guild_id = $1 AND user_id = $2""",
+                """INSERT INTO forcenick (guild_id,user_id,nick) VALUES($1,$2,$3) ON CONFLICT DO NOTHING""",
                 ctx.guild.id,
                 member.id,
+                name,
             )
-            return await ctx.success(f"**Unlocked** {member.mention}'s forced nickname")
-        await self.bot.db.execute(
-            """INSERT INTO forcenick (guild_id,user_id,nick) VALUES($1,$2,$3) ON CONFLICT DO NOTHING""",
-            ctx.guild.id,
-            member.id,
-            name,
-        )
-        if ctx.guild.id not in self.bot.cache.forcenick:
-            self.bot.cache.forcenick[ctx.guild.id] = {}
-        self.bot.cache.forcenick[ctx.guild.id][member.id] = name
-        await member.edit(nick=name, reason="forcenicked")
-        return await ctx.success(
-            f"**locked** {member.mention}'s nickname to **{name}**"
-        )
+            if ctx.guild.id not in self.bot.cache.forcenick:
+                self.bot.cache.forcenick[ctx.guild.id] = {}
+            self.bot.cache.forcenick[ctx.guild.id][member.id] = name
+            await member.edit(nick=name, reason="forcenicked")
+            return await ctx.success(
+                f"**locked** {member.mention}'s nickname to **{name}**"
+            )
+        except discord.Forbidden:
+            return await ctx.fail("I don't have permission to change that member's nickname")
 
     @commands.group(name="lock", brief="Lock the channel in a guild")
     @commands.has_permissions(manage_channels=True)
@@ -3020,20 +3024,27 @@ class Moderation(Cog):
     @commands.has_permissions(manage_messages=True)
     async def cleanup(self, ctx):
         bot_messages = []
-        async for message in ctx.channel.history(
-            limit=200
-        ):  # Increase the limit if needed
-            if message.author == self.bot.user or message.content.startswith(
-                ctx.prefix
-            ):
+        now = discord.utils.utcnow()
+        cutoff = now - datetime.timedelta(days=14)
+        
+        async for message in ctx.channel.history(limit=200):
+            if message.created_at < cutoff:
+                continue
+                
+            if message.author == self.bot.user or message.content.startswith(ctx.prefix):
                 bot_messages.append(message)
                 if len(bot_messages) == 100:
                     break
+                    
         bot_messages.append(ctx.message)
-        #        if messag
-        await ctx.channel.delete_messages(set(bot_messages))
-        message = await ctx.send("👍🏼")
-        await message.delete()
+        
+        if bot_messages:
+            await ctx.channel.delete_messages(set(bot_messages))
+            message = await ctx.send("👍🏼")
+            await message.delete()
+        else:
+            message = await ctx.send("No messages to clean up")
+            await message.delete(delay=3)
 
     @commands.group(
         name="warn",
@@ -3043,7 +3054,7 @@ class Moderation(Cog):
     )
     @commands.has_permissions(manage_messages=True)
     async def warn(
-        self, ctx: Context, member: Member, *, reason: str
+        self, ctx: Context, member: Member, *, reason: str = "No reason provided"
     ) -> discord.Message:
         if member.top_role >= ctx.author.top_role:
             return await ctx.fail("you can't warn someone higher than you")
@@ -3053,17 +3064,75 @@ class Moderation(Cog):
             return await ctx.fail("you can't warn me")
         if member == ctx.author:
             return await ctx.fail("you can't warn yourself")
+
+        # Add warning
+        warn_id = str(uuid.uuid4())[:6]
         await self.bot.db.execute(
-            """INSERT INTO warnings (guild_id, user_id, reason, created_at, moderator_id, id) VALUES($1, $2, $3, $4, $5, $6)""",
-            ctx.guild.id,
-            member.id,
-            reason,
+            """INSERT INTO warnings (guild_id, user_id, reason, created_at, moderator_id, id) 
+            VALUES($1, $2, $3, $4, $5, $6)""",
+            ctx.guild.id, member.id, reason, 
             discord.utils.utcnow().replace(tzinfo=None),
-            ctx.author.id,
-            str(uuid.uuid4())[:6],
+            ctx.author.id, warn_id
         )
+        
+        # Get warning count
+        warning_count = await self.bot.db.fetchval(
+            """SELECT COUNT(*) FROM warnings WHERE guild_id = $1 AND user_id = $2""",
+            ctx.guild.id, member.id
+        )
+
+        # Check for punishments at current warning count
+        punishments = await self.bot.db.fetch(
+            """SELECT type, duration FROM warning_punishments 
+            WHERE guild_id = $1 AND threshold = $2
+            ORDER BY CASE 
+                WHEN type = 'ban' THEN 1
+                WHEN type = 'kick' THEN 2
+                WHEN type = 'jail' THEN 3
+                WHEN type = 'timeout' THEN 4
+            END""",  # Order punishments so ban is always last
+            ctx.guild.id, warning_count
+        )
+
         await self.store_statistics(ctx, ctx.author)
-        return await ctx.success(f"**Warned** {member.mention} for `{reason}`")
+        response = f"**Warned** {member.mention} for `{reason}` (Warning #{warning_count})"
+
+        if punishments:
+            for punishment in punishments:
+                punishment_type = punishment['type']
+                duration = punishment['duration']
+
+                try:
+                    if punishment_type == "kick":
+                        await member.kick(reason=f"Reached warning threshold ({warning_count})")
+                        response += f"\nAutomatically kicked for reaching {warning_count} warnings"
+                        
+                    elif punishment_type == "ban":
+                        await member.ban(reason=f"Reached warning threshold ({warning_count})")
+                        response += f"\nAutomatically banned for reaching {warning_count} warnings"
+                        # Only reset warnings on ban
+                        await self.bot.db.execute(
+                            """DELETE FROM warnings WHERE guild_id = $1 AND user_id = $2""",
+                            ctx.guild.id, member.id
+                        )
+                        response += "\nWarning count has been reset due to ban"
+                        break  # Stop processing other punishments after ban
+                        
+                    elif punishment_type == "timeout":
+                        until = discord.utils.utcnow() + timedelta(seconds=duration)
+                        await member.timeout(until, reason=f"Reached warning threshold ({warning_count})")
+                        response += f"\nAutomatically timed out for {humanize.naturaldelta(timedelta(seconds=duration))} for reaching {warning_count} warnings"
+                        
+                    elif punishment_type == "jail":
+                        await self.do_jail(ctx, member)
+                        response += f"\nAutomatically jailed for reaching {warning_count} warnings"
+
+                except discord.Forbidden:
+                    response += f"\nFailed to apply punishment ({punishment_type}) - Missing Permissions"
+                except Exception as e:
+                    response += f"\nFailed to apply punishment ({punishment_type}) - {str(e)}"
+
+        return await ctx.success(response)
 
     @warn.command(
         name="list",
@@ -3348,6 +3417,180 @@ class Moderation(Cog):
         except Exception as e:
             await ctx.fail(f"Error sending report: {e}")
             logger.info(f"Error sending report: {e}")
+
+    @warn.group(name="punishment", brief="Manage warning punishments", invoke_without_command=True)
+    @commands.has_permissions(administrator=True)
+    async def warn_punishment(self, ctx: Context):
+        """View current warning punishments"""
+        punishments = await self.bot.db.fetch(
+            """SELECT threshold, type, duration FROM warning_punishments WHERE guild_id = $1 ORDER BY threshold ASC""",
+            ctx.guild.id
+        )
+        
+        if not punishments:
+            return await ctx.fail("No warning punishments configured")
+
+        embed = discord.Embed(
+            title="Warning Punishments",
+            color=self.bot.color,
+            description="List of automated punishments when warning threshold is reached"
+        )
+
+        for p in punishments:
+            duration = f" for {humanize.naturaldelta(timedelta(seconds=p['duration']))}" if p['duration'] else ""
+            embed.add_field(
+                name=f"Threshold: {p['threshold']} warnings",
+                value=f"Punishment: **{p['type']}**{duration}",
+                inline=False
+            )
+
+        await ctx.send(embed=embed)
+
+    @warn_punishment.command(name="add", brief="Add a warning punishment")
+    @commands.has_permissions(administrator=True) 
+    async def warn_punishment_add(
+        self, 
+        ctx: Context,
+        threshold: int,
+        type: Literal["kick", "timeout", "ban", "jail"],
+        duration: str = None
+    ):
+        """
+        Add a punishment for reaching a warning threshold
+        """
+        if type not in ["kick", "timeout", "ban", "jail"]:
+            return await ctx.fail("Invalid punishment type. Use 'kick', 'timeout', 'ban', or 'jail'.")
+        if threshold < 1:
+            return await ctx.fail("Threshold must be at least 1")
+
+        # Convert duration if provided
+        seconds = None
+        if duration and type in ("timeout", "jail"):
+            try:
+                seconds = humanfriendly.parse_timespan(duration)
+                if type == "timeout" and seconds > 2419200:  # 28 days
+                    return await ctx.fail("Timeout duration cannot exceed 28 days")
+            except:
+                return await ctx.fail("Invalid duration format. Example: 1h, 2d")
+        else:
+            duration = None
+        
+        # Store in database
+        await self.bot.db.execute(
+            """INSERT INTO warning_punishments (guild_id, threshold, type, duration)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (guild_id, threshold) 
+            DO UPDATE SET type = excluded.type, duration = excluded.duration""",
+            ctx.guild.id, threshold, type, seconds
+        )
+
+        duration_text = f" for {humanize.naturaldelta(timedelta(seconds=seconds))}" if seconds else ""
+        await ctx.success(f"Added punishment: **{type}**{duration_text} at **{threshold}** warnings")
+
+    @warn_punishment.command(name="remove", brief="Remove a warning punishment")
+    @commands.has_permissions(administrator=True)
+    async def warn_punishment_remove(self, ctx: Context, threshold: int):
+        """Remove a punishment for a specific warning threshold"""
+        result = await self.bot.db.execute(
+            """DELETE FROM warning_punishments WHERE guild_id = $1 AND threshold = $2""",
+            ctx.guild.id, threshold
+        )
+        
+        if result == "DELETE 0":
+            return await ctx.fail(f"No punishment found for threshold **{threshold}**")
+            
+        await ctx.success(f"Removed punishment for threshold **{threshold}**")
+
+    @warn_punishment.command(name="clear", brief="Clear all warning punishments")
+    @commands.has_permissions(administrator=True)
+    async def warn_punishment_clear(self, ctx: Context):
+        """Remove all warning punishments"""
+        await self.bot.db.execute(
+            """DELETE FROM warning_punishments WHERE guild_id = $1""",
+            ctx.guild.id
+        )
+        await ctx.success("Cleared all warning punishments")
+
+    @commands.group(name="warn", brief="Warn a member in a guild", example=",warn @sudosql being rude", invoke_without_command=True)
+    @commands.has_permissions(manage_messages=True)
+    async def warn(self, ctx: Context, member: Member, *, reason: str = "No reason provided") -> discord.Message:
+        if member.top_role >= ctx.author.top_role:
+            return await ctx.fail("you can't warn someone higher than you")
+        if member == ctx.guild.owner:
+            return await ctx.fail("you can't warn the owner")
+        if member == ctx.guild.me:
+            return await ctx.fail("you can't warn me")
+        if member == ctx.author:
+            return await ctx.fail("you can't warn yourself")
+
+        # Add warning
+        warn_id = str(uuid.uuid4())[:6]
+        await self.bot.db.execute(
+            """INSERT INTO warnings (guild_id, user_id, reason, created_at, moderator_id, id) 
+            VALUES($1, $2, $3, $4, $5, $6)""",
+            ctx.guild.id, member.id, reason, 
+            discord.utils.utcnow().replace(tzinfo=None),
+            ctx.author.id, warn_id
+        )
+        
+        # Get warning count
+        warning_count = await self.bot.db.fetchval(
+            """SELECT COUNT(*) FROM warnings WHERE guild_id = $1 AND user_id = $2""",
+            ctx.guild.id, member.id
+        )
+
+        # Check for punishments at current warning count
+        punishments = await self.bot.db.fetch(
+            """SELECT type, duration FROM warning_punishments 
+            WHERE guild_id = $1 AND threshold = $2
+            ORDER BY CASE 
+                WHEN type = 'ban' THEN 1
+                WHEN type = 'kick' THEN 2
+                WHEN type = 'jail' THEN 3
+                WHEN type = 'timeout' THEN 4
+            END""",  # Order punishments so ban is always last
+            ctx.guild.id, warning_count
+        )
+
+        await self.store_statistics(ctx, ctx.author)
+        response = f"**Warned** {member.mention} for `{reason}` (Warning #{warning_count})"
+
+        if punishments:
+            for punishment in punishments:
+                punishment_type = punishment['type']
+                duration = punishment['duration']
+
+                try:
+                    if punishment_type == "kick":
+                        await member.kick(reason=f"Reached warning threshold ({warning_count})")
+                        response += f"\nAutomatically kicked for reaching {warning_count} warnings"
+                        
+                    elif punishment_type == "ban":
+                        await member.ban(reason=f"Reached warning threshold ({warning_count})")
+                        response += f"\nAutomatically banned for reaching {warning_count} warnings"
+                        # Only reset warnings on ban
+                        await self.bot.db.execute(
+                            """DELETE FROM warnings WHERE guild_id = $1 AND user_id = $2""",
+                            ctx.guild.id, member.id
+                        )
+                        response += "\nWarning count has been reset due to ban"
+                        break  # Stop processing other punishments after ban
+                        
+                    elif punishment_type == "timeout":
+                        until = discord.utils.utcnow() + timedelta(seconds=duration)
+                        await member.timeout(until, reason=f"Reached warning threshold ({warning_count})")
+                        response += f"\nAutomatically timed out for {humanize.naturaldelta(timedelta(seconds=duration))} for reaching {warning_count} warnings"
+                        
+                    elif punishment_type == "jail":
+                        await self.do_jail(ctx, member)
+                        response += f"\nAutomatically jailed for reaching {warning_count} warnings"
+
+                except discord.Forbidden:
+                    response += f"\nFailed to apply punishment ({punishment_type}) - Missing Permissions"
+                except Exception as e:
+                    response += f"\nFailed to apply punishment ({punishment_type}) - {str(e)}"
+
+        return await ctx.success(response)
 
 
 async def setup(bot: "Greed") -> None:

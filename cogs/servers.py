@@ -2063,14 +2063,17 @@ class Servers(Cog):
         name="remove",
         aliases=("delete",),
         example=",emoji remove [emoji]",
-        brief="Remove an emoji from the server",
+        brief="Remove an emoji from the server"
     )
     @bot_has_permissions(manage_emojis=True)
     @has_permissions(manage_emojis=True)
-    async def emoji_remove(self: "Servers", ctx: Context, *, emoji: Emoji):
-        await emoji.delete(
-            reason=f"{self.bot.user.name.title()} Utilities [{ctx.author}]"
-        )
+    async def emoji_remove(self: "Servers", ctx: Context, *, emoji: Union[discord.Emoji, str]):
+        """Remove an emoji from the server"""
+        
+        if isinstance(emoji, str) or (isinstance(emoji, discord.Emoji) and emoji.guild_id != ctx.guild.id):
+            return await ctx.fail("That emoji cannot be deleted from this server")
+
+        await emoji.delete(reason=f"{self.bot.user.name.title()} Utilities [{ctx.author}]")
         return await ctx.success("**Deleted** that emoji")
 
     @emoji.command(
@@ -4055,10 +4058,17 @@ class Servers(Cog):
     async def reactionrole_add(
         self, ctx: Context, *, message_emoji_role: ReactionRoleConverter
     ):
-        emoji = message_emoji_role["emoji"]
+        emoji = str(message_emoji_role["emoji"])
         message = message_emoji_role["message"]
         role = message_emoji_role["role"]
-        emoji = str(emoji)
+
+        try:
+            await message.add_reaction(emoji)
+        except discord.HTTPException as e:
+            if e.code == 10014:
+                return await ctx.fail("Invalid emoji provided. Please use a valid emoji.")
+            raise
+
         if await self.bot.db.fetch(
             """SELECT * FROM reactionrole WHERE guild_id = $1 AND channel_id = $2 AND message_id = $3 AND emoji = $4 AND role_id = $5""",
             ctx.guild.id,
@@ -4084,8 +4094,8 @@ class Servers(Cog):
             role.id,
             message.jump_url,
         )
-        await message.add_reaction(emoji)
-        return await ctx.success("**Reaction role** has been **added to that meesage**")
+
+        return await ctx.success("**Reaction role** has been **added to that message**")
 
     def get_emoji(self, emoji: str):
         try:

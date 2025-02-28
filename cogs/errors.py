@@ -29,6 +29,7 @@ from aiohttp.client_exceptions import (
 from tool.exceptions import InvalidSubCommand
 from cogs.economy import OverMaximum
 from cogs.moderation import InvalidError
+import sys
 
 
 def multi_replace(text: str, to_replace: dict, once: bool = False) -> str:
@@ -64,7 +65,7 @@ def get_message(parameter: str) -> str:
 class Errors(Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.ignored = tuple([commands.CommandNotFound, CheckFailure, OverMaximum])
+        self.ignored = tuple([commands.CommandNotFound, CheckFailure, OverMaximum, CommandError])
         self.debug = False
 
     def get_rl(self, exception: Exception) -> Union[int, float]:
@@ -74,6 +75,9 @@ class Errors(Cog):
             return 5
 
     def log_error(self, ctx: Context, exception: Exception) -> None:
+        if isinstance(exception, CommandError):
+            return
+            
         error = getattr(exception, "original", exception)
         exc = "".join(
             traceback.format_exception(type(error), error, error.__traceback__)
@@ -89,17 +93,20 @@ class Errors(Cog):
         if self.debug is True:
             self.log_error(ctx, exception)
         if not isinstance(exception, commands.CommandNotFound):
-            if retry_after:  # and type(exception) != commands.CommandNotFound:
+            if retry_after:
                 return
-        try:
-            if msg := getattr(exception, "message"):
-                if msg == "lol":
-                    return
-        except Exception:
-            pass
 
         error = getattr(exception, "original", exception)
         if isinstance(error, InvalidError) or isinstance(exception, InvalidError):
+            return
+
+        # Replace the old CommandError handling with this updated version
+        if isinstance(exception, CommandError):
+            error_message = str(exception)
+            if hasattr(exception, 'message'):
+                error_message = exception.message
+            if error_message != "lol":  # Keep the special case handling
+                return await ctx.warning(error_message)
             return
 
         if isinstance(exception, commands.BadArgument):
@@ -147,6 +154,8 @@ class Errors(Cog):
             return await ctx.warning(
                 "The **API** timed out during the request due to a proxy error!"
             )
+        elif isinstance(exception, CommandError):
+            return await ctx.warning(exception.message)
         elif isinstance(error, InvalidSubCommand):
             if await self.bot.glory_cache.ratelimited(
                 f"rl:cooldown_message:{ctx.author.id}", 1, self.get_rl(exception) or 5
@@ -369,17 +378,6 @@ class Errors(Cog):
             ):
                 return
             return await ctx.warning(str(exception))
-        # if hasattr(exception, "message"):
-        #     if "The check functions" in exception.message:
-        #         return
-        #     if await self.bot.glory_cache.ratelimited(
-        #         f"rl:error_message:{ctx.author.id}", 3, 5
-        #     ):
-        #         return
-        #     logger.error(
-        #         f'{type(error).__name__:25} > {ctx.guild} | {ctx.author} "{ctx.message.content}" \n {error} \n {exc}'
-        #     )
-        #     return await ctx.warning(exception.message.split(":")[-1])
         if "Missing Permissions" in str(exception):
             if await self.bot.glory_cache.ratelimited(
                 f"rl:error_message:{ctx.author.id}", 3, 5
@@ -420,7 +418,7 @@ class Errors(Cog):
             self.log_error(ctx, exception)
         return await self.bot.send_exception(
             ctx, exception
-        )  # await ctx.warning(str(exception))
+        )
 
     @Cog.listener("on_command_error")
     async def on_error(self, ctx: Context, exception: Exception):
@@ -438,6 +436,15 @@ class Errors(Cog):
         else:
             m = "**Disabled** debug mode"
         return await ctx.success(m)
+
+    @Cog.listener()
+    async def on_application_command_error(self, ctx, error):
+        """Handle slash command errors"""
+        try:
+            return await self.handle_exceptions(ctx, error)
+        except Exception as e:
+            if not isinstance(e, CommandError):
+                self.log_error(ctx, e)
 
 
 async def setup(bot):

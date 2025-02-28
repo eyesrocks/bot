@@ -1185,7 +1185,7 @@ class Automod(commands.Cog):
     @commands.has_permissions(manage_guild=True)
     async def filter_punishment(self, ctx: Context, *, punishment: str):
         await self.check_setup(ctx.guild)
-        if punishment.lower() not in ["delete", "timeout", "kick", "ban"]:
+        if punishment.lower() not in ["delete", "timeout", "kick", "ban", "jail"]:
             return await ctx.fail(f"That is not a **valid punishment**")
 
         await self.bot.db.execute(

@@ -1,3 +1,5 @@
+from asyncio import tasks
+import json
 import os
 import typing
 from color_processing import ColorInfo
@@ -400,7 +402,8 @@ class CommandTransformer(app_commands.Transformer):
 class Information(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.requester = LastFMHTTPRequester(api_key="260c08af4a7f26f90743f66637572031")        
+        self.requester = LastFMHTTPRequester(api_key="260c08af4a7f26f90743f66637572031")    
+        self.bot.loop.create_task(self.setup_db())
         #       self.recognizer = Recognizer()
         self.command_count = len(
             [
@@ -409,6 +412,39 @@ class Information(commands.Cog):
                 if cmd.cog_name not in ("Jishaku", "events", "Owner")
             ]
         )
+
+
+    async def setup_db(self):
+        """Sets up the database tables if they don't exist."""
+        await self.bot.db.execute(''' 
+            CREATE TABLE IF NOT EXISTS guilds_stats ( 
+                guild_id BIGINT PRIMARY KEY, 
+                joins INT DEFAULT 0, 
+                leaves INT DEFAULT 0 
+            )
+        ''')
+
+    async def update_server_stats(self, guild_id: int, column: str):
+        """Update join/leave count for a guild."""
+        await self.bot.db.execute(
+            f"""
+            INSERT INTO guilds_stats (guild_id, {column})
+            VALUES ($1, 1)
+            ON CONFLICT (guild_id)
+            DO UPDATE SET {column} = guilds_stats.{column} + 1
+            """,
+            guild_id,
+        )
+
+    @commands.Cog.listener()
+    async def on_member_join(self, member):
+        """Listener for user joins."""
+        await self.update_server_stats(member.guild.id, "joins")
+
+    @commands.Cog.listener()
+    async def on_member_remove(self, member):
+        """Listener for user leaves."""
+        await self.update_server_stats(member.guild.id, "leaves")
 
     async def lf(self, mem: Union[Member, discord.User]):
         """Fetches the last played song on LastFM for a user using the nowplaying method"""
@@ -435,6 +471,34 @@ class Information(commands.Cog):
             print(f"Error fetching LastFM data: {e}")
         
         return None  # If no track is found, return None
+
+    @commands.command(aliases=["guildstats", "mc", "membercount"], brief="View the member count of the server", example=",membercount")
+    async def guilds_stats(self, ctx):
+        """Displays the number of joins, leaves, and total members for the server."""
+        guild = ctx.guild
+        total_users = len(guild.members)
+        total_members = len([member for member in guild.members if not member.bot])
+        total_bots = total_users - total_members
+
+        # Fetch stats from the database
+        stats = await self.bot.db.fetchrow(
+            "SELECT joins, leaves FROM guilds_stats WHERE guild_id = $1", guild.id
+        )
+        joins = stats["joins"] if stats else 0
+        leaves = stats["leaves"] if stats else 0
+
+        embed = discord.Embed(
+            title=f"**{ctx.guild.name}**",
+            color=self.bot.color,
+        )
+        embed.add_field(name="> Total", value=f"<:line:1336409552786161724> **`{total_users}`** <:iconsPerson:1342771680879317095>", inline=False)
+        embed.add_field(name="> Joins", value=f"<:line:1336409552786161724> **`{joins}`** <:190:1337552566002647171>", inline=False)
+        embed.add_field(name="> Leaves", value=f"<:line:1336409552786161724> **`{leaves}`** <:190:1337552564404748308>", inline=False)
+        embed.add_field(name="> Bots", value=f"<:line:1336409552786161724> **`{total_bots}`** <:spyiconsbots:1342773947560886316>", inline=True)
+        embed.set_thumbnail(url=ctx.guild.icon.url if ctx.guild.icon else None)
+        embed.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.display_avatar)
+
+        await ctx.send(embed=embed)
 
     @commands.command(name = "level", brief = "see your level in the server", aliases = ["lvl", "rank", "rnk", "activity"], usage = ",level <member>", example = ",level @aiohttp")
     async def level(self, ctx: Context, *, member: Optional[Member] = commands.Author):
@@ -748,32 +812,6 @@ class Information(commands.Cog):
 
         await ctx.send(embed=embed, view=view)
 
-    @commands.command(
-        name="members",
-        description="Show server statistics",
-        example=",members",
-        aliases=[
-            "membercount",
-            "serverstats",
-            "mc",
-        ],
-    )
-    async def server_stats(self, ctx):
-        guild = ctx.guild
-        total_users = len(guild.members)
-        total_members = len([member for member in guild.members if not member.bot])
-        total_bots = total_users - total_members
-        e = discord.Embed(
-            color=self.bot.color,
-            title=f"**__{guild.name}__**",
-        )
-        e.set_thumbnail(url=guild.icon)  # Set server icon as thumbnail
-        # Author information (user who used the command)
-        e.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar)
-        e.add_field(name="Users", value=f"`{total_users}`", inline=True)
-        e.add_field(name="Members", value=f"`{total_members}`", inline=True)
-        e.add_field(name="Bots", value=f"`{total_bots}`", inline=True)
-        await ctx.send(embed=e)
 
     @commands.command(
         name="serverinfo",
@@ -874,6 +912,7 @@ class Information(commands.Cog):
                 inline=True,
             )
             embed.set_thumbnail(url=user.display_avatar)
+            
             return await ctx.send(embed=embed)
 
         # Handle Member with full server info
@@ -1055,7 +1094,11 @@ class Information(commands.Cog):
 
             embed.add_field(name="**__Roles__**", value=f"{roles}", inline=False)
 
+
+
         embed.set_thumbnail(url=user.display_avatar)
+
+
 
         embed.set_footer(
             text=f"{len(mutual_guilds)} mutuals, Join position: {position}"

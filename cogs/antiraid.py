@@ -2,9 +2,11 @@ import discord
 from discord.ext import commands
 from datetime import datetime
 import pytz  # For handling timezone
-
+from tool.greed import Greed
+from loguru import logger
+from cogs.moderation import Moderation
 class Antiraid(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot: Greed):
         self.bot = bot
         self.original_permissions = {}
         self.bot.loop.create_task(self.setup_db())  # Initialize the database
@@ -23,7 +25,8 @@ class Antiraid(commands.Cog):
                 minimum_account_age INT DEFAULT 7, 
                 lockdown BOOLEAN DEFAULT FALSE, 
                 default_pfp_check BOOLEAN DEFAULT FALSE,
-                log_channel_id BIGINT
+                log_channel_id BIGINT,
+                raid_punishment TEXT DEFAULT 'ban'
             )
         ''')
         await self.bot.db.execute(''' 
@@ -46,11 +49,15 @@ class Antiraid(commands.Cog):
             ALTER TABLE server_settings
             ADD COLUMN IF NOT EXISTS log_channel_id BIGINT
         ''')
+        await self.bot.db.execute(''' 
+            ALTER TABLE server_settings
+            ADD COLUMN IF NOT EXISTS raid_punishment TEXT DEFAULT 'ban'
+        ''')
 
     async def get_server_settings(self, guild_id):
         """Fetch server settings for a specific guild."""
         query = '''
-        SELECT antiraid_enabled, minimum_account_age, lockdown, default_pfp_check, log_channel_id
+        SELECT antiraid_enabled, minimum_account_age, lockdown, default_pfp_check, log_channel_id, raid_punishment
         FROM server_settings
         WHERE guild_id = $1
         '''
@@ -65,7 +72,8 @@ class Antiraid(commands.Cog):
                 "minimum_account_age": 7,
                 "lockdown": False,
                 "default_pfp_check": False,
-                "log_channel_id": None
+                "log_channel_id": None,
+                "raid_punishment": "ban"
             }
         return dict(settings)
 
@@ -179,6 +187,24 @@ class Antiraid(commands.Cog):
         status = "enabled" if new_status else "disabled"
         await ctx.success(f"Default profile picture check has been {status}.")
 
+    @antiraid.command(name="punishment", brief="Set the punishment for raid attempts", usage="<ban/kick/timeout/jail>")
+    @commands.has_permissions(administrator=True)
+    async def set_punishment(self, ctx, punishment: str):
+        """Set the punishment for raid attempts."""
+        punishment = punishment.lower()
+        valid_punishments = ["ban", "kick", "timeout", "jail"]
+        
+        if punishment not in valid_punishments:
+            return await ctx.fail(f"Invalid punishment! Must be one of: {', '.join(valid_punishments)}")
+
+        await self.bot.db.execute(''' 
+            UPDATE server_settings
+            SET raid_punishment = $1
+            WHERE guild_id = $2
+        ''', punishment, ctx.guild.id)
+
+        await ctx.success(f"Raid punishment has been set to **{punishment}**")
+
     @antiraid.command(name="status")
     async def status(self, ctx):
         """Check the current anti-raid system status."""
@@ -192,6 +218,7 @@ class Antiraid(commands.Cog):
         embed.add_field(name="Minimum Account Age", value=f"{settings['minimum_account_age']} days", inline=False)
         embed.add_field(name="Default PFP Check", value="<:UB_Check_Icon:1306875712782864445>" if settings["default_pfp_check"] else "<:UB_X_Icon:1306875714426900531>", inline=False)
         embed.add_field(name="Log Channel", value=f"<#{settings['log_channel_id']}>" if settings['log_channel_id'] else "<:UB_X_Icon:1306875714426900531>", inline=False)
+        embed.add_field(name="Raid Punishment", value=settings.get('raid_punishment', 'ban').title(), inline=False)
         embed.set_footer(text="Use the antiraid commands to adjust settings.")
         await ctx.send(embed=embed)
 
@@ -241,20 +268,41 @@ class Antiraid(commands.Cog):
     async def handle_lockdown(self, member):
         """Handles the lockdown case."""
         await member.send("The server is currently in lockdown. Please try again later.")
-        await member.guild.kick(member, reason="Server lockdown in effect")
+        await self.handle_raid_punishment(member, "Server lockdown in effect")
         await self.log_raid_activity("Lockdown", member, member.guild)
 
     async def handle_default_pfp_check(self, member):
         """Handles default profile picture check."""
         await member.send("Accounts with default profile pictures are not allowed. Please update your profile picture and try again.")
-        await member.guild.kick(member, reason="Default profile picture detected")
+        await self.handle_raid_punishment(member, "Default profile picture detected")
         await self.log_raid_activity("Default PFP detected", member, member.guild)
 
     async def handle_account_age(self, member, account_age, min_age):
         """Handles account age below the minimum required."""
         await member.send(f"Your account is too new to join this server. Please try again after {min_age - account_age} days.")
-        await member.guild.ban(member, reason=f"Anti-raid: Account age below {min_age} days")
+        await self.handle_raid_punishment(member, f"Account age ({account_age} days) below required {min_age}")
         await self.log_raid_activity(f"Account age ({account_age} days) below required {min_age}", member, member.guild)
+
+    async def handle_raid_punishment(self, member, reason):
+        """Handle the punishment for a raid attempt."""
+        settings = await self.get_server_settings(member.guild.id)
+        punishment = settings.get("raid_punishment", "ban")
+
+        try:
+            if punishment == "ban":
+                await member.guild.ban(member, reason=f"Anti-raid: {reason}")
+            elif punishment == "kick":
+                await member.guild.kick(member, reason=f"Anti-raid: {reason}")
+            elif punishment == "timeout":
+                # 1 hour timeout
+                await member.timeout(datetime.timedelta(hours=1), reason=f"Anti-raid: {reason}")
+            elif punishment == "jail":
+                await Moderation.do_jail(member, reason=f"Anti-raid: {reason}")
+            else:
+                # Fallback to ban if jail not available
+                await member.guild.ban(member, reason=f"Anti-raid: {reason}")
+        except Exception as e:
+            logger.error(f"Failed to apply punishment {punishment} to {member}: {e}")
 
 # Add the cog to your bot
 async def setup(bot):

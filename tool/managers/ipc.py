@@ -9,6 +9,7 @@ from .transform import Transformers, asDict
 from discord.ext.commands import UserConverter
 from inspect import getmembers, iscoroutinefunction, signature
 from loguru import logger
+import discord
 
 EXCLUDED_METHODS = [
     "get_user_count",
@@ -78,29 +79,52 @@ class IPC:
         if not await self.wait_for_connection():
             raise RuntimeError("IPC connection is not ready")
 
+        # Set shorter timeout for certain methods
+        timeout = 10 if method in ["get_guild_count", "get_user_count", "get_role_count", "get_channel_count"] else 60
+
         for attempt in range(self.max_retries):
             try:
-                tasks = [
-                    self.bot.connection.request(method, s, *args, **kwargs)
-                    for s in self.sources if s != self.bot.connection.local_name
-                ]
-                # Also execute the local version of the method
-                tasks.append(coro(self.bot.connection.local_name, *args, **kwargs))
+                tasks = []
+                # Create tasks for other clusters
+                for s in self.sources:
+                    if s != self.bot.connection.local_name:
+                        tasks.append(
+                            asyncio.create_task(
+                                self.bot.connection.request(
+                                    method, s, timeout=timeout, **kwargs
+                                )
+                            )
+                        )
+                # Add local execution task
+                tasks.append(asyncio.create_task(coro(self.bot.connection.local_name, *args, **kwargs)))
 
-                if method == "get_shards":
-                    data = await gather(*tasks)
-                    d = []
-                    for i in data:
-                        d.extend(i)
-                    return d
-                elif method not in EXCLUDED_METHODS:
-                    gathered = await gather(*tasks)
-                    # Convert chain iterator to list before returning
-                    data = list(chain(*gathered))
-                else:
-                    data = await gather(*tasks)
-                
-                return data
+                # Wait for all tasks with timeout
+                try:
+                    if method == "get_shards":
+                        data = await asyncio.gather(*tasks, return_exceptions=True)
+                        d = []
+                        for i in data:
+                            if not isinstance(i, Exception):
+                                d.extend(i)
+                        return d
+                    elif method not in EXCLUDED_METHODS:
+                        gathered = await asyncio.gather(*tasks, return_exceptions=True)
+                        # Filter out exceptions and chain valid results
+                        data = list(chain(*[g for g in gathered if not isinstance(g, Exception)]))
+                    else:
+                        data = await asyncio.gather(*tasks, return_exceptions=True)
+                        # Filter out exceptions
+                        data = [d for d in data if not isinstance(d, Exception)]
+                    
+                    return data
+
+                except asyncio.TimeoutError:
+                    logger.warning(f"Timeout in roundtrip for method {method} (attempt {attempt + 1}/{self.max_retries})")
+                    # Cancel any pending tasks
+                    for task in tasks:
+                        if not task.done():
+                            task.cancel()
+                    continue
 
             except Exception as e:
                 if attempt == self.max_retries - 1:
@@ -114,6 +138,8 @@ class IPC:
                         await self.bot.connection.start()
                     except Exception as e:
                         logger.error(f"Failed to restart IPC connection: {str(e)}")
+
+        raise TimeoutError(f"All attempts failed for method {method}")
 
     async def get_shards(self, source: str, *args, **kwargs):
         data = []
