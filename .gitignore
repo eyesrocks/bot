@@ -1,0 +1,62 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.env/
+.venv/
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Website build files
+node_modules/
+.next/
+out/
+
+# Large media files
+*.psd
+*.ai
+*.mp4
+*.mov
+*.avi
+*.mp3
+*.wav
+*.flac
+
+# Rust build artifacts
+**/target/
+Cargo.lock
+**/*.rs.bk
+
+# Git submodules
+flux/makesweet/.git/ 
