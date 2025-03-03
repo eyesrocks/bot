@@ -31,7 +31,7 @@ class Automod(commands.Cog):
         name="filter",
         aliases=(
             "chatfilter",
-            "automod", 
+            "automod",
         ),
         invoke_without_command=False,
         brief="Filter commands to keep your chat secure",
@@ -348,7 +348,6 @@ class Automod(commands.Cog):
             """DELETE FROM automod_timeout WHERE guild_id = $1""",
             """DELETE FROM filter WHERE guild_id = $1""",
             """DELETE FROM filter_whitelist WHERE guild_id = $1""",
-            
         ]
         await gather(*[self.bot.db.execute(table, ctx.guild.id) for table in tables])
         return await ctx.success("filter has been **reset**")
@@ -510,9 +509,7 @@ class Automod(commands.Cog):
             ):
                 e.append(event.lower())
                 if event.lower() not in ["invites", "links", "snipe"]:
-                    if (
-                        is_enabled == True
-                    ):
+                    if is_enabled == True:
                         limit = f"- limit: `{threshold}`"
                     else:
                         limit = f""
@@ -1176,10 +1173,10 @@ class Automod(commands.Cog):
         )
 
     @_filter.command(
-        name = "punishment",
-        aliases = ["punish"],
-        brief = "Set the punishment for breaking automod rules",
-        example = ",filter punishment delete",
+        name="punishment",
+        aliases=["punish"],
+        brief="Set the punishment for breaking automod rules",
+        example=",filter punishment delete",
     )
     @commands.bot_has_permissions(administrator=True)
     @commands.has_permissions(manage_guild=True)
@@ -1193,12 +1190,14 @@ class Automod(commands.Cog):
             ctx.guild.id,
             punishment.lower(),
         )
-        return await ctx.success(f"**Punishment** for breaking automod rules is now `{punishment.lower()}`")
+        return await ctx.success(
+            f"**Punishment** for breaking automod rules is now `{punishment.lower()}`"
+        )
 
     @_filter.command(
-        name = "punishments",
-        brief = "View the current punishment for breaking automod rules",
-        example = ",filter punishments",
+        name="punishments",
+        brief="View the current punishment for breaking automod rules",
+        example=",filter punishments",
     )
     @commands.bot_has_permissions(administrator=True)
     @commands.has_permissions(manage_guild=True)
@@ -1220,7 +1219,9 @@ class Automod(commands.Cog):
                 color=self.bot.color,
             )
             return await ctx.send(embed=embed)
-        return await ctx.success(f"**Punishment** for breaking automod rules is `{punishment}`")
+        return await ctx.success(
+            f"**Punishment** for breaking automod rules is `{punishment}`"
+        )
 
 
 async def setup(bot: Greed):

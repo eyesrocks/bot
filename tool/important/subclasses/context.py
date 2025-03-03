@@ -9,7 +9,16 @@ from datetime import datetime
 from typing import Any, Dict, Optional, Tuple, Sequence, Union
 import aiohttp
 import discord
-from discord import Embed, File, Attachment, AllowedMentions, TextChannel, Message, Member, MessageFlags
+from discord import (
+    Embed,
+    File,
+    Attachment,
+    AllowedMentions,
+    TextChannel,
+    Message,
+    Member,
+    MessageFlags,
+)
 from discord.http import handle_message_parameters
 from discord.ui import View
 from discord.ext import commands
@@ -19,10 +28,12 @@ from tool.emotes import EMOJIS
 from _types import get_error
 from cashews import cache
 from loguru import logger, logger as log
+
 cache.setup("mem://")
 TUPLE = ()
 SET = set()
 GLOBAL = {}
+
 
 @cache(ttl="25m", key="{webhook_id}", prefix="reskin:webhook")
 async def reskin_webhook(bot: discord.Client, webhook_id: int):
@@ -31,16 +42,26 @@ async def reskin_webhook(bot: discord.Client, webhook_id: int):
     except Exception:
         return None
 
-async def reskin(bot: discord.Client, channel: discord.TextChannel, *, author: Optional[Member] = None, name: Optional[str] = None):
+
+async def reskin(
+    bot: discord.Client,
+    channel: discord.TextChannel,
+    *,
+    author: Optional[Member] = None,
+    name: Optional[str] = None,
+):
     if channel.guild:
-        configuration = await bot.db.fetchval(
-            """SELECT reskin FROM reskin_config WHERE guild_id = $1""", 
-            channel.guild.id
-        ) or None
-        
+        configuration = (
+            await bot.db.fetchval(
+                """SELECT reskin FROM reskin_config WHERE guild_id = $1""",
+                channel.guild.id,
+            )
+            or None
+        )
+
         if not configuration:
             return {}
-            
+
         if configuration.get("status"):
             if webhook_id := configuration["webhooks"].get(str(channel.id)):
                 table = "reskin"
@@ -52,8 +73,8 @@ async def reskin(bot: discord.Client, channel: discord.TextChannel, *, author: O
                 elif name:
                     reskin = await bot.db.fetchrow(
                         """SELECT username, avatar_url FROM reskin WHERE username = $1 AND user_id = ANY($2::BIGINT[])""",
-                        name, 
-                        [m.id for m in channel.guild.members]
+                        name,
+                        [m.id for m in channel.guild.members],
                     )
                 else:
                     return {}
@@ -62,44 +83,43 @@ async def reskin(bot: discord.Client, channel: discord.TextChannel, *, author: O
                     webhook = await reskin_webhook(bot, webhook_id)
                     if not webhook:
                         del configuration["webhooks"][str(channel.id)]
-                        await bot.db.update_config(channel.guild.id, table, configuration)
+                        await bot.db.update_config(
+                            channel.guild.id, table, configuration
+                        )
                     else:
                         return {
                             "username": reskin.get("username") or bot.user.name,
-                            "avatar_url": reskin.get("avatar_url") or bot.user.display_avatar.url,
+                            "avatar_url": reskin.get("avatar_url")
+                            or bot.user.display_avatar.url,
                             "webhook": webhook,
                         }
 
         return {}
+
 
 class Confirm(discord.ui.View):
     def __init__(self, ctx: commands.Context, *, timeout: Optional[int] = 60):
         super().__init__(timeout=timeout)
         self.value = None
         self.ctx = ctx
-    
+
     async def interaction_check(self, interaction: discord.Interaction):
         if interaction.user.id == self.ctx.author.id:
             return True
-        return await interaction.response.send_message("This is not your interaction!", ephemeral=True)
+        return await interaction.response.send_message(
+            "This is not your interaction!", ephemeral=True
+        )
 
     @discord.ui.button(label="Yes", style=discord.ButtonStyle.green)
-    async def yes(
-        self, 
-        button: discord.ui.Button, 
-        interaction: discord.Interaction
-    ):
+    async def yes(self, button: discord.ui.Button, interaction: discord.Interaction):
         self.value = True
         self.stop()
 
     @discord.ui.button(label="No", style=discord.ButtonStyle.red)
-    async def no(
-        self, 
-        button: discord.ui.Button, 
-        interaction: discord.Interaction
-    ):
+    async def no(self, button: discord.ui.Button, interaction: discord.Interaction):
         self.value = False
         self.stop()
+
 
 def is_unicode(emoji: str) -> bool:
     with contextlib.suppress(Exception):
@@ -277,6 +297,7 @@ class Cache:
         await asyncio.sleep(expiration)
         if key in self._dict:
             del self._dict[key]
+
     async def set(self, key: Any, value: Any, expiration: Optional[int] = None) -> int:
         """
         Set the value of the given key in the dictionary.
@@ -586,9 +607,7 @@ class ParameterParser:
                         result = converter(result)
 
                     except Exception:
-                        raise CommandError(
-                            f"Invalid value for parameter `{param}`."
-                        )
+                        raise CommandError(f"Invalid value for parameter `{param}`.")
 
             if isinstance(result, int):
                 if result < kwargs.get("minimum", 1):
@@ -687,7 +706,7 @@ class Context(commands.Context):
         return await self.send(embed=embed, delete_after=delete_after)
 
     async def currency(self, text, **kwargs):
-        color = 0x2a8000
+        color = 0x2A8000
         embed = discord.Embed(
             color=color,
             description=f"💵 {self.author.mention}: {text}",
@@ -759,7 +778,7 @@ class Context(commands.Context):
         return await self.send(embed=embed, delete_after=delete_after)
 
     async def normal(self, text, **kwargs):
-        color = 0x2f4672
+        color = 0x2F4672
         embed = discord.Embed(color=color, description=f"{self.author.mention}: {text}")
         if footer := kwargs.get("footer"):
             if isinstance(footer, tuple):
@@ -798,9 +817,9 @@ class Context(commands.Context):
             if config.get("fail_color"):
                 color = discord.Color.from_str(config["fail_color"])
             else:
-                color = 0xa00000
+                color = 0xA00000
         else:
-            color = 0xa00000
+            color = 0xA00000
         embed = discord.Embed(
             color=color, description=f"{emoji} {self.author.mention}: {text}"
         )
@@ -832,9 +851,9 @@ class Context(commands.Context):
             if config.get("warning_color"):
                 color = discord.Color.from_str(config["warning_color"])
             else:
-                color = 0xffd036
+                color = 0xFFD036
         else:
-            color = 0xffd036
+            color = 0xFFD036
             emoji = EMOJIS["icons_warning"]
             if e := kwargs.get("emoji"):
                 emoji += e
@@ -869,7 +888,7 @@ class Context(commands.Context):
         reskin = await self.reskin()
         if reskin:
             webhook = reskin["webhook"]
-            kwargs["username"] = reskin["username"] 
+            kwargs["username"] = reskin["username"]
             kwargs["avatar_url"] = reskin["avatar_url"]
             kwargs["wait"] = True
 
@@ -878,7 +897,7 @@ class Context(commands.Context):
             kwargs.pop("stickers", None)
             kwargs.pop("reference", None)
             kwargs.pop("followup", None)
-            
+
             try:
                 self.response = await webhook.send(*args, **kwargs)
                 if view and not view.is_finished():
@@ -886,14 +905,14 @@ class Context(commands.Context):
             except discord.NotFound:
                 reskin = await self.bot.pool.fetch_config(self.guild.id, "reskin") or {}
                 del reskin["webhooks"][str(self.channel.id)]
-                
+
                 await asyncio.gather(
                     self.bot.db.update_config(self.guild.id, "reskin", reskin),
                     cache.delete_many(
                         f"reskin:channel:{self.channel.id}",
-                        f"reskin:webhook:{self.channel.id}", 
-                        f"reskin:guild:channel:{self.guild.id}:{self.channel.id}"
-                    )
+                        f"reskin:webhook:{self.channel.id}",
+                        f"reskin:guild:channel:{self.guild.id}:{self.channel.id}",
+                    ),
                 )
             except discord.HTTPException as error:
                 raise error
@@ -905,7 +924,6 @@ class Context(commands.Context):
 
         self.response = await super().send(*args, **kwargs)
         return self.response
-
 
     #     async def send_help(self, command=None):
     #         command = self.command or self.bot.get_command(command)
@@ -1000,7 +1018,7 @@ class Context(commands.Context):
     async def confirm(self, text: str, timeout: int = 60) -> bool:
         con = Confirm(self, timeout=timeout)
         msg = await self.send(embed=discord.Embed(description="> " + text), view=con)
-        
+
         await con.wait()
         with contextlib.suppress(discord.NotFound):
             await msg.delete()
@@ -1028,14 +1046,18 @@ class MSG:
     ) -> Message:
         """Edits the message."""
         message = None
-        
-        if not (self.author.id == self._state._get_client().user.id or 
-                isinstance(self.channel, discord.TextChannel) and 
-                self.channel.permissions_for(self.guild.me).manage_messages):
+
+        if not (
+            self.author.id == self._state._get_client().user.id
+            or isinstance(self.channel, discord.TextChannel)
+            and self.channel.permissions_for(self.guild.me).manage_messages
+        ):
             raise discord.Forbidden("Cannot edit a message authored by another user")
-        
+
         try:
-            rs = await reskin(self._state._get_client(), self.channel, name=self.author.name)
+            rs = await reskin(
+                self._state._get_client(), self.channel, name=self.author.name
+            )
             if rs and "webhook" in rs:
                 webhook = rs["webhook"]
                 try:
@@ -1046,7 +1068,11 @@ class MSG:
                         embed=embed if embed is not MISSING else None,
                         attachments=attachments if attachments is not MISSING else None,
                         view=view if view is not MISSING else None,
-                        allowed_mentions=allowed_mentions if allowed_mentions is not MISSING else None
+                        allowed_mentions=(
+                            allowed_mentions
+                            if allowed_mentions is not MISSING
+                            else None
+                        ),
                     )
                     if delete_after:
                         await msg.delete(delay=delete_after)
@@ -1087,7 +1113,9 @@ class MSG:
                 allowed_mentions=allowed_mentions,
                 previous_allowed_mentions=previous_allowed_mentions,
             ) as params:
-                data = await self._state.http.edit_message(self.channel.id, self.id, params=params)
+                data = await self._state.http.edit_message(
+                    self.channel.id, self.id, params=params
+                )
                 message = Message(state=self._state, channel=self.channel, data=data)
 
                 if view and not view.is_finished():
@@ -1103,4 +1131,3 @@ class MSG:
         except discord.HTTPException as e:
             logger.error(f"Failed to edit message: {get_error(e)}")
             return None
-

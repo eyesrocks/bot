@@ -38,7 +38,9 @@ class EmbedError(CommandError):
 
 
 class Script:
-    def __init__(self, template: str, user: Union[Member, User], lastfm_data: dict = {}):
+    def __init__(
+        self, template: str, user: Union[Member, User], lastfm_data: dict = {}
+    ):
         self.pattern = compile(r"\{([\s\S]*?)\}")  # compile(r"{(.*?)}")
         self.data: Dict[str, Union[Dict, str]] = {
             "embed": {},
@@ -52,46 +54,52 @@ class Script:
             "{whitespace}": "\u200e",
         }
         if isinstance(user, Member):
-            self.replacements.update({
-                "{user.joined_at}": format_dt(user.joined_at, style="R"),
-                "{guild.name}": user.guild.name,
-                "{guild.count}": str(user.guild.member_count),
-                "{guild.count.format}": ordinal(len(user.guild.members)),
-                "{guild.id}": user.guild.id,
-                "{guild.created_at}": format_dt(user.guild.created_at, style="R"),
-                "{guild.boost_count}": str(user.guild.premium_subscription_count),
-                "{guild.booster_count}": str(len(user.guild.premium_subscribers)),
-                "{guild.boost_count.format}": ordinal(
-                    str(user.guild.premium_subscription_count)
-                ),
-                "{guild.booster_count.format}": ordinal(
-                    str(user.guild.premium_subscription_count)
-                ),
-                "{guild.boost_tier}": str(user.guild.premium_tier),
-                "{guild.icon}": user.guild.icon.url if user.guild.icon else "",
-                "{guild.vanity}": user.guild.vanity_url_code,
-                "{track}": lastfm_data.get("track", ""),
-                "{track.duration}": lastfm_data.get("duration", ""),
-                "{artist}": lastfm_data.get("artist", ""),
-                "{user}": lastfm_data.get("user", ""),  # noqa: F601
-                "{avatar}": lastfm_data.get("avatar", ""),
-                "{track.url}": lastfm_data.get("track.url", ""),
-                "{artist.url}": lastfm_data.get("artist.url", ""),
-                "{scrobbles}": lastfm_data.get("scrobbles", ""),
-                "{track.image}": lastfm_data.get("track.image", ""),
-                "{username}": lastfm_data.get("username", ""),
-                "{artist.plays}": lastfm_data.get("artist.plays", ""),
-                "{track.plays}": lastfm_data.get("track.plays", ""),
-                "{track.lower}": lastfm_data.get("track.lower", ""),
-                "{artist.lower}": lastfm_data.get("artist.lower", ""),
-                "{track.hyperlink}": lastfm_data.get("track.hyperlink", ""),
-                "{track.hyperlink_bold}": lastfm_data.get("track.hyperlink_bold", ""),
-                "{artist.hyperlink}": lastfm_data.get("artist.hyperlink", ""),
-                "{artist.hyperlink_bold}": lastfm_data.get("artist.hyperlink_bold", ""),
-                "{track.color}": lastfm_data.get("track.color", ""),
-                "{artist.color}": lastfm_data.get("artist.color", ""),
-                "{date}": lastfm_data.get("date", ""),
-            })
+            self.replacements.update(
+                {
+                    "{user.joined_at}": format_dt(user.joined_at, style="R"),
+                    "{guild.name}": user.guild.name,
+                    "{guild.count}": str(user.guild.member_count),
+                    "{guild.count.format}": ordinal(len(user.guild.members)),
+                    "{guild.id}": user.guild.id,
+                    "{guild.created_at}": format_dt(user.guild.created_at, style="R"),
+                    "{guild.boost_count}": str(user.guild.premium_subscription_count),
+                    "{guild.booster_count}": str(len(user.guild.premium_subscribers)),
+                    "{guild.boost_count.format}": ordinal(
+                        str(user.guild.premium_subscription_count)
+                    ),
+                    "{guild.booster_count.format}": ordinal(
+                        str(user.guild.premium_subscription_count)
+                    ),
+                    "{guild.boost_tier}": str(user.guild.premium_tier),
+                    "{guild.icon}": user.guild.icon.url if user.guild.icon else "",
+                    "{guild.vanity}": user.guild.vanity_url_code,
+                    "{track}": lastfm_data.get("track", ""),
+                    "{track.duration}": lastfm_data.get("duration", ""),
+                    "{artist}": lastfm_data.get("artist", ""),
+                    "{user}": lastfm_data.get("user", ""),  # noqa: F601
+                    "{avatar}": lastfm_data.get("avatar", ""),
+                    "{track.url}": lastfm_data.get("track.url", ""),
+                    "{artist.url}": lastfm_data.get("artist.url", ""),
+                    "{scrobbles}": lastfm_data.get("scrobbles", ""),
+                    "{track.image}": lastfm_data.get("track.image", ""),
+                    "{username}": lastfm_data.get("username", ""),
+                    "{artist.plays}": lastfm_data.get("artist.plays", ""),
+                    "{track.plays}": lastfm_data.get("track.plays", ""),
+                    "{track.lower}": lastfm_data.get("track.lower", ""),
+                    "{artist.lower}": lastfm_data.get("artist.lower", ""),
+                    "{track.hyperlink}": lastfm_data.get("track.hyperlink", ""),
+                    "{track.hyperlink_bold}": lastfm_data.get(
+                        "track.hyperlink_bold", ""
+                    ),
+                    "{artist.hyperlink}": lastfm_data.get("artist.hyperlink", ""),
+                    "{artist.hyperlink_bold}": lastfm_data.get(
+                        "artist.hyperlink_bold", ""
+                    ),
+                    "{track.color}": lastfm_data.get("track.color", ""),
+                    "{artist.color}": lastfm_data.get("artist.color", ""),
+                    "{date}": lastfm_data.get("date", ""),
+                }
+            )
         self.template = self._replace_placeholders(template)
 
     def get_color(self, color: str):
@@ -153,12 +161,14 @@ class Script:
             char = template[i]
 
             if char == "{":
-                if i + 1 < len(template) and (template[i + 1] == ":" or template[i + 1] == "$"):
+                if i + 1 < len(template) and (
+                    template[i + 1] == ":" or template[i + 1] == "$"
+                ):
                     stack.append("{:")
                     i += 1
                 else:
                     stack.append("{")
-            
+
             elif char == "}":
                 if not stack:
                     raise EmbedError("Found a `}` without a matching `{`")
@@ -244,7 +254,9 @@ class Script:
             raise EmbedError("field `embed` is to long the limit is 6000 characters")
         keys = [k for k in self.data.get("embed", {}).keys()]
         if len(keys) == 1 and "color" in keys:
-            raise EmbedError("A field or description is required if you provide a color")
+            raise EmbedError(
+                "A field or description is required if you provide a color"
+            )
 
     def _replace_placeholders(self: Self, template: str) -> str:
         template = (
@@ -300,8 +312,16 @@ class Script:
             field_data = value.split("&&")
             field = {
                 "name": field_data[0].strip(),
-                "value": field_data[1].strip().replace("value: ", "") if len(field_data) > 1 else None,
-                "inline": bool(field_data[2].strip().replace("inline ", "")) if len(field_data) > 2 else False,
+                "value": (
+                    field_data[1].strip().replace("value: ", "")
+                    if len(field_data) > 1
+                    else None
+                ),
+                "inline": (
+                    bool(field_data[2].strip().replace("inline ", ""))
+                    if len(field_data) > 2
+                    else False
+                ),
             }
             self.data["embed"]["fields"].append(field)
 
@@ -331,7 +351,9 @@ class Script:
         if not self.data.get("embed"):
             self.data.pop("embed", None)
 
-    async def send(self: Self, target: Union[Context, GuildChannel], **kwargs) -> Message:
+    async def send(
+        self: Self, target: Union[Context, GuildChannel], **kwargs
+    ) -> Message:
         # Handle button view
         button = self.data.pop("button", None)
         if button:
@@ -373,11 +395,10 @@ class Script:
         if message and hasattr(message, "edit"):
             # Filter kwargs to only include valid edit parameters
             edit_kwargs = {
-                k: v for k, v in kwargs.items() 
-                if k in ["content", "embed", "view"]
+                k: v for k, v in kwargs.items() if k in ["content", "embed", "view"]
             }
             return await message.edit(**edit_kwargs)
-        
+
         # Handle delete_after for new messages only
         if delete_after := self.data.get("delete_after"):
             kwargs["delete_after"] = delete_after
@@ -398,4 +419,3 @@ class Script:
 
 
 # type: ignore
-

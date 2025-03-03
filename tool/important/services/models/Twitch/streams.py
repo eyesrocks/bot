@@ -20,8 +20,10 @@ class Stream(BaseModel):
     tags: Optional[List[str]] = None
     is_mature: Optional[bool] = False
 
+
 class Pagination(BaseModel):
     cursor: Optional[str] = None
+
 
 class StreamResponse(BaseModel):
     data: Optional[List[Stream]] = []

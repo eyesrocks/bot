@@ -19,7 +19,9 @@ def ordinal(n):
 
 
 class EmbedBuilder:
-    def __init__(self, user: Union[discord.User, discord.Member], lastfm_data: dict = {}):
+    def __init__(
+        self, user: Union[discord.User, discord.Member], lastfm_data: dict = {}
+    ):
         self.user = user
         self.lastfm_data = lastfm_data
         self.replacements = {

@@ -18,8 +18,10 @@ from collections import defaultdict
 
 logger = getLogger(__name__)
 
+
 def get_tb(error: Exception):
     return "".join(traceback.format_exception(type(error), error, error.__traceback__))
+
 
 class Giveaway(Cog):
     def __init__(self, bot):
@@ -89,14 +91,14 @@ class Giveaway(Cog):
         """Properly weighted entry system"""
         weighted_entries = []
         for entry in entries:
-            weighted_entries.extend([entry['user_id']] * entry['entry_count'])
-        
+            weighted_entries.extend([entry["user_id"]] * entry["entry_count"])
+
         if not weighted_entries:
             return []
-        
+
         if amount >= len(weighted_entries):
             return list(set(weighted_entries))
-        
+
         return random.sample(weighted_entries, amount)
 
     async def get_config(
@@ -210,46 +212,45 @@ class Giveaway(Cog):
             prize,
             winners,
             await self.get_creator_id(message.id),
-            datetime.now()
+            datetime.now(),
         )
 
         embed = discord.Embed(
-            title="Giveaway Ended", 
-            description=f"**Prize:** {prize}\n**Winners:** {winners}", 
-            color=0x2F3136
+            title="Giveaway Ended",
+            description=f"**Prize:** {prize}\n**Winners:** {winners}",
+            color=0x2F3136,
         )
         await message.edit(embed=embed, view=None)
 
     async def get_creator_id(self, message_id: int):
         return await self.bot.db.fetchval(
-            "SELECT creator FROM gw WHERE message_id = $1", 
-            message_id
+            "SELECT creator FROM gw WHERE message_id = $1", message_id
         )
 
     @tasks.loop(minutes=5)
     async def cleanup_loop(self):
         """Clean up old giveaways and their entries after 5 days"""
         five_days_ago = datetime.now() - timedelta(days=5)
-        
+
         old_giveaways = await self.bot.db.fetch(
             """SELECT guild_id, message_id FROM ended_giveaways 
             WHERE ended_at < $1""",
-            five_days_ago
+            five_days_ago,
         )
-        
+
         for gw in old_giveaways:
             await self.bot.db.execute(
                 """DELETE FROM giveaway_entries 
                 WHERE guild_id = $1 AND message_id = $2""",
-                gw['guild_id'], 
-                gw['message_id']
+                gw["guild_id"],
+                gw["message_id"],
             )
-            
+
             await self.bot.db.execute(
                 """DELETE FROM ended_giveaways 
                 WHERE guild_id = $1 AND message_id = $2""",
-                gw['guild_id'], 
-                gw['message_id']
+                gw["guild_id"],
+                gw["message_id"],
             )
 
     @tasks.loop(minutes=1)
@@ -265,19 +266,19 @@ class Giveaway(Cog):
             active_giveaways = await self.bot.db.fetch(
                 """SELECT * FROM gw WHERE ex < NOW()"""
             )
-            
+
             for gw in active_giveaways:
-                guild = self.bot.get_guild(gw['guild_id'])
+                guild = self.bot.get_guild(gw["guild_id"])
                 if not guild:
                     continue
 
-                channel = guild.get_channel(gw['channel_id'])
+                channel = guild.get_channel(gw["channel_id"])
                 if not channel:
                     continue
 
                 try:
-                    message = await channel.fetch_message(gw['message_id'])
-                    prize = gw['prize']
+                    message = await channel.fetch_message(gw["message_id"])
+                    prize = gw["prize"]
                 except:
                     continue
 
@@ -285,32 +286,39 @@ class Giveaway(Cog):
                     """SELECT user_id, entry_count FROM giveaway_entries 
                     WHERE guild_id = $1 AND message_id = $2""",
                     guild.id,
-                    message.id
+                    message.id,
                 )
-                
-                winners = await self.get_winners(entries, gw['winner_count'])
-                winner_objects = [guild.get_member(w) for w in winners if guild.get_member(w)]
+
+                winners = await self.get_winners(entries, gw["winner_count"])
+                winner_objects = [
+                    guild.get_member(w) for w in winners if guild.get_member(w)
+                ]
 
                 embed = discord.Embed(
                     title=f"🎉 Giveaway Ended: {prize}",
-                    description="**Winners**\n" + "\n".join(
-                        [f"{i+1}. {w.mention}" for i, w in enumerate(winner_objects)] or ["No valid winners"]
+                    description="**Winners**\n"
+                    + "\n".join(
+                        [f"{i+1}. {w.mention}" for i, w in enumerate(winner_objects)]
+                        or ["No valid winners"]
                     ),
-                    color=0x2F3136
+                    color=0x2F3136,
                 )
 
                 try:
                     await channel.send(
-                        content=f"Congratulations {' '.join([w.mention for w in winner_objects])}!" if winner_objects else "",
-                        embed=embed
+                        content=(
+                            f"Congratulations {' '.join([w.mention for w in winner_objects])}!"
+                            if winner_objects
+                            else ""
+                        ),
+                        embed=embed,
                     )
                 except discord.HTTPException:
                     pass
 
-                await self.end_giveaway(message, gw['winner_count'], prize)
+                await self.end_giveaway(message, gw["winner_count"], prize)
                 await self.bot.db.execute(
-                    """DELETE FROM gw WHERE message_id = $1""", 
-                    message.id
+                    """DELETE FROM gw WHERE message_id = $1""", message.id
                 )
 
     @giveaway.command(
@@ -320,10 +328,12 @@ class Giveaway(Cog):
         example=",giveaway start 1h 1 $10",
     )
     @has_permissions(manage_guild=True)
-    async def giveaway_start(self, ctx: Context, duration: str, winners: int = 1, *, prize: str):
+    async def giveaway_start(
+        self, ctx: Context, duration: str, winners: int = 1, *, prize: str
+    ):
         end_time = await self.get_timeframe(duration)
         message = await ctx.send("Starting giveaway...", view=GiveawayView())
-        
+
         await self.bot.db.execute(
             """INSERT INTO gw 
             (guild_id, channel_id, message_id, ex, creator, winner_count, prize) 
@@ -334,17 +344,19 @@ class Giveaway(Cog):
             end_time,
             ctx.author.id,
             winners,
-            prize
+            prize,
         )
-        
-        embed = await self.get_message(ctx.guild, prize, end_time, winners, ctx.author, message)
+
+        embed = await self.get_message(
+            ctx.guild, prize, end_time, winners, ctx.author, message
+        )
         await message.edit(**embed)
         await ctx.success("Giveaway started successfully!")
 
     @giveaway.command(
         name="reroll",
         brief="Reroll giveaway winners",
-        example=",giveaway reroll 1234567890"
+        example=",giveaway reroll 1234567890",
     )
     @has_permissions(manage_guild=True)
     async def reroll(self, ctx: Context, message_id: int):
@@ -353,9 +365,9 @@ class Giveaway(Cog):
             """SELECT * FROM ended_giveaways 
             WHERE guild_id = $1 AND message_id = $2""",
             ctx.guild.id,
-            message_id
+            message_id,
         )
-        
+
         if not ended_gw:
             return await ctx.fail("No ended giveaway found with that message ID.")
 
@@ -363,44 +375,42 @@ class Giveaway(Cog):
             """SELECT user_id, entry_count FROM giveaway_entries 
             WHERE guild_id = $1 AND message_id = $2""",
             ctx.guild.id,
-            message_id
+            message_id,
         )
-        
+
         if not entries:
             return await ctx.fail("No entries found for this giveaway.")
 
-        winners = await self.get_winners(entries, ended_gw['winner_count'])
+        winners = await self.get_winners(entries, ended_gw["winner_count"])
         winners = [winners] if not isinstance(winners, list) else winners
-        
+
         winner_objects = []
         for w in winners:
             if member := ctx.guild.get_member(w):
                 winner_objects.append(member)
-        
+
         if not winner_objects:
             return await ctx.fail("No valid winners found.")
 
         embed = discord.Embed(
             title=f"🎉 Reroll: {ended_gw['prize']}",
-            description="**New Winners**\n" + "\n".join(
-                [f"{i+1}. {w.mention}" for i, w in enumerate(winner_objects)]
-            ),
-            color=0x2F3136
+            description="**New Winners**\n"
+            + "\n".join([f"{i+1}. {w.mention}" for i, w in enumerate(winner_objects)]),
+            color=0x2F3136,
         )
-        
-        channel = ctx.guild.get_channel(ended_gw['channel_id'])
+
+        channel = ctx.guild.get_channel(ended_gw["channel_id"])
         if channel:
             try:
                 await channel.send(
                     content=f"New winners: {' '.join([w.mention for w in winner_objects])}",
-                    embed=embed
+                    embed=embed,
                 )
                 await ctx.success("Successfully rerolled winners!")
             except discord.HTTPException as e:
                 await ctx.fail(f"Failed to send reroll message: {e}")
         else:
             await ctx.fail("Original channel not found.")
-
 
     @giveaway.command(
         name="end",
@@ -505,6 +515,7 @@ class Giveaway(Cog):
         return await ctx.success(
             f"{role.mention}'s **max entries** set to `{max}` for **entering giveaways**"
         )
+
 
 async def setup(bot):
     await bot.add_cog(Giveaway(bot))

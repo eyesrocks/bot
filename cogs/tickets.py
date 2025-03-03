@@ -1,7 +1,7 @@
 import asyncio
 import re
 from discord.abc import GuildChannel  # type: ignore
-from discord.ui import View, Button, Select, Modal, TextInput, DynamicItem # type: ignore
+from discord.ui import View, Button, Select, Modal, TextInput, DynamicItem  # type: ignore
 from discord.ext import commands  # type: ignore
 from discord.ext.commands import (  # type: ignore
     PartialEmojiConverter,
@@ -10,7 +10,8 @@ from discord.ext.commands import (  # type: ignore
     Context,
     has_permissions,
     check,
-    bot_has_permissions, CommandError
+    bot_has_permissions,
+    CommandError,
 )
 from tool.important.subclasses.parser import EmbedConverter  # type: ignore
 from discord import (  # type: ignore
@@ -23,7 +24,7 @@ from discord import (  # type: ignore
     Interaction,
     ButtonStyle,
     SelectOption,
-    TextStyle
+    TextStyle,
 )
 
 EMOJI_REGEX = re.compile(
@@ -109,7 +110,6 @@ def manage_ticket():
     return check(predicate)
 
 
-
 def ticket_exists():
     async def predicate(ctx: Context):
         check = await ctx.bot.db.fetchrow(
@@ -125,15 +125,16 @@ def ticket_exists():
                     support_id,
                     open_embed,
                     message_id
-                ) VALUES ($1, $2, $3, $4, $5, $6)""", 
-                ctx.guild.id, 
+                ) VALUES ($1, $2, $3, $4, $5, $6)""",
+                ctx.guild.id,
                 ctx.channel.id,
                 None,  # category_id
                 None,  # support_id
                 None,  # open_embed
-                None   # message_id
+                None,  # message_id
             )
         return True
+
     return check(predicate)
 
 
@@ -295,7 +296,7 @@ class OpenTicket(
                 None,
                 None,
                 None,
-                None
+                None,
             )
             check = await interaction.client.db.fetchrow(
                 "SELECT * FROM tickets WHERE guild_id = $1", interaction.guild.id
@@ -315,9 +316,7 @@ class OpenTicket(
             )
         else:
             options = [
-                SelectOption(
-                    label=result["name"], description=result["description"]
-                )
+                SelectOption(label=result["name"], description=result["description"])
                 for result in results
             ]
             select = Select(options=options, placeholder="Topic menu")
@@ -373,7 +372,8 @@ class DeleteTicket(
             "SELECT support_id FROM tickets WHERE guild_id = $1", interaction.guild.id
         )
         fake_permissions = await interaction.client.db.fetchrow(
-            "SELECT role_id, perms FROM fakeperms WHERE guild_id = $1", interaction.guild.id
+            "SELECT role_id, perms FROM fakeperms WHERE guild_id = $1",
+            interaction.guild.id,
         )
         if ticket_data:
             support_role_id = ticket_data.get("support_id")
@@ -393,7 +393,8 @@ class DeleteTicket(
                     and "manage_channels" not in fake_permissions["perms"]
                 ):
                     return await interaction.response.send_message(
-                        "You are missing permissions **Manage Channels**", ephemeral=True
+                        "You are missing permissions **Manage Channels**",
+                        ephemeral=True,
                     )
             else:
                 return await interaction.response.send_message(
@@ -414,6 +415,7 @@ class DeleteTicket(
             await inter.response.edit_message(
                 content="Channel will **not be deleted**", view=None
             )
+
         yes.callback = yes_callback
         no.callback = no_callback
         view.add_item(yes)
@@ -544,9 +546,15 @@ class Tickets(Cog):
         await ctx.channel.set_permissions(
             member, overwrite=overwrites, reason="Removed from the ticket"
         )
-        return await ctx.success(f"{member.mention} has been **removed from this ticket**")
+        return await ctx.success(
+            f"{member.mention} has been **removed from this ticket**"
+        )
 
-    @ticket.command(name="close", extras={"perms": "ticket support / manage channels"}, brief="Check the server's ticket settings")
+    @ticket.command(
+        name="close",
+        extras={"perms": "ticket support / manage channels"},
+        brief="Check the server's ticket settings",
+    )
     @manage_ticket()
     @get_ticket()
     @commands.bot_has_permissions(manage_channels=True)
@@ -557,7 +565,10 @@ class Tickets(Cog):
         await ctx.channel.delete(reason="ticket closed")
 
     @ticket.command(
-        name="reset", aliases=["disable"], extras={"perms": "manage server"}, brief="Reset the ticket module. Will prevent existing ticket panels from working."
+        name="reset",
+        aliases=["disable"],
+        extras={"perms": "manage server"},
+        brief="Reset the ticket module. Will prevent existing ticket panels from working.",
     )
     @has_permissions(manage_guild=True)
     @ticket_exists()
@@ -604,7 +615,9 @@ class Tickets(Cog):
                 role.id,
                 ctx.guild.id,
             )
-            return await ctx.success(f"{role.mention} has been **updated** as the **ticket support role**")
+            return await ctx.success(
+                f"{role.mention} has been **updated** as the **ticket support role**"
+            )
         else:
             await self.bot.db.execute(
                 "UPDATE tickets SET support_id = $1 WHERE guild_id = $2",
@@ -630,7 +643,9 @@ class Tickets(Cog):
                 category.id,
                 ctx.guild.id,
             )
-            return await ctx.success(f"**Tickets opened will be created** under `#{category.name}`")
+            return await ctx.success(
+                f"**Tickets opened will be created** under `#{category.name}`"
+            )
         else:
             await self.bot.db.execute(
                 "UPDATE tickets SET category_id = $1 WHERE guild_id = $2",
@@ -658,7 +673,9 @@ class Tickets(Cog):
                 f"**Custom embed opening messag**e has been **set** to:\n```{code}```"
             )
         else:
-            return await ctx.success("**Custom ticket opening message** has been `reset`")
+            return await ctx.success(
+                "**Custom ticket opening message** has been `reset`"
+            )
 
     @ticket.command(
         name="topics",
@@ -722,7 +739,11 @@ class Tickets(Cog):
         view.interaction_check = interaction_check
         await ctx.reply(embed=embed, view=view)
 
-    @ticket.command(name="settings", aliases=["config"], brief="Check the server's configured ticket settings")
+    @ticket.command(
+        name="settings",
+        aliases=["config"],
+        brief="Check the server's configured ticket settings",
+    )
     @commands.bot_has_permissions(manage_channels=True)
     async def ticket_config(self, ctx: Context):
         """check the server's ticket settings"""
@@ -833,9 +854,10 @@ class Tickets(Cog):
             message.id,
             ctx.guild.id,
         )
-        return await ctx.success(f"**Ticket channel** has been **set** to {channel.mention}")
+        return await ctx.success(
+            f"**Ticket channel** has been **set** to {channel.mention}"
+        )
 
 
 async def setup(bot) -> None:
     return await bot.add_cog(Tickets(bot))
-

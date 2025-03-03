@@ -27,12 +27,12 @@ class Statistics:
 
 def cache():
     """
-        A decorator to cache coroutine results in Redis for class methods.
-        It generates a cache key using the function name, class name, and kwargs.
-        If a value exists in Redis for the function's name and kwargs, it returns the cached value.
-        Otherwise, it executes the coroutine, caches the result, and returns it.
-        If you supply cached=False to any cached coroutine it will not get the cached result 
-        but instead return a fresh result and cache the fresh result
+    A decorator to cache coroutine results in Redis for class methods.
+    It generates a cache key using the function name, class name, and kwargs.
+    If a value exists in Redis for the function's name and kwargs, it returns the cached value.
+    Otherwise, it executes the coroutine, caches the result, and returns it.
+    If you supply cached=False to any cached coroutine it will not get the cached result
+    but instead return a fresh result and cache the fresh result
     """
 
     def decorator(func: Callable):
@@ -41,9 +41,7 @@ def cache():
             self.status = True
             redis_client = self.redis
             val = f"{self.__class__.__name__}.{func.__name__}-{'-'.join(str(m) for m in args)}{orjson.dumps(kwargs, option=orjson.OPT_SORT_KEYS)}"
-            key = hash_(
-                val
-            )
+            key = hash_(val)
             logger.info(f"{val}\n{key}")
             if redis_client:
                 if kwargs.pop("cached", True) is not False:
@@ -69,10 +67,27 @@ def cache():
                 if redis_client:
                     if self.ttl:
                         ensure_future(
-                            redis_client.set(key, orjson.dumps(result.dict()) if not isinstance(result, (bytes, dict, list)) else result, ex=self.ttl)
+                            redis_client.set(
+                                key,
+                                (
+                                    orjson.dumps(result.dict())
+                                    if not isinstance(result, (bytes, dict, list))
+                                    else result
+                                ),
+                                ex=self.ttl,
+                            )
                         )
                     else:
-                        ensure_future(redis_client.set(key, orjson.dumps(result.dict()) if not isinstance(result, (bytes, dict, list)) else result))
+                        ensure_future(
+                            redis_client.set(
+                                key,
+                                (
+                                    orjson.dumps(result.dict())
+                                    if not isinstance(result, (bytes, dict, list))
+                                    else result
+                                ),
+                            )
+                        )
                 self.succeeded += 1
                 self.status = False
             except Exception as error:

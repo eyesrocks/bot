@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from typing import List, Optional, Any
 from datetime import datetime
 
+
 class Channel(BaseModel):
     id: str
     login: str
@@ -13,6 +14,7 @@ class Channel(BaseModel):
     offline_image_url: Optional[str] = None
     view_count: Optional[int] = 0
     created_at: datetime
+
 
 class ChannelResponse(BaseModel):
     data: Optional[List[Channel]] = None

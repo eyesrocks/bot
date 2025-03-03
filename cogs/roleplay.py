@@ -14,6 +14,7 @@ from anime_api.apis import HmtaiAPI
 from anime_api.apis.hmtai.objects import Image
 from anime_api.apis.hmtai.types import ImageCategory
 
+
 class MarryView(View):
     def __init__(self, bot: Greed, ctx: Context, proposer: Member, proposee: Member):
         super().__init__(timeout=60)
@@ -22,8 +23,6 @@ class MarryView(View):
         self.proposer = proposer
         self.proposee = proposee
 
-
-
     async def on_timeout(self):
         await self.ctx.send("You took too long to respond, please try again.")
         self.stop()
@@ -31,7 +30,9 @@ class MarryView(View):
     @button(label="Yes", style=ButtonStyle.green)
     async def yes(self, interaction: Interaction, button: Button):
         if interaction.user.id != self.proposee.id:
-            await interaction.response.send_message("You are not the one being proposed to!", ephemeral=True)
+            await interaction.response.send_message(
+                "You are not the one being proposed to!", ephemeral=True
+            )
             return
 
         await self.bot.db.execute(
@@ -42,21 +43,31 @@ class MarryView(View):
             DO NOTHING;
             """,
             self.proposer.id,
-            self.proposee.id
+            self.proposee.id,
         )
-        await interaction.response.edit_message(content=None, embed=Embed(description=f"> {self.proposee.mention} has accepted {self.proposer.mention}'s proposal!"), view=None)
+        await interaction.response.edit_message(
+            content=None,
+            embed=Embed(
+                description=f"> {self.proposee.mention} has accepted {self.proposer.mention}'s proposal!"
+            ),
+            view=None,
+        )
         self.stop()
 
     @button(label="No", style=ButtonStyle.red)
     async def no(self, interaction: Interaction, button: Button):
         if interaction.user.id != self.proposee.id:
-            await interaction.response.send_message("You are not the one being proposed to!", ephemeral=True)
+            await interaction.response.send_message(
+                "You are not the one being proposed to!", ephemeral=True
+            )
             return
-            
-        await interaction.response.edit_message(content=f"{self.proposee.mention} has rejected {self.proposer.mention}'s proposal!", embed=None, view=None)
+
+        await interaction.response.edit_message(
+            content=f"{self.proposee.mention} has rejected {self.proposer.mention}'s proposal!",
+            embed=None,
+            view=None,
+        )
         self.stop()
-
-
 
 
 class Roleplay(Cog):
@@ -69,7 +80,10 @@ class Roleplay(Cog):
     def ordinal(n: int) -> str:
         """Convert an integer into its ordinal representation, e.g., 1 -> 1st"""
         n = int(n)
-        return "%d%s" % (n, "tsnrhtdd"[(n // 10 % 10 != 1) * (n % 10 < 4) * n % 10::4])
+        return "%d%s" % (
+            n,
+            "tsnrhtdd"[(n // 10 % 10 != 1) * (n % 10 < 4) * n % 10 :: 4],
+        )
 
     async def send(
         self,
@@ -77,7 +91,7 @@ class Roleplay(Cog):
         user1: Member,
         user2: Member,
         interaction: str,
-        response: str
+        response: str,
     ) -> None:
         """Send an embed for a roleplay interaction and update interaction count."""
 
@@ -89,15 +103,15 @@ class Roleplay(Cog):
         RETURNING count;
         """
         record = await self.bot.db.fetchrow(query, user1.id, user2.id, interaction)
-        interaction_count = record['count']
+        interaction_count = record["count"]
 
         async with aiohttp.ClientSession() as session:
-            async with session.get(f'https://nekos.best/api/v2/{interaction}') as resp:
+            async with session.get(f"https://nekos.best/api/v2/{interaction}") as resp:
                 if resp.status != 200:
                     await ctx.send("Couldn't retrieve a GIF, please try again later.")
                     return
                 data = await resp.json()
-                gif_url = data['results'][0]['url']
+                gif_url = data["results"][0]["url"]
 
         embed = Embed(
             description=f"> {user1.mention} {response} {user2.mention} for the {self.ordinal(interaction_count)} time!",
@@ -105,7 +119,6 @@ class Roleplay(Cog):
         embed.set_image(url=gif_url)
 
         await ctx.send(embed=embed)
-
 
     # Define the command template to minimize repetition:
     async def get_image(self, ctx, category: str, tag_name: str):
@@ -115,22 +128,28 @@ class Roleplay(Cog):
             """SELECT * FROM boosters WHERE user_id = $1""", ctx.author.id
         )
         if not result:
-            await ctx.fail(f"You are not boosting [/greedbot](https://discord.gg/greedbot), boost the server to use this command")
+            await ctx.fail(
+                f"You are not boosting [/greedbot](https://discord.gg/greedbot), boost the server to use this command"
+            )
             return
 
         # Check if the command is invoked in an NSFW channel
         if not ctx.channel.is_nsfw():
-            return await ctx.fail(f"This command can only be used in **NSFW** channels. Do ,nsfw to enable nsfw in a channel")
+            return await ctx.fail(
+                f"This command can only be used in **NSFW** channels. Do ,nsfw to enable nsfw in a channel"
+            )
 
         try:
             # Fetch random image based on the category tag without awaiting the Image object
-            image: Image = self.api.get_random_image(getattr(ImageCategory.NSFW, tag_name.upper()))
-            
+            image: Image = self.api.get_random_image(
+                getattr(ImageCategory.NSFW, tag_name.upper())
+            )
+
             # Embed the image
             embed = Embed(
                 title=f"enjoy some {tag_name}",
                 color=self.bot.color,
-                description=image.url
+                description=image.url,
             )
             embed.set_image(url=image.url)
 
@@ -143,15 +162,19 @@ class Roleplay(Cog):
             await ctx.send(f"An error occurred: {e}")
 
     @Cog.listener()
-    async def on_guild_channel_update(self, before: discord.abc.GuildChannel, after: discord.abc.GuildChannel):
+    async def on_guild_channel_update(
+        self, before: discord.abc.GuildChannel, after: discord.abc.GuildChannel
+    ):
         """Triggered when a channel's NSFW status is changed."""
-        
+
         # Check if the channel was changed from NSFW to SFW
         if before.nsfw and not after.nsfw:
             # Get all messages in the channel and filter based on embed URLs
             embeds_to_delete = self.nsfw_embeds.get(before.id, [])
 
-            async for message in before.history(limit=100):  # Limit set to 100, adjust if needed
+            async for message in before.history(
+                limit=100
+            ):  # Limit set to 100, adjust if needed
                 for embed in message.embeds:
                     # If the embed URL matches one we saved, delete that message
                     if embed.url in embeds_to_delete:
@@ -159,8 +182,6 @@ class Roleplay(Cog):
 
             # Clear the stored embeds for this channel after deletion
             self.nsfw_embeds[before.id].clear()
-
-
 
     @app_commands.command(
         name="kiss",
@@ -221,14 +242,12 @@ class Roleplay(Cog):
     async def nod_userapp(self, interaction: Interaction, user: Member) -> None:
         ctx = await Context.from_interaction(interaction)
         await self.nod(ctx, user)
-        
-
 
     @command(
         name="propose",
         aliases=["marry"],
         brief="propose to another user.",
-        example=",propose @wurri"
+        example=",propose @wurri",
     )
     async def propose(self, ctx: Context, member: Member) -> None:
         """propose to another user."""
@@ -241,13 +260,13 @@ class Roleplay(Cog):
         )
         if proposer_res:
             return await ctx.send("You're already married to someone!")
-        
+
         if member.id == ctx.author.id:
             return await ctx.fail("You can't marry yourself!")
-        
+
         if member.bot:
             return await ctx.fail("You can't marry a bot!")
-        
+
         proposee_res = await self.bot.db.fetchrow(
             """
             SELECT * FROM marriages
@@ -262,13 +281,10 @@ class Roleplay(Cog):
         await ctx.send(
             content=member.mention,
             embed=Embed(description=f"{ctx.author.mention} has proposed to you!"),
-            view=view
+            view=view,
         )
-    
-    @command(
-        name="spouse",
-        brief="check who your spouse is."
-    )
+
+    @command(name="spouse", brief="check who your spouse is.")
     async def spouse(self, ctx: Context) -> None:
         """check who your spouse is."""
         res = await self.bot.db.fetchrow(
@@ -281,16 +297,15 @@ class Roleplay(Cog):
         if not res:
             return await ctx.fail("You're not married to anyone!")
 
-        spouse_id = res['user1_id'] if res['user2_id'] == ctx.author.id else res['user2_id']
+        spouse_id = (
+            res["user1_id"] if res["user2_id"] == ctx.author.id else res["user2_id"]
+        )
         spouse = ctx.guild.get_member(spouse_id)
         if spouse is None:
             return await ctx.fail("Your spouse is not in this server.")
         await ctx.normal(f"You are married to {spouse.name}!")
 
-    @command(
-        name="divorce",
-        brief="divorce your spouse."
-    )
+    @command(name="divorce", brief="divorce your spouse.")
     async def divorce(self, ctx: Context) -> None:
         """divorce your spouse."""
         res = await self.bot.db.fetchrow(
@@ -303,7 +318,9 @@ class Roleplay(Cog):
         if not res:
             return await ctx.fail("You're not married to anyone!")
 
-        spouse_id = res['user1_id'] if res['user2_id'] == ctx.author.id else res['user2_id']
+        spouse_id = (
+            res["user1_id"] if res["user2_id"] == ctx.author.id else res["user2_id"]
+        )
         await self.bot.db.execute(
             """
             DELETE FROM marriages
@@ -313,131 +330,83 @@ class Roleplay(Cog):
         )
         await ctx.normal(f"You are now divorced!")
 
-    @command( 
-        name="kiss",
-        brief="kiss another user.",
-        example=",kiss @wurri" 
-    )
+    @command(name="kiss", brief="kiss another user.", example=",kiss @wurri")
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def kiss(self, ctx: Context, member: Member) -> None:
         """kiss another user."""
         await self.send(ctx, ctx.author, member, "kiss", "kisses")
 
-    @command( 
-        name="hug",
-        brief="hug another user.",
-        example=",hug @wurri" 
-    )
+    @command(name="hug", brief="hug another user.", example=",hug @wurri")
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def hug(self, ctx: Context, member: Member) -> None:
         """hug another user."""
         await self.send(ctx, ctx.author, member, "hug", "hugs")
 
-    @command( 
-        name="smile",
-        brief="smile at another user.",
-        example=",smile @wurri" 
-    )
+    @command(name="smile", brief="smile at another user.", example=",smile @wurri")
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def smile(self, ctx: Context, member: Member) -> None:
         """smile at another user."""
         await self.send(ctx, ctx.author, member, "smile", "smiles at")
 
-    @command( 
-        name="pat",
-        brief="pat another user.",
-        example=",pat @wurri" 
-    )
+    @command(name="pat", brief="pat another user.", example=",pat @wurri")
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def pat(self, ctx: Context, member: Member) -> None:
         """pat another user."""
         await self.send(ctx, ctx.author, member, "pat", "pats")
 
-    @command( 
-        name="pout",
-        brief="pout at another user.",
-        example=",pout @wurri" 
-    )
+    @command(name="pout", brief="pout at another user.", example=",pout @wurri")
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def pout(self, ctx: Context, member: Member) -> None:
         """pout at another user."""
         await self.send(ctx, ctx.author, member, "pout", "pouts at")
 
-    @command( 
-        name="nod",
-        brief="nod at another user.",
-        example=",nod @wurri" 
-    )
+    @command(name="nod", brief="nod at another user.", example=",nod @wurri")
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def nod(self, ctx: Context, member: Member) -> None:
         """nod at another user."""
         await self.send(ctx, ctx.author, member, "nod", "nods at")
 
-    @command( 
-        name="punch",
-        brief="punch another user.",
-        example=",punch @wurri" 
-    )
+    @command(name="punch", brief="punch another user.", example=",punch @wurri")
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def punch(self, ctx: Context, member: Member) -> None:
         """punch another user."""
         await self.send(ctx, ctx.author, member, "punch", "punches")
 
-    @command( 
-        name="laugh",
-        brief="laugh at another user.",
-        example=",laugh @wurri" 
-    )
+    @command(name="laugh", brief="laugh at another user.", example=",laugh @wurri")
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def laugh(self, ctx: Context, member: Member) -> None:
         """laugh at another user."""
         await self.send(ctx, ctx.author, member, "laugh", "laughs at")
 
-    @command( 
-        name="wink",
-        brief="wink at another user.",
-        example=",wink @wurri" 
-    )
+    @command(name="wink", brief="wink at another user.", example=",wink @wurri")
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def wink(self, ctx: Context, member: Member) -> None:
         """wink at another user."""
         await self.send(ctx, ctx.author, member, "wink", "winks at")
 
-    @command( 
-        name="blush",
-        brief="blush at another user.",
-        example=",blush @wurri" 
-    )
+    @command(name="blush", brief="blush at another user.", example=",blush @wurri")
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def blush(self, ctx: Context, member: Member) -> None:
         """blush at another user."""
         await self.send(ctx, ctx.author, member, "blush", "blushes at")
 
-    @command( 
-        name="cuddle",
-        brief="cuddle with another user.",
-        example=",cuddle @wurri"
-    )
+    @command(name="cuddle", brief="cuddle with another user.", example=",cuddle @wurri")
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def cuddle(self, ctx: Context, member: Member) -> None:
         """cuddle with another user."""
         await self.send(ctx, ctx.author, member, "cuddle", "cuddles with")
 
-    @command(
-        name="slap",
-        brief="slap another user.",
-        example=",slap @wurri"
-    )
+    @command(name="slap", brief="slap another user.", example=",slap @wurri")
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def slap(self, ctx: Context, member: Member) -> None:
         """slap another user."""
         await self.send(ctx, ctx.author, member, "slap", "slaps")
 
     @command(
-        name = "kill",
-        brief = "kill another user.",
-        example = ",kill @tourxp",
-        aliases = ["shoot"]
+        name="kill",
+        brief="kill another user.",
+        example=",kill @tourxp",
+        aliases=["shoot"],
     )
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def kill(self, ctx: Context, member: Member) -> None:
@@ -446,7 +415,10 @@ class Roleplay(Cog):
         """
         await self.send(ctx, ctx.author, member, "shoot", "kills")
 
-    @command(name="fuck", brief="fuck another user (nsfw)",)
+    @command(
+        name="fuck",
+        brief="fuck another user (nsfw)",
+    )
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def fuck(self, ctx, *, member: Member) -> None:
         """NSFW command to send a random NSFW gif from a local folder."""
@@ -457,12 +429,16 @@ class Roleplay(Cog):
         )
 
         if not result:
-            await ctx.fail("You are not boosting [/greedbot](https://discord.gg/greedbot) boost the server to use this command")
+            await ctx.fail(
+                "You are not boosting [/greedbot](https://discord.gg/greedbot) boost the server to use this command"
+            )
             return
 
         # Check if the command is invoked in an NSFW channel
         if not ctx.channel.is_nsfw():
-            return await ctx.fail("This command can only be used in **NSFW** channels. Do ,nsfw to enable nsfw in a channel")
+            return await ctx.fail(
+                "This command can only be used in **NSFW** channels. Do ,nsfw to enable nsfw in a channel"
+            )
 
         # Check if the user is trying to interact with themselves
         if ctx.author == member:
@@ -504,7 +480,8 @@ class Roleplay(Cog):
                 ON CONFLICT(user_id, target_id)
                 DO UPDATE SET times_fucked = freaky.times_fucked + 1
                 """,
-                ctx.author.id, member.id
+                ctx.author.id,
+                member.id,
             )
 
             # Fetch the updated count of interactions
@@ -513,18 +490,21 @@ class Roleplay(Cog):
                 SELECT times_fucked FROM freaky
                 WHERE user_id = $1 AND target_id = $2
                 """,
-                ctx.author.id, member.id
+                ctx.author.id,
+                member.id,
             )
 
             # If no interaction, initialize it to 1
-            times_fucked = result['times_fucked'] if result else 1
+            times_fucked = result["times_fucked"] if result else 1
 
             # Create an embed message
             embed = Embed(
                 description=f"**{ctx.author.mention}** is interacting with **{member.mention}**! 🔥",
-                color=self.bot.color
+                color=self.bot.color,
             )
-            embed.set_footer(text=f"{ctx.author} has interacted with {member} {times_fucked} times.")
+            embed.set_footer(
+                text=f"{ctx.author} has interacted with {member} {times_fucked} times."
+            )
 
             # Attach the GIF to the embed
             with open(gif_path, "rb") as gif_file:
@@ -541,95 +521,134 @@ class Roleplay(Cog):
         """Group for random NSFW images."""
         return await ctx.send_help(ctx.command.qualified_name)
 
-    @random_group.command(name="ass", brief="Get a random 'ass' image.", usage=",random ass")
+    @random_group.command(
+        name="ass", brief="Get a random 'ass' image.", usage=",random ass"
+    )
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def randomass(self, ctx):
         await self.get_image(ctx, "ass", "ASS")
 
-    @random_group.command(name="anal", brief="Get a random 'anal' image.", usage=",random anal")
+    @random_group.command(
+        name="anal", brief="Get a random 'anal' image.", usage=",random anal"
+    )
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def randomanal(self, ctx):
         await self.get_image(ctx, "anal", "ANAL")
 
-    @random_group.command(name="bdsm", brief="Get a random 'bdsm' image.", usage=",random bdsm")
+    @random_group.command(
+        name="bdsm", brief="Get a random 'bdsm' image.", usage=",random bdsm"
+    )
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def randombdsm(self, ctx):
         await self.get_image(ctx, "bdsm", "BDSM")
 
-    @random_group.command(name="classic", brief="Get a random 'nsfw' image.", usage=",random classic")
+    @random_group.command(
+        name="classic", brief="Get a random 'nsfw' image.", usage=",random classic"
+    )
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def randomclassic(self, ctx):
         await self.get_image(ctx, "classic", "CLASSIC")
 
-    @random_group.command(name="cum", brief="Get a random 'nsfw' image.", usage=",random cum")
+    @random_group.command(
+        name="cum", brief="Get a random 'nsfw' image.", usage=",random cum"
+    )
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def randomcum(self, ctx):
         await self.get_image(ctx, "cum", "CUM")
 
-    @random_group.command(name="creampie", brief="Get a random 'nsfw' image.", usage=",random creampie")
+    @random_group.command(
+        name="creampie", brief="Get a random 'nsfw' image.", usage=",random creampie"
+    )
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def randomcreampie(self, ctx):
         await self.get_image(ctx, "creampie", "CREAMPIE")
 
-    @random_group.command(name="manga", brief="Get a random 'nsfw' image.", usage=",random manga")
+    @random_group.command(
+        name="manga", brief="Get a random 'nsfw' image.", usage=",random manga"
+    )
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def randommanga(self, ctx):
         await self.get_image(ctx, "manga", "MANGA")
 
-    @random_group.command(name="femdom", brief="Get a random 'nsfw' image.", usage=",random femdom")
+    @random_group.command(
+        name="femdom", brief="Get a random 'nsfw' image.", usage=",random femdom"
+    )
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def randomfemdom(self, ctx):
         await self.get_image(ctx, "femdom", "FEMDOM")
 
-    @random_group.command(name="hentai", brief="Get a random 'nsfw' image.", usage=",random hentai")
+    @random_group.command(
+        name="hentai", brief="Get a random 'nsfw' image.", usage=",random hentai"
+    )
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def randomhentai(self, ctx):
         await self.get_image(ctx, "hentai", "HENTAI")
 
-    @random_group.command(name="masturbation", brief="Get a random 'nsfw' image.", usage=",random masturbation")
+    @random_group.command(
+        name="masturbation",
+        brief="Get a random 'nsfw' image.",
+        usage=",random masturbation",
+    )
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def randommasturbation(self, ctx):
         await self.get_image(ctx, "masturbation", "MASTURBATION")
 
-    @random_group.command(name="pussy", brief="Get a random 'nsfw' image.", usage=",random pussy")
+    @random_group.command(
+        name="pussy", brief="Get a random 'nsfw' image.", usage=",random pussy"
+    )
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def randompussy(self, ctx):
         await self.get_image(ctx, "pussy", "PUSSY")
 
-    @random_group.command(name="blowjob", brief="Get a random 'nsfw' image.", usage=",random blowjob")
+    @random_group.command(
+        name="blowjob", brief="Get a random 'nsfw' image.", usage=",random blowjob"
+    )
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def randomblowjob(self, ctx):
         await self.get_image(ctx, "blowjob", "BLOWJOB")
 
-    @random_group.command(name="boobjob", brief="Get a random 'nsfw' image.", usage=",random boobjob")
+    @random_group.command(
+        name="boobjob", brief="Get a random 'nsfw' image.", usage=",random boobjob"
+    )
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def randomboobjob(self, ctx):
         await self.get_image(ctx, "boobjob", "BOOBJOB")
 
-    @random_group.command(name="boobs", brief="Get a random 'nsfw' image.", usage=",random boobs")
+    @random_group.command(
+        name="boobs", brief="Get a random 'nsfw' image.", usage=",random boobs"
+    )
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def randomboobs(self, ctx):
         await self.get_image(ctx, "boobs", "BOOBS")
 
-    @random_group.command(name="thighs", brief="Get a random 'nsfw' image.", usage=",random thighs")
+    @random_group.command(
+        name="thighs", brief="Get a random 'nsfw' image.", usage=",random thighs"
+    )
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def randomthighs(self, ctx):
         await self.get_image(ctx, "thighs", "THIGHS")
 
-    @random_group.command(name="ahegao", brief="Get a random 'nsfw' image.", usage=",random ahegao")
+    @random_group.command(
+        name="ahegao", brief="Get a random 'nsfw' image.", usage=",random ahegao"
+    )
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def randomahegao(self, ctx):
         await self.get_image(ctx, "ahegao", "AHEGAO")
 
-    @random_group.command(name="tentacles", brief="Get a random 'nsfw' image.", usage=",random tentacles")
+    @random_group.command(
+        name="tentacles", brief="Get a random 'nsfw' image.", usage=",random tentacles"
+    )
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def randomtentacles(self, ctx):
         await self.get_image(ctx, "tentacles", "TENTACLES")
 
-    @random_group.command(name="gif", brief="Get a random 'gif' image.", usage=",random gif")
+    @random_group.command(
+        name="gif", brief="Get a random 'gif' image.", usage=",random gif"
+    )
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def randomgif(self, ctx):
         await self.get_image(ctx, "gif", "GIF")
+
 
 async def setup(bot: "Greed"):
     await bot.add_cog(Roleplay(bot))

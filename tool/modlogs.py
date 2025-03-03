@@ -1,5 +1,16 @@
 import discord
-from discord import Embed, Message, Member, User, Object, AuditLogEntry, utils, VoiceState, Role, abc
+from discord import (
+    Embed,
+    Message,
+    Member,
+    User,
+    Object,
+    AuditLogEntry,
+    utils,
+    VoiceState,
+    Role,
+    abc,
+)
 from discord.ext.commands import Context
 from datetime import datetime
 from enum import Enum, auto
@@ -10,7 +21,9 @@ from _types import catch
 from asyncio import sleep
 import random
 import asyncio
+
 change_type = Union[Role, AuditLogEntry]
+
 
 def serialize(key: str, value: Any):
     if isinstance(value, list):
@@ -19,7 +32,11 @@ def serialize(key: str, value: Any):
         return False
     return value
 
-def get_channel_changes(before: Union[abc.GuildChannel, AuditLogEntry], after: Union[abc.GuildChannel, AuditLogEntry]):
+
+def get_channel_changes(
+    before: Union[abc.GuildChannel, AuditLogEntry],
+    after: Union[abc.GuildChannel, AuditLogEntry],
+):
     changes = {}
     if isinstance(before, abc.GuildChannel):
         attrs = before.__slots__
@@ -33,10 +50,13 @@ def get_channel_changes(before: Union[abc.GuildChannel, AuditLogEntry], after: U
             a = after.changes.after[list(after.changes.after.keys())[0]]
             changes = {k: v for k, v in a.items() if b[k] != v}
             target = next(t for t, v in before.target.overwrites if v == a)
-    string = "\n".join(f"**{key}:** `{serialize(key, value)}`" for key, value in changes.items())
+    string = "\n".join(
+        f"**{key}:** `{serialize(key, value)}`" for key, value in changes.items()
+    )
     if "overwrites" in a:
         target = next(t for t, v in after.overwrites if v == a["overwrites"])
     return target, string
+
 
 def get_role_changes(before: change_type, after: change_type):
     added, removed = "", ""
@@ -52,12 +72,17 @@ def get_role_changes(before: change_type, after: change_type):
     difference = {key: value for key, value in a.items() if b[key] != value}
     for k, v in difference.items():
         if v:
-            added += f", `{k.replace('_', ' ')}`" if added else f"`{k.replace('_', ' ')}`"
+            added += (
+                f", `{k.replace('_', ' ')}`" if added else f"`{k.replace('_', ' ')}`"
+            )
         else:
-            removed += f", `{k.replace('_', ' ')}`" if removed else f"`{k.replace('_', ' ')}`"
+            removed += (
+                f", `{k.replace('_', ' ')}`" if removed else f"`{k.replace('_', ' ')}`"
+            )
     string = f"**added:** {added}\n" if added else ""
     string += f"**removed:** {removed}" if removed else ""
     return string
+
 
 class EventType(Enum):
     channel_create = auto()
@@ -93,24 +118,25 @@ class EventType(Enum):
     image_mute = auto()
     image_unmute = auto()
 
+
 class Handler:
     def __init__(self, bot):
         self.bot = bot
         self.rl_settings = {
-            'user_fetch': (1, 2),
-            'modlog_send': (5, 5),
-            'global_logs': (50, 10),
-            'guild_logs': (10, 5),
-            'cache_ttl': 300
+            "user_fetch": (1, 2),
+            "modlog_send": (5, 5),
+            "global_logs": (50, 10),
+            "guild_logs": (10, 5),
+            "cache_ttl": 300,
         }
 
     async def check_user(self, user: Union[Member, User, Object]):
         """Check user with improved rate limiting and caching"""
         if not user:
             return "Unknown User"
-        
+
         cache_key = f"user_mention:{user.id}"
-        
+
         # First check if we have a cached mention
         if cached := await self.bot.glory_cache.get(cache_key):
             return cached
@@ -119,21 +145,23 @@ class Handler:
         cached_user = self.bot.get_user(user.id)
         if cached_user:
             mention = cached_user.mention
-            await self.bot.glory_cache.set(cache_key, mention, self.rl_settings['cache_ttl'])
+            await self.bot.glory_cache.set(
+                cache_key, mention, self.rl_settings["cache_ttl"]
+            )
             return mention
 
         # Global fetch ratelimit
         global_key = "global_user_fetch"
         if await self.bot.glory_cache.ratelimited(global_key, 30, 60):
-            return str(user.id) # Fallback to ID if rate limited globally
-            
+            return str(user.id)  # Fallback to ID if rate limited globally
+
         # Per-user fetch ratelimit
         user_key = f"fetch_user:{user.id}"
         if await self.bot.glory_cache.ratelimited(user_key, 1, 30):
-            return str(user.id) # Fallback to ID if rate limited per-user
+            return str(user.id)  # Fallback to ID if rate limited per-user
 
         try:
-            fetched_user = await self.bot.fetch_user(user.id) 
+            fetched_user = await self.bot.fetch_user(user.id)
             mention = fetched_user.mention
             # Cache successful fetch for longer
             await self.bot.glory_cache.set(cache_key, mention, 3600)
@@ -143,7 +171,7 @@ class Handler:
             return "Unknown User"
         except discord.HTTPException as e:
             logger.warning(f"HTTP error fetching user {user.id}: {e}")
-            return str(user.id) # Fallback to ID on API errors
+            return str(user.id)  # Fallback to ID on API errors
         except Exception as e:
             logger.error(f"Error checking user {user.id}: {e}")
             return str(user.id)
@@ -169,7 +197,9 @@ class Handler:
                 embed.description = f"voicemaster channel was deleted due to **{str(ctx)}** leaving {ts}"
             elif after and (before is None or before.channel != after.channel):
                 embed.title = "vm channel creation"
-                embed.description = f"voicemaster channel was created for **{str(ctx)}** {ts}"
+                embed.description = (
+                    f"voicemaster channel was created for **{str(ctx)}** {ts}"
+                )
         else:
             if before.channel:
                 if after.channel:
@@ -177,19 +207,27 @@ class Handler:
                     embed.description = f"{ctx.mention} left **{before.channel.name}** and joined **{after.channel.name}** {ts}"
                 else:
                     embed.title = "User left a voice channel"
-                    embed.description = f"{ctx.mention} left **{before.channel.name}** {ts}"
+                    embed.description = (
+                        f"{ctx.mention} left **{before.channel.name}** {ts}"
+                    )
             elif after.channel:
                 embed.title = "User joined a voice channel"
-                embed.description = f"{ctx.mention} joined **{after.channel.name}** {ts}"
+                embed.description = (
+                    f"{ctx.mention} joined **{after.channel.name}** {ts}"
+                )
         return embed
 
-    async def get_embed(self, ctx: Union[Context, Message, AuditLogEntry], event: EventType):
+    async def get_embed(
+        self, ctx: Union[Context, Message, AuditLogEntry], event: EventType
+    ):
         ts = utils.format_dt(datetime.now(), style="R")
         embed = Embed(color=self.bot.color)
         if isinstance(ctx, Context):
             ctx = self.get_kwargs(ctx)
             args = ctx.kwargs
-            author_mention = ctx.author.mention if hasattr(ctx.author, 'mention') else "Unknown User"
+            author_mention = (
+                ctx.author.mention if hasattr(ctx.author, "mention") else "Unknown User"
+            )
             if event == EventType.jail:
                 embed.title = "Member Jailed"
                 embed.description = f"**Moderator:** {author_mention}\n> **Action:** jailed\n> **User:** {args['member'].mention}\n> **When:** {ts}"
@@ -197,7 +235,9 @@ class Handler:
                 member = args.get("member")
                 if isinstance(member, str) and member.lower() == "all":
                     embed.title = "members unjailed"
-                    embed.description = f"{author_mention} **unjailed** all jailed members {ts}"
+                    embed.description = (
+                        f"{author_mention} **unjailed** all jailed members {ts}"
+                    )
                 else:
                     embed.title = "Member Unjailed"
                     embed.description = f"**Moderator:** {author_mention}\n> **Action:** unjailed\n> **User:** {args['member'].mention}\n> **When:** {ts}"
@@ -234,7 +274,11 @@ class Handler:
             elif event == EventType.role_assign:
                 embed.title = "Role(s) Assigned to user"
                 roles = args.get("role", args.get("role_input"))
-                r = ", ".join(role.mention for role in roles) if len(roles) > 1 else roles[0].mention
+                r = (
+                    ", ".join(role.mention for role in roles)
+                    if len(roles) > 1
+                    else roles[0].mention
+                )
                 e = f"{args['member'].mention}" if args.get("member") else ""
                 embed.description = f"**Moderator:** {author_mention}\n> **Role(s):** {r}\n> **User:** {e}\n> **When:** {ts}"
             elif event == EventType.role_create:
@@ -242,8 +286,14 @@ class Handler:
                 embed.description = f"**Moderator:** {author_mention}\n> **Role:** {args['name']}\n> **When:** {ts}"
             elif event == EventType.role_update:
                 embed.title = "Role Updated"
-                role = args.get("args").roles[0] if args.get("args") else args.get("role")
-                embed.description = f"**Moderator:** {author_mention}\n> Role: **{role.name}**\n> **Using:** {ctx.command.qualified_name}\n> **When:** {ts}" if role else "**Role information is unavailable**"
+                role = (
+                    args.get("args").roles[0] if args.get("args") else args.get("role")
+                )
+                embed.description = (
+                    f"**Moderator:** {author_mention}\n> Role: **{role.name}**\n> **Using:** {ctx.command.qualified_name}\n> **When:** {ts}"
+                    if role
+                    else "**Role information is unavailable**"
+                )
             elif event == EventType.category_channel_create:
                 embed.title = "Category Created"
                 embed.description = f"**Moderator:** {author_mention}\n> **Category:** {args['name']}\n> **How:** Created through Greeds `,category create` command\n> **When:** {ts}"
@@ -290,7 +340,9 @@ class Handler:
             if event == EventType.role_assign:
                 if ctx.reason:
                     if ctx.reason.startswith(f"[ {self.bot.user.name} antinuke ]"):
-                        reason = ctx.reason.split(f"[ {self.bot.user.name} antinuke ]")[-1]
+                        reason = ctx.reason.split(f"[ {self.bot.user.name} antinuke ]")[
+                            -1
+                        ]
                         title = "member stripped"
                         description = f"**Moderator:** {ctx.user.mention}\n> **User Stripped:** {await self.check_user(ctx.target)}\n> **Reason:** {reason}\n> **When:** {ts}"
                     else:
@@ -346,7 +398,9 @@ class Handler:
             elif event == EventType.ban:
                 if ctx.reason:
                     if ctx.reason.startswith(f"[ {self.bot.user.name} antinuke ]"):
-                        reason = ctx.reason.split(f"[ {self.bot.user.name} antinuke ]")[-1]
+                        reason = ctx.reason.split(f"[ {self.bot.user.name} antinuke ]")[
+                            -1
+                        ]
                         title = "Member Banned"
                         description = f"**Moderator:** {ctx.user.mention}\n> **User Punished:** {await self.check_user(ctx.target)}\n> **Punishment:** `member banned`\n> **Reason:** {reason}\n> **When:** {ts}"
                     else:
@@ -364,7 +418,9 @@ class Handler:
             elif event == EventType.kick:
                 if ctx.reason:
                     if ctx.reason.startswith(f"[ {self.bot.user.name} antinuke ]"):
-                        reason = ctx.reason.split(f"[ {self.bot.user.name} antinuke ]")[-1]
+                        reason = ctx.reason.split(f"[ {self.bot.user.name} antinuke ]")[
+                            -1
+                        ]
                         title = "Member Kicked"
                         description = f"**Moderator:** {ctx.user.mention}\n> **User Punished:** {await self.check_user(ctx.target.id)}\n> **Punishment:** `member kicked`\n> **Reason:** {reason}\n> **When:** {ts}"
                     else:
@@ -497,7 +553,10 @@ class Handler:
                 else:
                     return EventType.channel_update
             elif action == 12:
-                if str(ctx.target.type) == "category" or str(ctx.changes.before.type) == "category":
+                if (
+                    str(ctx.target.type) == "category"
+                    or str(ctx.changes.before.type) == "category"
+                ):
                     return EventType.category_channel_delete
                 else:
                     return EventType.channel_delete
@@ -529,15 +588,13 @@ class Handler:
         try:
             # Global rate limit
             if await self.bot.glory_cache.ratelimited(
-                "modlog_global",
-                *self.rl_settings['global_logs']
+                "modlog_global", *self.rl_settings["global_logs"]
             ):
                 await asyncio.sleep(random.uniform(0.5, 1))
 
             # Per-guild rate limit
             if await self.bot.glory_cache.ratelimited(
-                f"modlog_guild:{c.guild.id}",
-                *self.rl_settings['guild_logs']
+                f"modlog_guild:{c.guild.id}", *self.rl_settings["guild_logs"]
             ):
                 await asyncio.sleep(random.uniform(0.5, 1))
 
@@ -565,12 +622,12 @@ class Handler:
                     return
 
             if embed:
+
                 async def send_embed(channel: discord.TextChannel, embed: Embed):
                     """Send embed with rate limiting and retries"""
                     # Channel rate limit
                     if await self.bot.glory_cache.ratelimited(
-                        f"modlog_channel:{channel.id}",
-                        *self.rl_settings['modlog_send']
+                        f"modlog_channel:{channel.id}", *self.rl_settings["modlog_send"]
                     ):
                         # Store in queue if rate limited
                         await self.bot.db.execute(
@@ -578,7 +635,7 @@ class Handler:
                             VALUES ($1, $2, $3)""",
                             c.guild.id,
                             channel.id,
-                            embed.to_dict()
+                            embed.to_dict(),
                         )
                         return
 
@@ -588,7 +645,7 @@ class Handler:
                             return await channel.send(embed=embed)
                         except discord.HTTPException as e:
                             if e.status == 429:
-                                retry_after = e.retry_after or (backoff * (2 ** attempt))
+                                retry_after = e.retry_after or (backoff * (2**attempt))
                                 await sleep(retry_after + random.uniform(0, 0.5))
                             else:
                                 logger.error(f"HTTP error sending embed: {e}")
@@ -596,7 +653,7 @@ class Handler:
                         except Exception as e:
                             logger.error(f"Error sending embed: {e}")
                             break
-                        await sleep(backoff * (2 ** attempt) + random.uniform(0, 0.5))
+                        await sleep(backoff * (2**attempt) + random.uniform(0, 0.5))
 
                     # Store failed sends in queue
                     await self.bot.db.execute(
@@ -604,7 +661,7 @@ class Handler:
                         VALUES ($1, $2, $3)""",
                         c.guild.id,
                         channel.id,
-                        embed.to_dict()
+                        embed.to_dict(),
                     )
 
                 channel_id = await self.bot.db.fetchval(

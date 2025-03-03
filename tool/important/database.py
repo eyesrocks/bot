@@ -37,21 +37,21 @@ class Record(DefaultRecord):
 
 
 class ConnectionContextManager(Protocol):
-    async def __aenter__(self) -> Connection:
-        ...
+    async def __aenter__(self) -> Connection: ...
 
     async def __aexit__(
         self,
         exc_type: Optional[type[BaseException]],
         exc_value: Optional[BaseException],
         traceback: Optional[TracebackType],
-    ) -> None:
-        ...
+    ) -> None: ...
 
 
 class Database:
     def __init__(self):
-        self.uri: str = "postgres://postgres:azwnCeBdWK1uKtX6j3bqU6kli4xWEnTlp827kEHyIL8qYJ5xdg5ivMWtOaG@localhost:5432/greed"
+        self.uri: str = (
+            "postgres://postgres:azwnCeBdWK1uKtX6j3bqU6kli4xWEnTlp827kEHyIL8qYJ5xdg5ivMWtOaG@localhost:5432/greed"
+        )
         self.pool: Optional[Pool] = None
         self.cache = {}
 
@@ -60,7 +60,7 @@ class Database:
 
     def decoder(self, *data: Any):
         return ujson.loads(data[1] if len(data) > 1 else data[0])
-    
+
     def encoderb(self, *data: Any):
         return orjson.dumps(data[1] if len(data) > 1 else data[0])
 
@@ -94,11 +94,13 @@ class Database:
 
     async def execute_sql_file(self, file_path: str = "greed.sql") -> None:
         if not self.pool:
-            raise RuntimeError("Database connection pool is not initialized. Call 'connect()' first.")
+            raise RuntimeError(
+                "Database connection pool is not initialized. Call 'connect()' first."
+            )
 
         async with self.pool.acquire() as connection:
             await self.settings(connection)
-            with open(file_path, 'r') as file:
+            with open(file_path, "r") as file:
                 sql = file.read()
 
             try:
@@ -106,7 +108,6 @@ class Database:
                 log.info(f"Executed SQL file {file_path} successfully.")
             except Exception as e:
                 log.error(f"An error occurred while executing the SQL file: {e}")
-
 
     async def close(self) -> None:
         if self.pool:
@@ -207,7 +208,6 @@ class Database:
             for t in tables
         ]
         return await asyncio.gather(*tasks)
-    
 
     async def fetch_config(self, guild_id: int, key: str):
         return await self.fetchval(

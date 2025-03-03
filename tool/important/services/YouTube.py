@@ -9,6 +9,7 @@ from yt_dlp import DownloadError, YoutubeDL
 from logging import getLogger, ERROR
 
 from loguru import logger
+
 cache.setup("mem://")
 
 
@@ -73,14 +74,14 @@ def extract_data(url: str):
         data["file"] = video["requested_downloads"][0]["filepath"]
     except DownloadError as e:
         raise e
-    
+
     attempts = 0
     while True:
         try:
             attempts += 1
             if attempts == 10:
                 break
-            
+
             i = ffmpeg.input(data["file"])
             out = i.output(
                 "greedyoutube.mp4",
@@ -131,7 +132,7 @@ async def youtube_post(url: str, proxy: str = None, **kwargs) -> Optional[dict]:
             "original_url": data["original_url"],
             "comment_count": int(data["comment_count"]),
         }
-#        logger.error(post_data)
+        #        logger.error(post_data)
         d = YouTubePost(**post_data)
         #       async with aiohttp.ClientSession() as session:
         #            async with session.get(d.url) as response:

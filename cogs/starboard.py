@@ -179,12 +179,10 @@ class starboard(commands.Cog, name="Starboard"):
         message_id: int,
     ):
         if await self.bot.glory_cache.ratelimited(
-            f"star_msgrl:{guild.id}:{message_id}", 
-            5, 
-            15
+            f"star_msgrl:{guild.id}:{message_id}", 5, 15
         ):
             return
-            
+
         lock = self._locks.get(guild.id)
         if not lock:
             self._locks[guild.id] = lock = asyncio.Lock()
@@ -253,8 +251,9 @@ class starboard(commands.Cog, name="Starboard"):
                 except discord.HTTPException:
                     pass
 
-
-            starboard_message = await starboard_channel.send(content=content, embed=embed, files=files)
+            starboard_message = await starboard_channel.send(
+                content=content, embed=embed, files=files
+            )
             await self.bot.db.execute(
                 "INSERT INTO starboard_entries (guild_id, channel_id, message_id, emoji, starboard_message_id) VALUES ($1, $2, $3, $4, $5) ON"
                 " CONFLICT (guild_id, channel_id, message_id, emoji) DO UPDATE SET starboard_message_id = $5",
@@ -275,9 +274,7 @@ class starboard(commands.Cog, name="Starboard"):
         message_id: int,
     ):
         if await self.bot.glory_cache.ratelimited(
-            f"unstar_msgrl:{guild.id}:{message_id}", 
-            5,
-            15
+            f"unstar_msgrl:{guild.id}:{message_id}", 5, 15
         ):
             return
 
@@ -573,13 +570,12 @@ class starboard(commands.Cog, name="Starboard"):
             )
             if result == "DELETE 0":
                 return await ctx.fail(f"**{channel.mention}** is not being ignored")
-                
+
         except Exception as e:
             logger.error(f"Error in starboard_unignore: {e}")
             await ctx.fail("An unexpected error occurred. Please try again later.")
         else:
             await ctx.success(f"Unignored **{channel.mention}**")
-                
 
 
 async def setup(bot):

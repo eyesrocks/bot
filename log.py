@@ -12,11 +12,14 @@ from loguru import logger
 LOG_LEVEL = os.getenv("LOG_LEVEL") or "INFO"
 LOG_LOCK = threading.Lock()
 
+
 def hook():
     pass
 
-def logger.info_chunk(msg):
+
+def info_chunk(msg):
     logger.info(msg, file=sys.stderr, end="", flush=True)
+
 
 class InterceptHandler(logging.Handler):
     def emit(self, record):
@@ -31,6 +34,7 @@ class InterceptHandler(logging.Handler):
         logger.opt(depth=depth, exception=record.exc_info).log(
             level, record.getMessage()
         )
+
 
 class AsyncLogEmitter:
     def __init__(self, name=None) -> None:
@@ -68,6 +72,7 @@ class AsyncLogEmitter:
 
     def emit(self, msg: str):
         self.queue.put(msg)
+
 
 def make_dask_sink(name=None, log_emitter=None):
     if log_emitter:

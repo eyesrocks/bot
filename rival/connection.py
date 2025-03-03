@@ -1,7 +1,8 @@
 """
 rival- An IPC based on Websockets. Fast, Stable, and easy-to-use,
-for inter-communication between your processes or discord.py bots. 
+for inter-communication between your processes or discord.py bots.
 """
+
 # pylint: disable=E0401,W0718,C0301
 import asyncio
 import logging
@@ -30,19 +31,26 @@ from .lib.errors import (
 )
 from .lib.events import Events
 from .lib.message import WsMessage
-from .lib.payload import Payloads, MessagePayload, rivalObject, responseObject, PayloadTypes as PayloadType
+from .lib.payload import (
+    Payloads,
+    MessagePayload,
+    rivalObject,
+    responseObject,
+    PayloadTypes as PayloadType,
+)
 import loguru
+
 logger = loguru.logger
-Coro = TypeVar('Coro', bound=Callable[..., Coroutine[Any, Any, Any]])
+Coro = TypeVar("Coro", bound=Callable[..., Coroutine[Any, Any, Any]])
 
 
 class Connection:
     def __init__(
-            self,
-            local_name: str,
-            host: str = "localhost",
-            port: int = 13254,
-            reconnect: bool = True
+        self,
+        local_name: str,
+        host: str = "localhost",
+        port: int = 13254,
+        reconnect: bool = True,
     ):
         self.uri: str = f"ws://{host}:{port}"
         self.local_name: str = local_name
@@ -82,9 +90,7 @@ class Connection:
 
     async def __verify_client(self):
         payload = MessagePayload(
-            type=Payloads.verification,
-            id=self.local_name,
-            uuid=str(uuid.uuid4())
+            type=Payloads.verification, id=self.local_name, uuid=str(uuid.uuid4())
         )
         await self.send_message(payload)
         logger.info("Verification request sent")
@@ -96,10 +102,10 @@ class Connection:
                 self.uri,
                 close_timeout=0,
                 ping_interval=None,
-                max_size=int(self.max_data_size * 1048576)
+                max_size=int(self.max_data_size * 1048576),
             )
             self._authorized = False
-            self.__events.dispatch_event('rival_connect')
+            self.__events.dispatch_event("rival_connect")
             logger.info("Connected to Websocket")
 
     async def __reconnect_client(self) -> bool:
@@ -109,8 +115,12 @@ class Connection:
                 await self.__verify_client()
                 return True
             except Exception as error:
-                logger.debug("Failed to reconnect. Retrying in {}s.", self.reconnect_threshold)
-                logger.error("While trying to reconnect there has been an error. {}", str(error))
+                logger.debug(
+                    "Failed to reconnect. Retrying in {}s.", self.reconnect_threshold
+                )
+                logger.error(
+                    "While trying to reconnect there has been an error. {}", str(error)
+                )
                 await asyncio.sleep(self.reconnect_threshold)
 
     async def start(self) -> None:
@@ -141,9 +151,11 @@ class Connection:
     async def add_route(self, callback: typing.Callable, name: str = None):
         route_name = name or callback.__name__
         if route_name in self.__routes:
-            raise KeyError(f"Route name is already registered!\nRoutes: {self.__routes}")
+            raise KeyError(
+                f"Route name is already registered!\nRoutes: {self.__routes}"
+            )
         if not asyncio.iscoroutinefunction(callback):
-            raise InvalidRouteType('Route callback must be an asyncio coro.')
+            raise InvalidRouteType("Route callback must be an asyncio coro.")
 
         self.__routes[route_name] = callback
         return callback
@@ -160,31 +172,36 @@ class Connection:
 
     def __register_object_funcs(self, rival_object: rivalObject):
         self.__sub_routes[rival_object.uuid] = rival_object.functions
-        asyncio.create_task(self.__purge_sub_routes(
-            rival_object.object_expiry, rival_object.uuid
-        ))
+        asyncio.create_task(
+            self.__purge_sub_routes(rival_object.object_expiry, rival_object.uuid)
+        )
 
     async def ping(self, client=None, timeout: int = 60) -> bool:
         if self._on_hold or self.websocket is None or not self.websocket.open:
-            raise ClientNotReadyError("The client is currently not ready to send or accept requests.")
+            raise ClientNotReadyError(
+                "The client is currently not ready to send or accept requests."
+            )
         if not self._authorized:
             raise UnauthorizedError("Client is not authorized!")
         logger.debug("Pinging IPC Server")
 
         _uuid = str(uuid.uuid4())
         payload = MessagePayload(
-            type=Payloads.ping,
-            id=self.local_name,
-            destination=client,
-            uuid=_uuid
+            type=Payloads.ping, id=self.local_name, destination=client, uuid=_uuid
         )
         await self.send_message(payload)
-        resp = await self.__get_response(_uuid, asyncio.get_event_loop(), timeout=timeout)
+        resp = await self.__get_response(
+            _uuid, asyncio.get_event_loop(), timeout=timeout
+        )
         return resp.get("success", False)
 
-    async def _call_function(self, destination, object_identifier, func_name, *args, **kwargs) -> bool:
+    async def _call_function(
+        self, destination, object_identifier, func_name, *args, **kwargs
+    ) -> bool:
         if self._on_hold or self.websocket is None or not self.websocket.open:
-            raise ClientNotReadyError("The client is currently not ready to send or accept requests.")
+            raise ClientNotReadyError(
+                "The client is currently not ready to send or accept requests."
+            )
         if not self._authorized:
             raise UnauthorizedError("Client is not authorized!")
         logger.debug("Calling a function IPC Server")
@@ -199,33 +216,28 @@ class Connection:
                 "__uuid__": object_identifier,
                 "__func__": func_name,
                 "__args__": list(args),
-                "__kwargs__": dict(kwargs)
-            }
+                "__kwargs__": dict(kwargs),
+            },
         )
         await self.send_message(payload)
         recv = await self.__get_response(_uuid, asyncio.get_event_loop(), timeout=30)
         return recv
 
     def __get_response(
-            self,
-            _uuid: str,
-            loop: asyncio.AbstractEventLoop,
-            timeout: int = 60
+        self, _uuid: str, loop: asyncio.AbstractEventLoop, timeout: int = 60
     ):
         future = loop.create_future()
         self.listeners[_uuid] = future
         return asyncio.wait_for(future, timeout)
 
     async def request(
-            self,
-            route: str,
-            source: str,
-            timeout: int = 60,
-            **kwargs
+        self, route: str, source: str, timeout: int = 60, **kwargs
     ) -> Any:
         if self.websocket is not None and self.websocket.open:
             if self._on_hold:
-                raise ClientNotReadyError("The client is currently not ready to send or accept requests.")
+                raise ClientNotReadyError(
+                    "The client is currently not ready to send or accept requests."
+                )
             if not self._authorized:
                 raise UnauthorizedError("Client is not authorized!")
 
@@ -241,7 +253,7 @@ class Connection:
                 destination=source,
                 route=route,
                 data=kwargs,
-                uuid=_uuid
+                uuid=_uuid,
             )
 
             # Register the listener before sending the message
@@ -262,37 +274,41 @@ class Connection:
 
         else:
             await self.start()
-            raise ClientNotReadyError("The client has not been started or has disconnected")
+            raise ClientNotReadyError(
+                "The client has not been started or has disconnected"
+            )
 
     async def get_clients(self, timeout: int = 60):
         if self.websocket is not None and self.websocket.open:
             if self._on_hold:
-                raise ClientNotReadyError("The client is currently not ready to send or accept requests.")
+                raise ClientNotReadyError(
+                    "The client is currently not ready to send or accept requests."
+                )
             if not self._authorized:
                 raise UnauthorizedError("Client is not authorized!")
 
             logger.info("Requesting IPC Server for {}", "get_clients")
             _uuid = str(uuid.uuid4())
             payload = MessagePayload(
-                type=Payloads.client_list,
-                id=self.local_name,
-                uuid=_uuid
+                type=Payloads.client_list, id=self.local_name, uuid=_uuid
             )
             await self.send_message(payload)
-            recv = await self.__get_response(_uuid, asyncio.get_event_loop(), timeout=timeout)
+            recv = await self.__get_response(
+                _uuid, asyncio.get_event_loop(), timeout=timeout
+            )
             return recv
         else:
             await self.start()
-            raise ClientNotReadyError("The client has not been started or has disconnected")
+            raise ClientNotReadyError(
+                "The client has not been started or has disconnected"
+            )
 
-    async def inform(
-            self,
-            data: Any,
-            destinations: list
-    ):
+    async def inform(self, data: Any, destinations: list):
         if self.websocket is not None and self.websocket.open:
             if self._on_hold:
-                raise ClientNotReadyError("The client is currently not ready to send or accept requests.")
+                raise ClientNotReadyError(
+                    "The client is currently not ready to send or accept requests."
+                )
             if not self._authorized:
                 raise UnauthorizedError("Client is not authorized!")
 
@@ -309,18 +325,20 @@ class Connection:
 
             await self.send_message(payload)
         else:
-            raise ClientNotReadyError("The client has not been started or has disconnected")
+            raise ClientNotReadyError(
+                "The client has not been started or has disconnected"
+            )
 
     async def wait_until_ready(self):
-        await self.wait_for('rival_ready', None)
+        await self.wait_for("rival_ready", None)
 
     async def wait_until_disconnected(self):
-        await self.wait_for('rival_disconnect', None)
+        await self.wait_for("rival_disconnect", None)
 
     def wait_for(
-            self,
-            event: str,
-            timeout: Union[int, None] = None,
+        self,
+        event: str,
+        timeout: Union[int, None] = None,
     ):
         future = asyncio.get_event_loop().create_future()
 
@@ -335,7 +353,7 @@ class Connection:
             try:
                 message = WsMessage(orjson.loads(await self.websocket.recv()))
             except websockets.exceptions.ConnectionClosedError:
-                self.__events.dispatch_event('rival_disconnect')
+                self.__events.dispatch_event("rival_disconnect")
                 if self.reconnect:
                     if not await self.__reconnect_client():
                         break
@@ -344,7 +362,7 @@ class Connection:
 
             if message.type.success and not self._authorized:
                 logger.info("Authorized Successfully")
-                self.__events.dispatch_event('rival_ready')
+                self.__events.dispatch_event("rival_ready")
                 self._authorized = True
                 self._on_hold = False
 
@@ -361,35 +379,40 @@ class Connection:
                         data="Route not found",
                         traceback="Route not found",
                         destination=message.id,
-                        uuid=message.uuid
+                        uuid=message.uuid,
                     )
                     self.__send_message(payload)
                     return
                 logger.info("Fulfilling request @ route: {}", message.route)
                 asyncio.create_task(self._fulfill_request(message))
-                self.__events.dispatch_event('rival_request')
+                self.__events.dispatch_event("rival_request")
 
             elif message.type.response:
                 logger.info("Received a response from server @ uuid: {}", message.uuid)
                 asyncio.create_task(self._dispatch(message))
-                self.__events.dispatch_event('rival_response')
+                self.__events.dispatch_event("rival_response")
 
             elif message.type.error:
                 if message.data == "Already authorized.":
                     self._on_hold = True
                     logger.warning(
-                        "Another client is already connected. Requests will be enabled when the other is disconnected.")
+                        "Another client is already connected. Requests will be enabled when the other is disconnected."
+                    )
                 else:
                     logger.debug("Failed to fulfill request: {}", message.data)
-                    self.__events.dispatch_event('rival_error', message.data)
+                    self.__events.dispatch_event("rival_error", message.data)
 
                 if message.uuid is not None:
                     asyncio.create_task(self._dispatch(message))
 
             elif message.type.information:
                 if message.data:
-                    logger.debug("Received an information bit from client: {}", message.id)
-                    self.__events.dispatch_event('rival_information', message.data, message.id)
+                    logger.debug(
+                        "Received an information bit from client: {}", message.id
+                    )
+                    self.__events.dispatch_event(
+                        "rival_information", message.data, message.id
+                    )
 
             elif message.type.function_call:
                 logger.debug("Received an object function call.")
@@ -398,16 +421,18 @@ class Connection:
                     type=Payloads.response,
                     id=self.local_name,
                     destination=message.id,
-                    uuid=message.uuid
+                    uuid=message.uuid,
                 )
                 try:
-                    called_function = self.__sub_routes[message.data["__uuid__"]][message.data["__func__"]]
+                    called_function = self.__sub_routes[message.data["__uuid__"]][
+                        message.data["__func__"]
+                    ]
                     asyncio.create_task(
                         self._fulfil_callback(
                             payload,
                             called_function,
                             *message.data["__args__"],
-                            **message.data["__kwargs__"]
+                            **message.data["__kwargs__"],
                         )
                     )
                 except KeyError:
@@ -417,7 +442,7 @@ class Connection:
                         data="The called function has either expired or has never been registered",
                         traceback="The called function has either expired or has never been registered",
                         destination=message.id,
-                        uuid=message.uuid
+                        uuid=message.uuid,
                     )
                     self.__send_message(payload)
 
@@ -430,7 +455,9 @@ class Connection:
     async def _fulfil_callback(self, payload, function, *args, **kwargs):
         try:
             payload.data = await function(*args, **kwargs)
-            if not isinstance(payload.data, (int, float, str, bool, type(None), list, tuple, dict)):
+            if not isinstance(
+                payload.data, (int, float, str, bool, type(None), list, tuple, dict)
+            ):
                 payload.data = rivalObject(payload.data)
 
             if isinstance(payload.data, rivalObject):
@@ -439,13 +466,11 @@ class Connection:
             self.__send_message(payload)
         except Exception as error:
             logger.exception("Failed to run the registered method")
-            self.__events.dispatch_event('rival_error', error)
+            self.__events.dispatch_event("rival_error", error)
             payload.type = Payloads.error
             payload.data = str(error)
-            payload.traceback = ''.join(
-                traceback.format_exception(
-                    TypeError, error, error.__traceback__
-                )
+            payload.traceback = "".join(
+                traceback.format_exception(TypeError, error, error.__traceback__)
             )
 
     async def _fulfill_request(self, message: WsMessage):
@@ -464,11 +489,11 @@ class Connection:
                 self.__parse_object(payload)
         except Exception as error:
             logger.exception(error)
-            self.__events.dispatch_event('rival_error', error)
+            self.__events.dispatch_event("rival_error", error)
             etype = type(error)
             trace = error.__traceback__
             lines = traceback.format_exception(etype, error, trace)
-            traceback_text = ''.join(lines)
+            traceback_text = "".join(lines)
 
             payload.type = Payloads.error
             payload.data = str(error)
@@ -478,15 +503,11 @@ class Connection:
                 await self.send_message(payload)
             except TypeError as error:
                 logger.exception("Failed to convert data to json")
-                self.__events.dispatch_event('rival_error', error)
+                self.__events.dispatch_event("rival_error", error)
                 payload.type = Payloads.error
                 payload.data = str(error)
-                payload.traceback = ''.join(
-                    traceback.format_exception(
-                        TypeError,
-                        error,
-                        error.__traceback__
-                    )
+                payload.traceback = "".join(
+                    traceback.format_exception(TypeError, error, error.__traceback__)
                 )
                 self.__send_message(payload)
 
@@ -494,8 +515,8 @@ class Connection:
         data = msg.data
         _uuid = msg.uuid
         if _uuid is None:
-            raise MissingUUIDError('UUID is missing.')
-        
+            raise MissingUUIDError("UUID is missing.")
+
         try:
             future: asyncio.Future = self.listeners[_uuid]
             if not msg.type.error:
@@ -504,11 +525,11 @@ class Connection:
                 else:
                     future.set_result(data)
             else:
-                future.set_exception(
-                    ClientRuntimeError(msg.data)
-                )
+                future.set_exception(ClientRuntimeError(msg.data))
         except KeyError:
             # Log the issue but don't raise an error
-            logger.warning(f"Received response for UUID {_uuid} but no listener found. Message type: {msg.type}")
+            logger.warning(
+                f"Received response for UUID {_uuid} but no listener found. Message type: {msg.type}"
+            )
             logger.debug(f"Current listeners: {list(self.listeners.keys())}")
             return

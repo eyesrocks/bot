@@ -1,240 +1,24 @@
 {
   "type": "Scheduler",
-  "id": "Scheduler-a8c701a5-ef71-4b42-bc29-a9a555bb8ea3",
-  "address": "tcp://127.0.0.1:33115",
+  "id": "Scheduler-483a0406-7b32-4b95-b944-3ef738d78f18",
+  "address": "tcp://127.0.0.1:44879",
   "services": {
     "dashboard": 8787
   },
-  "started": 1740680195.1560075,
+  "started": 1740959648.2821023,
   "workers": {
-    "tcp://127.0.0.1:34789": {
-      "type": "Worker",
-      "id": 1,
-      "host": "127.0.0.1",
-      "resources": {},
-      "local_directory": "/tmp/dask-scratch-space/worker-kgx6hna1",
-      "name": 1,
-      "nthreads": 1,
-      "memory_limit": 27004807577,
-      "last_seen": 1740680200.5290444,
-      "services": {
-        "dashboard": 41945
-      },
-      "metrics": {
-        "task_counts": {},
-        "bandwidth": {
-          "total": 100000000,
-          "workers": {},
-          "types": {}
-        },
-        "digests_total_since_heartbeat": {
-          "latency": 0.9137978553771973,
-          "tick-duration": 0.9793834686279297
-        },
-        "managed_bytes": 0,
-        "spilled_bytes": {
-          "memory": 0,
-          "disk": 0
-        },
-        "transfer": {
-          "incoming_bytes": 0,
-          "incoming_count": 0,
-          "incoming_count_total": 0,
-          "outgoing_bytes": 0,
-          "outgoing_count": 0,
-          "outgoing_count_total": 0
-        },
-        "event_loop_interval": 0.02,
-        "cpu": 19.5,
-        "memory": 169361408,
-        "time": 1740680199.496848,
-        "host_net_io": {
-          "read_bps": 4803502.048992009,
-          "write_bps": 1258669.8839795701
-        },
-        "host_disk_io": {
-          "read_bps": 0.0,
-          "write_bps": 0.0
-        },
-        "num_fds": 27
-      },
-      "status": "running",
-      "nanny": "tcp://127.0.0.1:34401"
-    },
-    "tcp://127.0.0.1:38637": {
-      "type": "Worker",
-      "id": 4,
-      "host": "127.0.0.1",
-      "resources": {},
-      "local_directory": "/tmp/dask-scratch-space/worker-2x8e3npk",
-      "name": 4,
-      "nthreads": 1,
-      "memory_limit": 27004807577,
-      "last_seen": 1740680200.5286033,
-      "services": {
-        "dashboard": 33485
-      },
-      "metrics": {
-        "task_counts": {},
-        "bandwidth": {
-          "total": 100000000,
-          "workers": {},
-          "types": {}
-        },
-        "digests_total_since_heartbeat": {
-          "latency": 0.9196624755859375,
-          "tick-duration": 0.9796977043151855
-        },
-        "managed_bytes": 0,
-        "spilled_bytes": {
-          "memory": 0,
-          "disk": 0
-        },
-        "transfer": {
-          "incoming_bytes": 0,
-          "incoming_count": 0,
-          "incoming_count_total": 0,
-          "outgoing_bytes": 0,
-          "outgoing_count": 0,
-          "outgoing_count_total": 0
-        },
-        "event_loop_interval": 0.02,
-        "cpu": 18.8,
-        "memory": 169414656,
-        "time": 1740680199.4952328,
-        "host_net_io": {
-          "read_bps": 4624315.777813273,
-          "write_bps": 1091730.2004465898
-        },
-        "host_disk_io": {
-          "read_bps": 0.0,
-          "write_bps": 0.0
-        },
-        "num_fds": 27
-      },
-      "status": "running",
-      "nanny": "tcp://127.0.0.1:42621"
-    },
-    "tcp://127.0.0.1:42677": {
-      "type": "Worker",
-      "id": 2,
-      "host": "127.0.0.1",
-      "resources": {},
-      "local_directory": "/tmp/dask-scratch-space/worker-za63qa7k",
-      "name": 2,
-      "nthreads": 1,
-      "memory_limit": 27004807577,
-      "last_seen": 1740680200.8033319,
-      "services": {
-        "dashboard": 41713
-      },
-      "metrics": {
-        "task_counts": {},
-        "bandwidth": {
-          "total": 100000000,
-          "workers": {},
-          "types": {}
-        },
-        "digests_total_since_heartbeat": {
-          "tick-duration": 0.49950432777404785,
-          "latency": 0.15168547630310059
-        },
-        "managed_bytes": 0,
-        "spilled_bytes": {
-          "memory": 0,
-          "disk": 0
-        },
-        "transfer": {
-          "incoming_bytes": 0,
-          "incoming_count": 0,
-          "incoming_count_total": 0,
-          "outgoing_bytes": 0,
-          "outgoing_count": 0,
-          "outgoing_count_total": 0
-        },
-        "event_loop_interval": 0.019991774559020997,
-        "cpu": 2.0,
-        "memory": 169357312,
-        "time": 1740680200.6185775,
-        "host_net_io": {
-          "read_bps": 13271448.002170872,
-          "write_bps": 1619594.2374693223
-        },
-        "host_disk_io": {
-          "read_bps": 0.0,
-          "write_bps": 229543.84106237808
-        },
-        "num_fds": 28
-      },
-      "status": "running",
-      "nanny": "tcp://127.0.0.1:46339"
-    },
-    "tcp://127.0.0.1:45095": {
-      "type": "Worker",
-      "id": 3,
-      "host": "127.0.0.1",
-      "resources": {},
-      "local_directory": "/tmp/dask-scratch-space/worker-utrt7_13",
-      "name": 3,
-      "nthreads": 1,
-      "memory_limit": 27004807577,
-      "last_seen": 1740680200.5293994,
-      "services": {
-        "dashboard": 45175
-      },
-      "metrics": {
-        "task_counts": {},
-        "bandwidth": {
-          "total": 100000000,
-          "workers": {},
-          "types": {}
-        },
-        "digests_total_since_heartbeat": {
-          "latency": 0.6687374114990234,
-          "tick-duration": 0.9801347255706787
-        },
-        "managed_bytes": 0,
-        "spilled_bytes": {
-          "memory": 0,
-          "disk": 0
-        },
-        "transfer": {
-          "incoming_bytes": 0,
-          "incoming_count": 0,
-          "incoming_count_total": 0,
-          "outgoing_bytes": 0,
-          "outgoing_count": 0,
-          "outgoing_count_total": 0
-        },
-        "event_loop_interval": 0.02,
-        "cpu": 26.8,
-        "memory": 169496576,
-        "time": 1740680199.4983509,
-        "host_net_io": {
-          "read_bps": 5902683.011933517,
-          "write_bps": 1644493.7886635016
-        },
-        "host_disk_io": {
-          "read_bps": 0.0,
-          "write_bps": 0.0
-        },
-        "num_fds": 27
-      },
-      "status": "running",
-      "nanny": "tcp://127.0.0.1:39309"
-    },
-    "tcp://127.0.0.1:46875": {
+    "tcp://127.0.0.1:33299": {
       "type": "Worker",
       "id": 0,
       "host": "127.0.0.1",
       "resources": {},
-      "local_directory": "/tmp/dask-scratch-space/worker-arkk3221",
+      "local_directory": "/tmp/dask-scratch-space/worker-c4jsiis9",
       "name": 0,
       "nthreads": 1,
       "memory_limit": 27004807577,
-      "last_seen": 1740680200.8063362,
+      "last_seen": 1740959653.3139813,
       "services": {
-        "dashboard": 46879
+        "dashboard": 39709
       },
       "metrics": {
         "task_counts": {},
@@ -244,8 +28,8 @@
           "types": {}
         },
         "digests_total_since_heartbeat": {
-          "tick-duration": 0.5008316040039062,
-          "latency": 0.14743900299072266
+          "tick-duration": 0.4994511604309082,
+          "latency": 0.42751121520996094
         },
         "managed_bytes": 0,
         "spilled_bytes": {
@@ -260,22 +44,238 @@
           "outgoing_count": 0,
           "outgoing_count_total": 0
         },
-        "event_loop_interval": 0.019971261024475096,
-        "cpu": 4.0,
-        "memory": 169459712,
-        "time": 1740680200.6244311,
+        "event_loop_interval": 0.03454596655709403,
+        "cpu": 2.0,
+        "memory": 169295872,
+        "time": 1740959653.3050056,
         "host_net_io": {
-          "read_bps": 13223180.856512146,
-          "write_bps": 1600710.5389049116
+          "read_bps": 8352679.937479048,
+          "write_bps": 751528.8815620453
         },
         "host_disk_io": {
           "read_bps": 0.0,
-          "write_bps": 245319.62282067613
+          "write_bps": 688948.3639317258
         },
         "num_fds": 28
       },
       "status": "running",
-      "nanny": "tcp://127.0.0.1:41245"
+      "nanny": "tcp://127.0.0.1:40601"
+    },
+    "tcp://127.0.0.1:37425": {
+      "type": "Worker",
+      "id": 2,
+      "host": "127.0.0.1",
+      "resources": {},
+      "local_directory": "/tmp/dask-scratch-space/worker-g1q0tf1u",
+      "name": 2,
+      "nthreads": 1,
+      "memory_limit": 27004807577,
+      "last_seen": 1740959653.5383809,
+      "services": {
+        "dashboard": 34603
+      },
+      "metrics": {
+        "task_counts": {},
+        "bandwidth": {
+          "total": 100000000,
+          "workers": {},
+          "types": {}
+        },
+        "digests_total_since_heartbeat": {
+          "tick-duration": 0.4996328353881836,
+          "latency": 0.4042351245880127
+        },
+        "managed_bytes": 0,
+        "spilled_bytes": {
+          "memory": 0,
+          "disk": 0
+        },
+        "transfer": {
+          "incoming_bytes": 0,
+          "incoming_count": 0,
+          "incoming_count_total": 0,
+          "outgoing_bytes": 0,
+          "outgoing_count": 0,
+          "outgoing_count_total": 0
+        },
+        "event_loop_interval": 0.03588967907185457,
+        "cpu": 4.0,
+        "memory": 169365504,
+        "time": 1740959652.9093885,
+        "host_net_io": {
+          "read_bps": 304395.31228804117,
+          "write_bps": 304149.5485992091
+        },
+        "host_disk_io": {
+          "read_bps": 0.0,
+          "write_bps": 196419.13550362072
+        },
+        "num_fds": 27
+      },
+      "status": "running",
+      "nanny": "tcp://127.0.0.1:40053"
+    },
+    "tcp://127.0.0.1:38607": {
+      "type": "Worker",
+      "id": 3,
+      "host": "127.0.0.1",
+      "resources": {},
+      "local_directory": "/tmp/dask-scratch-space/worker-9vwx5xcg",
+      "name": 3,
+      "nthreads": 1,
+      "memory_limit": 27004807577,
+      "last_seen": 1740959653.3144884,
+      "services": {
+        "dashboard": 42983
+      },
+      "metrics": {
+        "task_counts": {},
+        "bandwidth": {
+          "total": 100000000,
+          "workers": {},
+          "types": {}
+        },
+        "digests_total_since_heartbeat": {
+          "tick-duration": 0.5000190734863281,
+          "latency": 0.42428064346313477
+        },
+        "managed_bytes": 0,
+        "spilled_bytes": {
+          "memory": 0,
+          "disk": 0
+        },
+        "transfer": {
+          "incoming_bytes": 0,
+          "incoming_count": 0,
+          "incoming_count_total": 0,
+          "outgoing_bytes": 0,
+          "outgoing_count": 0,
+          "outgoing_count_total": 0
+        },
+        "event_loop_interval": 0.03358158773305465,
+        "cpu": 4.0,
+        "memory": 169570304,
+        "time": 1740959653.3083982,
+        "host_net_io": {
+          "read_bps": 8361803.887315866,
+          "write_bps": 756238.8588157118
+        },
+        "host_disk_io": {
+          "read_bps": 0.0,
+          "write_bps": 689348.4348114163
+        },
+        "num_fds": 28
+      },
+      "status": "running",
+      "nanny": "tcp://127.0.0.1:36027"
+    },
+    "tcp://127.0.0.1:39459": {
+      "type": "Worker",
+      "id": 4,
+      "host": "127.0.0.1",
+      "resources": {},
+      "local_directory": "/tmp/dask-scratch-space/worker-ul3z0zbm",
+      "name": 4,
+      "nthreads": 1,
+      "memory_limit": 27004807577,
+      "last_seen": 1740959653.3142374,
+      "services": {
+        "dashboard": 38771
+      },
+      "metrics": {
+        "task_counts": {},
+        "bandwidth": {
+          "total": 100000000,
+          "workers": {},
+          "types": {}
+        },
+        "digests_total_since_heartbeat": {
+          "tick-duration": 0.49843740463256836,
+          "latency": 0.4247002601623535
+        },
+        "managed_bytes": 0,
+        "spilled_bytes": {
+          "memory": 0,
+          "disk": 0
+        },
+        "transfer": {
+          "incoming_bytes": 0,
+          "incoming_count": 0,
+          "incoming_count_total": 0,
+          "outgoing_bytes": 0,
+          "outgoing_count": 0,
+          "outgoing_count_total": 0
+        },
+        "event_loop_interval": 0.03376364707946777,
+        "cpu": 2.0,
+        "memory": 169508864,
+        "time": 1740959652.80864,
+        "host_net_io": {
+          "read_bps": 235360.10331557938,
+          "write_bps": 235114.52266468725
+        },
+        "host_disk_io": {
+          "read_bps": 0.0,
+          "write_bps": 130848.56534038404
+        },
+        "num_fds": 27
+      },
+      "status": "running",
+      "nanny": "tcp://127.0.0.1:34731"
+    },
+    "tcp://127.0.0.1:42433": {
+      "type": "Worker",
+      "id": 1,
+      "host": "127.0.0.1",
+      "resources": {},
+      "local_directory": "/tmp/dask-scratch-space/worker-wynlqr7s",
+      "name": 1,
+      "nthreads": 1,
+      "memory_limit": 27004807577,
+      "last_seen": 1740959653.3137043,
+      "services": {
+        "dashboard": 34707
+      },
+      "metrics": {
+        "task_counts": {},
+        "bandwidth": {
+          "total": 100000000,
+          "workers": {},
+          "types": {}
+        },
+        "digests_total_since_heartbeat": {
+          "tick-duration": 0.49980950355529785,
+          "latency": 0.42931199073791504
+        },
+        "managed_bytes": 0,
+        "spilled_bytes": {
+          "memory": 0,
+          "disk": 0
+        },
+        "transfer": {
+          "incoming_bytes": 0,
+          "incoming_count": 0,
+          "incoming_count_total": 0,
+          "outgoing_bytes": 0,
+          "outgoing_count": 0,
+          "outgoing_count_total": 0
+        },
+        "event_loop_interval": 0.03712613242013114,
+        "cpu": 4.0,
+        "memory": 169467904,
+        "time": 1740959653.3032742,
+        "host_net_io": {
+          "read_bps": 8343828.845408401,
+          "write_bps": 751045.5851745735
+        },
+        "host_disk_io": {
+          "read_bps": 0.0,
+          "write_bps": 688189.9289127097
+        },
+        "num_fds": 28
+      },
+      "status": "running",
+      "nanny": "tcp://127.0.0.1:44631"
     }
   }
 }

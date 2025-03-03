@@ -9,8 +9,10 @@ import os
 
 GLOBAL_DASK = {}
 
+
 def get_dask() -> distributed.Client:
     return GLOBAL_DASK.get("client")
+
 
 async def start_dask(bot, address: str) -> distributed.Client:
     if "client" in GLOBAL_DASK:
@@ -52,6 +54,7 @@ async def start_dask(bot, address: str) -> distributed.Client:
         GLOBAL_DASK["client"] = client
     logger.info("Dask client started successfully")
     return client
+
 
 def submit_coroutine(func: Callable, *args, **kwargs):
     worker_loop: asyncio.AbstractEventLoop = distributed.get_worker().loop.asyncio_loop

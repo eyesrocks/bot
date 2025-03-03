@@ -3,10 +3,11 @@ from uuid import uuid4
 
 
 class Payloads:
-    '''
+    """
     Specifies all the payloads available in the system.
     This is a low level class for :class:`~rival.lib.payload.PayloadTypes`.
-    '''
+    """
+
     success = 0
     verification = 1
     request = 2
@@ -17,8 +18,9 @@ class Payloads:
     function_call = 7
     client_list = 8
 
+
 class PayloadTypes:
-    '''
+    """
     Specifies the type of message. Available Types:
         | ``success``: Successful authorization.
         | ``verification``: Verification request.
@@ -26,103 +28,103 @@ class PayloadTypes:
         | ``response``: Response to a request.
         | ``error``: Error response.
         | ``ping``: Ping message.
-    '''
+    """
+
     def __init__(self, type: int) -> None:
         self._type = type
-    
+
     def __repr__(self) -> str:
-        return '<PayloadTypes: {}>'.format(self._type)
-    
+        return "<PayloadTypes: {}>".format(self._type)
+
     @property
     def success(self) -> bool:
-        '''
+        """
         :class:`bool`: Returns ``True`` if the message is a success message.
-        '''
+        """
         return self._type == Payloads.success
 
     @property
     def verification(self) -> bool:
-        '''
+        """
         :class:`bool`: Returns ``True`` if the message is a verification message.
-        '''
+        """
         return self._type == Payloads.verification
-    
+
     @property
     def request(self) -> bool:
-        '''
+        """
         :class:`bool`: Returns ``True`` if the message is a request message.
-        '''
+        """
         return self._type == Payloads.request
-    
+
     @property
     def response(self) -> bool:
-        '''
+        """
         :class:`bool`: Returns ``True`` if the message is a response message.
-        '''
+        """
         return self._type == Payloads.response
-    
+
     @property
     def error(self) -> bool:
-        '''
+        """
         :class:`bool`: Returns ``True`` if the message is an error message.
-        '''
+        """
         return self._type == Payloads.error
 
     @property
     def ping(self) -> bool:
-        '''
+        """
         :class:`bool`: Returns ``True`` if the message is a ping message.
-        '''
+        """
         return self._type == Payloads.ping
 
     @property
     def information(self) -> bool:
-        '''
+        """
         :class:`bool`: Returns ``True`` if the message is an information message.
-        '''
+        """
         return self._type == Payloads.information
 
     @property
     def function_call(self) -> bool:
-        '''
+        """
         :class:`bool`: Returns ``True`` if the message is an information message.
-        '''
+        """
         return self._type == Payloads.function_call
-    
+
     @property
     def client_list(self) -> bool:
         return self._type == Payloads.client_list
 
 
-
 class MessagePayload:
-    '''
+    """
     Represent IPC payload class.
-    '''
+    """
+
     def __init__(self, **kwargs):
-        self.id = kwargs.pop('id', None)
-        self.type = kwargs.pop('type', None)
-        self.route = kwargs.pop('route', None)
-        self.traceback = kwargs.pop('traceback', None)
-        self.data = kwargs.pop('data', {})
-        self.uuid = kwargs.pop('uuid', None)
-        self.destination = kwargs.pop('destination', None)
-        self.pseudo_object = kwargs.pop('pseudo_object', None)
-    
+        self.id = kwargs.pop("id", None)
+        self.type = kwargs.pop("type", None)
+        self.route = kwargs.pop("route", None)
+        self.traceback = kwargs.pop("traceback", None)
+        self.data = kwargs.pop("data", {})
+        self.uuid = kwargs.pop("uuid", None)
+        self.destination = kwargs.pop("destination", None)
+        self.pseudo_object = kwargs.pop("pseudo_object", None)
 
     def from_message(self, msg):
-        '''
+        """
         Makes a payload from message. This is similar to cloning a message's ``dict`` to a new ``dict`` with same values.
 
         Parameters
         ----------
         msg: :class:`~rival.lib.message.WsMessage`
             The message to clone
-        
+
         Return Type
         -----------
         :class:`~rival.lib.payload.MessagePayload`
-        '''
+        """
         self.id = msg.id
         self.type = msg.type
         self.route = msg.route
@@ -134,22 +136,22 @@ class MessagePayload:
         return self
 
     def to_dict(self) -> dict:
-        '''
+        """
         Returns a ``dict`` representing the message.
 
         Return Type
         -----------
         :class:`dict`
-        '''
+        """
         return {
-            'id': self.id,
-            'type': self.type,
-            'route': self.route,
-            'data': self.data,
-            'traceback': self.traceback,
-            'uuid': self.uuid,
-            'destination': self.destination,
-            'pseudo_object': self.pseudo_object
+            "id": self.id,
+            "type": self.type,
+            "route": self.route,
+            "data": self.data,
+            "traceback": self.traceback,
+            "uuid": self.uuid,
+            "destination": self.destination,
+            "pseudo_object": self.pseudo_object,
         }
 
 
@@ -163,20 +165,24 @@ class responseObject:
             self.__setattr__(each_attribute, attribute_value)
 
         for each_function, is_it_coro in data["__func__"].items():
+
             async def __async_fakeFunc(*args, **kwargs):
-                return await self.__function_call(each_function, is_it_coro, *args, **kwargs)
+                return await self.__function_call(
+                    each_function, is_it_coro, *args, **kwargs
+                )
 
             self.__setattr__(each_function, __async_fakeFunc)
 
-    
-
     async def __function_call(self, function_name, is_it_coro, *args, **kwargs):
-        return await self.__ipc._call_function(self.__source, self.__uuid__, function_name, *args, **kwargs)
-
+        return await self.__ipc._call_function(
+            self.__source, self.__uuid__, function_name, *args, **kwargs
+        )
 
 
 class rivalObject:
-    def __init__(self, object, required_functions = [], object_expiry=30, process_iters = True):
+    def __init__(
+        self, object, required_functions=[], object_expiry=30, process_iters=True
+    ):
         """Creates a fake object which can be transferred to another client
         Whenever a fake object is sent to another client, the required functions are registered in the memory until the object expiry timeout.
 
@@ -202,7 +208,7 @@ class rivalObject:
         for attribute in self.object.__dir__():
             if attribute[0] == "_":
                 continue
-            
+
             try:
                 attribute_value = getattr(self.object, attribute)
             except:
@@ -212,16 +218,26 @@ class rivalObject:
             elif callable(attribute_value):
                 if attribute in self.required_functions:
                     self.functions[attribute] = attribute_value
-                    self.__serialized_functions[attribute] = asyncio.iscoroutinefunction(attribute_value)
+                    self.__serialized_functions[attribute] = (
+                        asyncio.iscoroutinefunction(attribute_value)
+                    )
             elif isinstance(attribute_value, (list, set, tuple)):
                 if self.process_iters:
-                    if not any(not self.__pythonic_object(__elem) for __elem in attribute_value):
-                        self.__serialized[attribute] = tuple(attribute_value) if isinstance(attribute_value, tuple) else attribute_value
+                    if not any(
+                        not self.__pythonic_object(__elem) for __elem in attribute_value
+                    ):
+                        self.__serialized[attribute] = (
+                            tuple(attribute_value)
+                            if isinstance(attribute_value, tuple)
+                            else attribute_value
+                        )
             elif isinstance(attribute_value, dict):
                 if self.process_iters:
                     if not any(
-                        not self.__pythonic_object(key) or not self.__pythonic_object(value)
-                        for key, value in attribute_value.items()):
+                        not self.__pythonic_object(key)
+                        or not self.__pythonic_object(value)
+                        for key, value in attribute_value.items()
+                    ):
                         self.__serialized[attribute] = attribute_value
 
             else:
@@ -230,7 +246,7 @@ class rivalObject:
                         self.__serialized[attribute] = str(attribute_value)
                 except:
                     ...
-                
+
         return self.__serialized, self.functions
 
     def serialize(self):
@@ -239,5 +255,5 @@ class rivalObject:
             "__name__": self.object.__class__.__name__,
             "__attr__": raw_object[0],
             "__func__": self.__serialized_functions,
-            "__uuid__": self.uuid
+            "__uuid__": self.uuid,
         }

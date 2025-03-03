@@ -34,7 +34,9 @@ class ConfessionModel(Modal, title="confess"):
 
             channel = interaction.guild.get_channel(check["channel_id"])
             if not channel:
-                return await interaction.response.send_message("The confession channel no longer exists.", ephemeral=True)
+                return await interaction.response.send_message(
+                    "The confession channel no longer exists.", ephemeral=True
+                )
             count = check["confession"] + 1
             embed = Embed(
                 color=interaction.client.color,
@@ -247,7 +249,6 @@ class Confessions(Cog):
             return await interaction.response.send_message(
                 "This command can only be used in a server.", ephemeral=True
             )
-            
 
         re = await self.bot.db.fetchrow(
             "SELECT * FROM confess_mute WHERE guild_id = $1 AND user_id = $2",

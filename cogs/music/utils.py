@@ -1,5 +1,6 @@
 from typing import Union
 
+
 def pluralize(text: str, count: int) -> str:
     """
     Pluralize a string based on the count.
@@ -38,6 +39,7 @@ def format_duration(time_input: Union[int, float], is_milliseconds: bool = True)
     if hours > 0:
         return f"{hours}:{minutes:02}:{seconds:02}"
     return f"{minutes}:{seconds:02}"
+
 
 async def setup(bot):
     pass

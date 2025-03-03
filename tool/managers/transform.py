@@ -1,5 +1,14 @@
-from discord import Member, Guild, User, Client, TextChannel, VoiceChannel, CategoryChannel
+from discord import (
+    Member,
+    Guild,
+    User,
+    Client,
+    TextChannel,
+    VoiceChannel,
+    CategoryChannel,
+)
 from typing import Union, Optional, Dict, Any, List
+
 
 def asDict(obj, max_depth=5) -> dict:
     """
@@ -39,6 +48,7 @@ def asDict(obj, max_depth=5) -> dict:
         return properties
 
     return get_properties(obj, 0, set())
+
 
 class Transformers:
     def __init__(self, bot: Client):
@@ -93,7 +103,7 @@ class Transformers:
             data = asDict(member)
             data["guild"] = self.transform_guild(member.guild)
             return data
-    
+
     def transform_channel(
         self, channel: Union[TextChannel, VoiceChannel, CategoryChannel, dict]
     ) -> Optional[Union[Dict[Any, Any], TextChannel, VoiceChannel, CategoryChannel]]:

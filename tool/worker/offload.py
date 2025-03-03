@@ -65,9 +65,9 @@ def offloaded(f: Callable[P, T]) -> Callable[P, Awaitable[T]]:
         loop = asyncio.get_running_loop()
         cf_future = loop.create_future()
         from tool.greed import Greed
-        
+
         bot = a[0] if a and isinstance(a[0], Greed) else None
-        
+
         retries = 3
 
         for attempt in range(retries):
@@ -77,10 +77,12 @@ def offloaded(f: Callable[P, T]) -> Callable[P, Awaitable[T]]:
                     dask = await start_dask("greed", "127.0.0.1:8787")
                 except Exception as e:
                     if attempt == retries - 1:
-                        raise RuntimeError(f"Failed to restart Dask after {retries} attempts: {e}")
+                        raise RuntimeError(
+                            f"Failed to restart Dask after {retries} attempts: {e}"
+                        )
                     await asyncio.sleep(1)
                     continue
-            
+
             try:
                 meth = partial(f, *a, **ka)
                 cf_future.dask_future = dask.submit(meth, pure=False)

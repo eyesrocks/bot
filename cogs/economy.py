@@ -37,15 +37,18 @@ from discord import Embed, ui, Interaction
 from discord import ui, Embed, ButtonStyle
 from tool.greed import Greed
 import time
+
 log = logger
 MAX_GAMBLE = 250_000
 BOOSTER_ROLE_ID = 1301664266868363356
 GUILD_ID = 1301617147964821524
 
+
 class OverMaximum(CommandError):
     def __init__(self, message):
         self.message = message
         super().__init__(message)
+
 
 class GambleConverter(commands.Converter):
     async def convert(self, ctx: Context, argument: str) -> float:
@@ -55,10 +58,9 @@ class GambleConverter(commands.Converter):
                 raise ValueError("Amount must be positive")
             if amount > MAX_GAMBLE:
                 raise OverMaximum(f"Maximum gamble amount is {MAX_GAMBLE:,}")
-                
+
             balance = await ctx.bot.db.fetchval(
-                "SELECT balance FROM economy WHERE user_id = $1", 
-                ctx.author.id
+                "SELECT balance FROM economy WHERE user_id = $1", ctx.author.id
             )
             if amount > balance:
                 raise ValueError(f"You only have {balance:,} bucks")
@@ -66,27 +68,71 @@ class GambleConverter(commands.Converter):
         except ValueError as e:
             raise CommandError(str(e))
 
+
 def format_large_number(num: Union[int, float]) -> str:
     suffixes = [
-        "", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc", "Ud", "Dd", "Td", "Qad", "Qid", "Sxd", "Spd", "Ocd", "Nod", "Vg", "Uv", "Dv", "Tv", "Qav", "Qiv", "Sxv", "Spv", "Ocv", "Nov", "Tg", "Utg", "Dtg", "Ttg", "Qatg", "Qitg", "Sxtg", "Sptg", "Octg", "Notg", "Qng"
+        "",
+        "K",
+        "M",
+        "B",
+        "T",
+        "Qa",
+        "Qi",
+        "Sx",
+        "Sp",
+        "Oc",
+        "No",
+        "Dc",
+        "Ud",
+        "Dd",
+        "Td",
+        "Qad",
+        "Qid",
+        "Sxd",
+        "Spd",
+        "Ocd",
+        "Nod",
+        "Vg",
+        "Uv",
+        "Dv",
+        "Tv",
+        "Qav",
+        "Qiv",
+        "Sxv",
+        "Spv",
+        "Ocv",
+        "Nov",
+        "Tg",
+        "Utg",
+        "Dtg",
+        "Ttg",
+        "Qatg",
+        "Qitg",
+        "Sxtg",
+        "Sptg",
+        "Octg",
+        "Notg",
+        "Qng",
     ]
     num_str = str(num)
     if "." in num_str:
-        num_str = num_str[:num_str.index(".")]
+        num_str = num_str[: num_str.index(".")]
     num_len = len(num_str)
     if num_len <= 3:
         return num_str
     suffix_index = (num_len - 1) // 3
     if suffix_index >= len(suffixes):
         return f"{num} is too large to format."
-    scaled_num = int(num_str[:num_len - suffix_index * 3])
+    scaled_num = int(num_str[: num_len - suffix_index * 3])
     return f"{scaled_num}{suffixes[suffix_index]}"
+
 
 @dataclass
 class Achievement:
     name: str
     description: str
     price: Optional[int] = None
+
 
 @dataclass
 class Item:
@@ -96,10 +142,12 @@ class Item:
     duration: int
     emoji: str
 
+
 @dataclass
 class Chance:
     percentage: float
     total: float
+
 
 class BlackjackView(ui.View):
     def __init__(self, ctx, bot):
@@ -130,10 +178,12 @@ class BlackjackView(ui.View):
         except Exception:
             return 1
 
+
 def get_hour():
     est = timezone("US/Eastern")
     now = datetime.now(est)
     return now.hour + 1
+
 
 def get_win(multiplied: bool = False, by: int = 3):
     if multiplied:
@@ -143,6 +193,7 @@ def get_win(multiplied: bool = False, by: int = 3):
             return random.uniform(4.5, 7.5)
     else:
         return random.uniform(1.5, 2.5)
+
 
 def _format_int(n: Union[float, str, int]):
     if isinstance(n, float):
@@ -168,21 +219,26 @@ def _format_int(n: Union[float, str, int]):
         return d[::-1][1:]
     return d[::-1]
 
+
 def format_int(n: Union[float, str, int], disallow_negatives: Optional[bool] = False):
     n = _format_int(n)
     if disallow_negatives is True and n.startswith("-"):
         return 0
     return n
 
+
 def ensure_non_negative(value: float) -> float:
     return max(value, 0)
 
+
 def get_chances():
     from config import CHANCES
+
     data = {}
     for key, value in CHANCES.items():
         data[key] = Chance(percentage=value["percentage"], total=value["total"])
     return data
+
 
 def get_time_next_day():
     current_datetime = datetime.now()
@@ -191,85 +247,147 @@ def get_time_next_day():
     time_until_next_day = (next_day_start - current_datetime).total_seconds()
     return time_until_next_day
 
+
+def parse_shorthand_amount(amount_str: str) -> float:
+    """
+    Parse a string with shorthand notation like 100k, 5m, etc. into a float.
+    Supports k (thousand), m (million), b (billion), t (trillion).
+    """
+    amount_str = amount_str.replace(",", "").strip().lower()
+
+    # Define multipliers for suffixes
+    multipliers = {
+        "k": 1_000,
+        "m": 1_000_000,
+        "b": 1_000_000_000,
+        "t": 1_000_000_000_000,
+    }
+
+    # Check for shorthand notation
+    for suffix, multiplier in multipliers.items():
+        if amount_str.endswith(suffix):
+            try:
+                # Extract the number part and multiply by the appropriate factor
+                number_part = amount_str[: -len(suffix)]
+                return float(number_part) * multiplier
+            except ValueError:
+                # If conversion fails, return None to handle the error in the converter
+                return None
+
+    # If no suffix found, try to convert directly to float
+    try:
+        return float(amount_str)
+    except ValueError:
+        return None
+
+
 class BankAmount(commands.Converter):
     name = "BankAmount"
 
     async def convert(self, ctx: Context, argument: Union[int, float, str]):
         if isinstance(argument, str):
-            argument = argument.replace(",", "")
-        if isinstance(argument, int):
-            balance = await self.bot.db.fetchval(
-                "SELECT bank FROM economy WHERE user_id = $1", ctx.author.id
-            )
-            if argument > balance:
-                raise commands.CommandError(
-                    f"You only have **{format_int(balance)}** bucks in your bank"
-                )
-            if argument < 0:
-                raise commands.CommandError("you can't withdraw an amount below 0")
-            argument = float(argument)
-        elif isinstance(argument, float):
-            balance = await self.bot.db.fetchval(
-                "SELECT bank FROM economy WHERE user_id = $1", ctx.author.id
-            )
-            if argument > balance:
-                raise commands.CommandError(
-                    f"you only have **{format_int(balance)}** bucks in your bank"
-                )
-            if argument < 0.00:
-                raise commands.CommandError("you can't withdraw an amount below 0")
-        else:
-            if argument.lower() == "all":
-                argument = await ctx.bot.db.fetchval(
+            argument = argument.replace(",", "").strip().lower()
+
+            # Get bank balance
+            bank_balance = (
+                await ctx.bot.db.fetchval(
                     "SELECT bank FROM economy WHERE user_id = $1", ctx.author.id
                 )
-            try:
-                argument = float(argument)
-            except Exception:
-                await ctx.warning("Please provide an **Amount**")
-                raise OverMaximum("lol")  # MissingRequiredArgument(BankAmount)
+                or 0.0
+            )
+
+            # Handle special keywords
+            if argument == "all":
+                argument = bank_balance
+            elif argument == "half":
+                argument = bank_balance / 2
+            elif argument == "quarter":
+                argument = bank_balance / 4
+            else:
+                # Handle shorthand notation
+                parsed_amount = parse_shorthand_amount(argument)
+                if parsed_amount is not None:
+                    argument = parsed_amount
+                else:
+                    try:
+                        argument = float(argument)
+                    except Exception:
+                        await ctx.warning("Please provide a valid **Amount**")
+                        raise OverMaximum("lol")  # MissingRequiredArgument(BankAmount)
+
+        # Convert to float for consistency
+        argument = float(argument)
+
+        # Check balance
+        balance = (
+            await ctx.bot.db.fetchval(
+                "SELECT bank FROM economy WHERE user_id = $1", ctx.author.id
+            )
+            or 0.0
+        )
+
+        if argument > balance:
+            raise commands.CommandError(
+                f"You only have **{format_int(balance)}** bucks in your bank"
+            )
+        if argument < 0:
+            raise commands.CommandError("you can't withdraw an amount below 0")
+
         return argument
+
 
 class Amount(commands.Converter):
     name = "Amount"
 
     async def convert(self, ctx: Context, argument: Union[int, float, str]):
-        if "," in argument:
-            argument = argument.replace(",", "")
-            argument = float(argument)
-        if isinstance(argument, int):
-            balance = await ctx.bot.db.fetchval(
-                "SELECT balance FROM economy WHERE user_id = $1", ctx.author.id
-            )
-            if float(argument) > float(balance):
-                raise commands.CommandError(
-                    f"you only have **{format_int(balance)}** bucks"
-                )
-            if float(argument) < 0.00:
-                raise commands.CommandError("you can't use an amount below 0")
-            argument = float(argument)
-        elif isinstance(argument, float):
-            balance = await ctx.bot.db.fetchval(
-                "SELECT balance FROM economy WHERE user_id = $1", ctx.author.id
-            )
-            if argument > balance:
-                raise commands.CommandError(
-                    f"you only have **{format_int(balance)}** bucks"
-                )
-            if argument < 0.00:
-                raise commands.CommandError("you can't gamble an amount below 0")
-        else:
-            if argument.lower() == "all":
-                argument = await ctx.bot.db.fetchval(
+        if isinstance(argument, str):
+            argument = argument.replace(",", "").strip().lower()
+
+            # Get wallet balance
+            wallet_balance = (
+                await ctx.bot.db.fetchval(
                     "SELECT balance FROM economy WHERE user_id = $1", ctx.author.id
                 )
-            try:
-                argument = float(argument)
-            except Exception:
-                await ctx.warning("Please provide an **Amount**")
-                raise OverMaximum("lol")  # MissingRequiredArgument(Amount)
-        if float(argument) <= 0.00:
+                or 0.0
+            )
+
+            # Handle special keywords
+            if argument == "all":
+                argument = wallet_balance
+            elif argument == "half":
+                argument = wallet_balance / 2
+            elif argument == "quarter":
+                argument = wallet_balance / 4
+            else:
+                # Handle shorthand notation
+                parsed_amount = parse_shorthand_amount(argument)
+                if parsed_amount is not None:
+                    argument = parsed_amount
+                else:
+                    try:
+                        argument = float(argument)
+                    except Exception:
+                        await ctx.warning("Please provide a valid **Amount**")
+                        raise OverMaximum("lol")  # MissingRequiredArgument(Amount)
+
+        # Convert to float for consistency
+        argument = float(argument)
+
+        # Check balance
+        balance = (
+            await ctx.bot.db.fetchval(
+                "SELECT balance FROM economy WHERE user_id = $1", ctx.author.id
+            )
+            or 0.0
+        )
+
+        if argument > balance:
+            raise commands.CommandError(
+                f"You only have **{format_int(balance)}** bucks"
+            )
+        if argument <= 0:
             raise commands.CommandError("you can't use an amount below 0")
+
         return argument
 
 
@@ -277,21 +395,34 @@ class GambleAmount(commands.Converter):
     name = "GambleAmount"
 
     async def convert(self, ctx: Context, argument: Union[int, float, str]):
-        # Fetch user's current balance and convert to float
-        balance = float(await ctx.bot.db.fetchval(
-            "SELECT balance FROM economy WHERE user_id = $1", ctx.author.id
-        ) or 0.0)
+        balance = float(
+            await ctx.bot.db.fetchval(
+                "SELECT balance FROM economy WHERE user_id = $1", ctx.author.id
+            )
+            or 0.0
+        )
 
-        # Parse the input argument
         if isinstance(argument, str):
-            argument = argument.replace(",", "").lower()
+            argument = argument.replace(",", "").strip().lower()
+
             if argument == "all":
                 amount = balance
+            elif argument == "half":
+                amount = balance / 2
+            elif argument == "quarter":
+                amount = balance / 4
             else:
-                try:
-                    amount = float(argument)
-                except ValueError:
-                    raise CommandError("Invalid amount")
+                # Handle shorthand notation
+                parsed_amount = parse_shorthand_amount(argument)
+                if parsed_amount is not None:
+                    amount = parsed_amount
+                else:
+                    try:
+                        amount = float(argument)
+                    except ValueError:
+                        raise CommandError(
+                            f"Invalid amount: '{argument}' is not a valid number"
+                        )
         else:
             amount = float(argument)
 
@@ -312,6 +443,7 @@ class GambleAmount(commands.Converter):
             raise CommandError("Insufficient funds")
 
         return amount
+
 
 def account():
     async def predicate(ctx: Context):
@@ -338,9 +470,11 @@ def account():
 
     return check(predicate)
 
-matplotlib.use('agg')
+
+matplotlib.use("agg")
 
 EMOJIS["diamond"] = "💎"
+
 
 class Economy(commands.Cog):
     def __init__(self, bot: Greed):
@@ -357,7 +491,12 @@ class Economy(commands.Cog):
         self.donator_wins = {}
         self.reacted_users = []
         self.locks = defaultdict(asyncio.Lock)
-        self.default_emojis = ["<:4695whiteup:1328326087108726855>", "<:7373whitedown:1328326088480522332>", "<:2052whiteleft:1328326086211407995>", "<:9847whiteright:1328326090359570434>"]  # Fixed emojis for DDR
+        self.default_emojis = [
+            "<:4695whiteup:1328326087108726855>",
+            "<:7373whitedown:1328326088480522332>",
+            "<:2052whiteleft:1328326086211407995>",
+            "<:9847whiteright:1328326090359570434>",
+        ]  # Fixed emojis for DDR
         self.emoji_to_text = {  # Map emojis to their text representation
             "<:4695whiteup:1328326087108726855>": "up",
             "<:7373whitedown:1328326088480522332>": "down",
@@ -411,7 +550,7 @@ class Economy(commands.Cog):
             },
         }
         self.symbols = ["♠", "♥", "♦", "♣"]
-        
+
         self.achievements = {
             "Lets begin.": {
                 "description": f"open an account through {self.bot.user.name} for gambling",
@@ -513,14 +652,19 @@ class Economy(commands.Cog):
         self.chart = EconomyCharts(self.bot)
         self.clear_items.start()  # Start the clear_items task when the cog is loaded
 
-
     async def get_lab(self, user_id):
         """Fetch user's lab details."""
-        return await self.bot.db.fetchrow("SELECT * FROM labs WHERE user_id = $1", user_id)
+        return await self.bot.db.fetchrow(
+            "SELECT * FROM labs WHERE user_id = $1", user_id
+        )
 
     async def update_lab(self, user_id, **kwargs):
         """Update lab data."""
-        query = "UPDATE labs SET " + ", ".join(f"{k} = ${i+1}" for i, k in enumerate(kwargs.keys())) + " WHERE user_id = ${}".format(len(kwargs) + 1)
+        query = (
+            "UPDATE labs SET "
+            + ", ".join(f"{k} = ${i+1}" for i, k in enumerate(kwargs.keys()))
+            + " WHERE user_id = ${}".format(len(kwargs) + 1)
+        )
         await self.bot.db.execute(query, *kwargs.values(), user_id)
 
     @tasks.loop(minutes=1)  # Task runs every 60 minutes
@@ -534,7 +678,9 @@ class Economy(commands.Cog):
                 user_id = lab["user_id"]
                 ampoules = lab["ampoules"]
                 earnings_per_hour = ampoules * 3_276
-                earnings_per_minute = earnings_per_hour / 60  # Convert to earnings per minute
+                earnings_per_minute = (
+                    earnings_per_hour / 60
+                )  # Convert to earnings per minute
 
                 # Fetch the user's storage limit and current earnings
                 user_lab = await self.bot.db.fetchrow(
@@ -556,7 +702,7 @@ class Economy(commands.Cog):
                 await self.bot.db.execute(
                     "UPDATE labs SET earnings = $1 WHERE user_id = $2",
                     new_earnings,  # Set the updated earnings (with the cap applied)
-                    user_id
+                    user_id,
                 )
 
         except Exception as e:
@@ -573,16 +719,18 @@ class Economy(commands.Cog):
         if self.earnings_task.is_running():
             self.earnings_task.stop()
 
-    def generate_pie_chart(self, member_name: str, progress: float, avatar_b64: str) -> BytesIO:
+    def generate_pie_chart(
+        self, member_name: str, progress: float, avatar_b64: str
+    ) -> BytesIO:
         """
         Generates and updates the pie chart with progress.
         The chart starts off grey and gets filled with green as the user answers questions correctly.
         """
         # We want to represent progress as a portion of the pie
         data = [progress, 1 - progress]  # The progress and the remaining part
-        colors = ['#7BB662', '#7B7B7B']  # Grey for remaining, green for progress
+        colors = ["#7BB662", "#7B7B7B"]  # Grey for remaining, green for progress
         labels = [f"{int(progress * 100)}%", "Locked"]
-#7BB662
+        # 7BB662
         # Decode avatar from base64
         avatar_bytes = base64.b64decode(avatar_b64)
         avatar_image = Image.open(BytesIO(avatar_bytes)).convert("RGBA")
@@ -591,13 +739,17 @@ class Economy(commands.Cog):
         mask = Image.new("L", avatar_image.size, 0)
         draw = ImageDraw.Draw(mask)
         draw.ellipse((0, 0) + avatar_image.size, fill=255)
-        alpha = ImageMath.eval("a*b/255", a=avatar_image.split()[3], b=mask).convert("L")
+        alpha = ImageMath.eval("a*b/255", a=avatar_image.split()[3], b=mask).convert(
+            "L"
+        )
         avatar_image.putalpha(alpha)
 
         # Generate pie chart
         plt.figure(figsize=(6, 8))
-        wedges, _ = plt.pie(data, colors=colors, startangle=90, wedgeprops=dict(width=0.3))
-        plt.axis('equal')
+        wedges, _ = plt.pie(
+            data, colors=colors, startangle=90, wedgeprops=dict(width=0.3)
+        )
+        plt.axis("equal")
 
         # Overlay the avatar image onto the chart
         width, height = avatar_image.size
@@ -608,13 +760,19 @@ class Economy(commands.Cog):
         plt.imshow(avatar_image, extent=extent, zorder=-1)
 
         # Add a legend
-        plt.legend(wedges, labels, title=f"{member_name}'s Safe",
-                   loc="upper center", bbox_to_anchor=(0.5, 0.08),
-                   facecolor='#2C2F33', edgecolor='#23272A')
+        plt.legend(
+            wedges,
+            labels,
+            title=f"{member_name}'s Safe",
+            loc="upper center",
+            bbox_to_anchor=(0.5, 0.08),
+            facecolor="#2C2F33",
+            edgecolor="#23272A",
+        )
 
         # Save chart to memory (in a buffer)
         buffer = BytesIO()
-        plt.savefig(buffer, format='png', transparent=True)
+        plt.savefig(buffer, format="png", transparent=True)
         plt.close()
 
         buffer.seek(0)  # Reset the pointer to the start of the buffer
@@ -688,7 +846,6 @@ class Economy(commands.Cog):
         except ValueError:
             return "Invalid number"
 
-
     async def get_balance(
         self, member: DiscordMember, with_bank: bool = False
     ) -> Union[float, tuple[float, float]]:
@@ -706,6 +863,7 @@ class Economy(commands.Cog):
                 "SELECT balance FROM economy WHERE user_id = $1", member.id
             )
             return float(balance) if balance else 0.0
+
     def get_expiration(self, item: str) -> tuple:
         now = datetime.now()
         ex = now + timedelta(seconds=self.items[item].duration)
@@ -749,7 +907,6 @@ class Economy(commands.Cog):
             f"successfully used **{item}** it will expire {format_dt(ex, style='R')}"
         )
 
-
     def get_random_amount(self, difficulty: str):
         if difficulty == "easy":
             return random.randint(1000, 6000)
@@ -781,7 +938,6 @@ class Economy(commands.Cog):
         answer = a * b
         return question, answer
 
-
     async def buy_item(self, ctx: Context, item: str, amount: int = 1):
         if amount > 99:
             return await ctx.fail("you can only buy 99")
@@ -812,22 +968,21 @@ class Economy(commands.Cog):
         else:
             return False
 
-
-
     @tasks.loop(minutes=1)
     async def clear_items(self):
         """Remove expired items from the `used_items` table."""
         try:
             # Batch delete expired items
             await self.bot.db.execute(
-                """DELETE FROM used_items WHERE expiration <= $1""",
-                datetime.now()
+                """DELETE FROM used_items WHERE expiration <= $1""", datetime.now()
             )
         except Exception as e:
             # Log errors if any occur
             self.bot.logger.error(f"Error clearing expired items: {e}")
 
-    async def check_item(self, ctx: Context, member: Optional[discord.Member] = None) -> bool:
+    async def check_item(
+        self, ctx: Context, member: Optional[discord.Member] = None
+    ) -> bool:
         """Check if a member has a valid item."""
         cn = ctx.command.qualified_name
         item = None
@@ -860,8 +1015,7 @@ class Economy(commands.Cog):
         # Check expiration time
         if data["expiration"].timestamp() <= datetime.now().timestamp():
             await self.bot.db.execute(
-                """DELETE FROM used_items WHERE user_id = $1 AND item = $2""",
-                *kwargs
+                """DELETE FROM used_items WHERE user_id = $1 AND item = $2""", *kwargs
             )
             return False
 
@@ -949,7 +1103,6 @@ class Economy(commands.Cog):
         except asyncio.TimeoutError:
             return 1
 
-
     @commands.Cog.listener()
     async def on_message(self, message):
         # Ignore messages from bots
@@ -968,8 +1121,6 @@ class Economy(commands.Cog):
         # Normalize the combo
         normalized_combo = " ".join(self.emoji_to_text[e] for e in combo.split())
 
-
-
         # Check if the normalized user input matches the normalized combo
         if normalized_input == normalized_combo:
             # Remove the active combo since we have a winner
@@ -984,7 +1135,9 @@ class Economy(commands.Cog):
             amount = random.randint(1000, 5000)
 
             # Debugging: Show match success
-            logger.info(f"[DEBUG] Combo matched by {message.author} in channel {message.channel.id}")
+            logger.info(
+                f"[DEBUG] Combo matched by {message.author} in channel {message.channel.id}"
+            )
 
             # Update the winner's balance in the database
             await self.bot.db.execute(
@@ -998,8 +1151,6 @@ class Economy(commands.Cog):
                 f"**{message.author.mention}**, you typed the correct combo and won the DDR minigame, earning **`{amount}` bucks!**"
             )
 
-
-
     @commands.command(
         name="blackjack",
         aliases=["bj"],
@@ -1007,7 +1158,7 @@ class Economy(commands.Cog):
         example=",blackjack 100",
     )
     @account()
-    @commands.cooldown(1, 30, commands.BucketType.user)
+    @commands.cooldown(1, 10, commands.BucketType.user)
     async def blackjack(self, ctx: Context, *, amount: GambleAmount):
         async with self.locks[f"bj:{ctx.author.id}"]:
             balance = await self.get_balance(ctx.author)
@@ -1075,7 +1226,9 @@ class Economy(commands.Cog):
                         inline=False,
                     )
 
-                    if sum(get_amount(author_deck_n, i)) == sum(get_amount(bot_deck_n, bot_val)):
+                    if sum(get_amount(author_deck_n, i)) == sum(
+                        get_amount(bot_deck_n, bot_val)
+                    ):
                         em.description = "Nobody won."
                     elif (
                         sum(get_amount(author_deck_n, i)) > 21
@@ -1083,13 +1236,18 @@ class Economy(commands.Cog):
                     ):
                         em.description = "Nobody won."
                     elif (
-                        sum(get_amount(author_deck_n, i)) > sum(get_amount(bot_deck_n, bot_val))
+                        sum(get_amount(author_deck_n, i))
+                        > sum(get_amount(bot_deck_n, bot_val))
                         or sum(get_amount(bot_deck_n, bot_val)) > 21
                     ):
-                        em.description = f"you won **{self.format_int(int(win_amount))}** bucks"
+                        em.description = (
+                            f"you won **{self.format_int(int(win_amount))}** bucks"
+                        )
                         await self.update_balance(ctx.author, "Add", int(win_amount))
                     else:
-                        em.description = f"you lost **{self.format_int(float(amount))}** bucks"
+                        em.description = (
+                            f"you lost **{self.format_int(float(amount))}** bucks"
+                        )
                         await self.update_balance(ctx.author, "Take", amount)
 
                     em.set_thumbnail(url=thumbnail_url)
@@ -1111,7 +1269,9 @@ class Economy(commands.Cog):
                             await self.update_balance(ctx.author, "Take", amount)
                         else:
                             em.description = f"I went over 21 and you won **{self.format_int(int(win_amount))} bucks**"
-                            await self.update_balance(ctx.author, "Add", int(win_amount))
+                            await self.update_balance(
+                                ctx.author, "Add", int(win_amount)
+                            )
 
                         em.add_field(
                             name="Your hand ({})".format(
@@ -1139,7 +1299,9 @@ class Economy(commands.Cog):
                     inline=True,
                 )
                 em.add_field(
-                    name="Opponents hand ({})".format(sum(get_amount(bot_deck_n, bot_val))),
+                    name="Opponents hand ({})".format(
+                        sum(get_amount(bot_deck_n, bot_val))
+                    ),
                     value=f'{"".join([self.cards[x].replace("{sym}", random.choice(self.symbols)) for x in get_amount(bot_deck, bot_val)])}',
                     inline=False,
                 )
@@ -1168,13 +1330,13 @@ class Economy(commands.Cog):
                     inline=True,
                 )
                 em.add_field(
-                    name="Opponents hand ({})".format(sum(get_amount(bot_deck_n, bot_val))),
+                    name="Opponents hand ({})".format(
+                        sum(get_amount(bot_deck_n, bot_val))
+                    ),
                     value=f'{"".join([self.cards[x].replace("{sym}", random.choice(self.symbols)) for x in get_amount(bot_deck, bot_val)])}',
                     inline=False,
                 )
                 await msg.edit(embed=em, view=None)
-
-
 
     @commands.command(
         name="balance",
@@ -1182,7 +1344,7 @@ class Economy(commands.Cog):
         brief="Show your wallet, bank, lab earnings, and rank on the leaderboard",
         example=",balance",
     )
-    @commands.cooldown(2, 15, commands.BucketType.guild)
+    @commands.cooldown(2, 10, commands.BucketType.guild)
     async def balance(self, ctx: commands.Context, member: discord.Member = None):
         """Shows the user's balance, bank, lab earnings, and rank."""
         member = member or ctx.author
@@ -1197,7 +1359,6 @@ class Economy(commands.Cog):
 
         balance = user_data["balance"]
         bank = user_data["bank"]
-
 
         # Fetch user's lab earnings if they own a lab
         lab_data = await self.bot.db.fetchrow(
@@ -1217,15 +1378,25 @@ class Economy(commands.Cog):
         # Determine user's rank
         rank = next(
             (idx + 1 for idx, user in enumerate(users) if user["user_id"] == member.id),
-            "Unranked"
+            "Unranked",
         )
 
         # Create embed response
         embed = discord.Embed(color=self.bot.color)
-        embed.set_author(name=f"{member.name}'s Balance", icon_url=member.display_avatar.url)
-        embed.add_field(name="💰 Cash", value=f"{format_large_number(balance)} ", inline=True)
-        embed.add_field(name="🏦 Bank", value=f"{format_large_number(bank)} ", inline=True)
-        embed.add_field(name="<:ampoule:1337841915177205875> Lab Earnings", value=f"{format_large_number(lab_earnings)}", inline=False)
+        embed.set_author(
+            name=f"{member.name}'s Balance", icon_url=member.display_avatar.url
+        )
+        embed.add_field(
+            name="💰 Cash", value=f"{format_large_number(balance)} ", inline=True
+        )
+        embed.add_field(
+            name="🏦 Bank", value=f"{format_large_number(bank)} ", inline=True
+        )
+        embed.add_field(
+            name="<:ampoule:1337841915177205875> Lab Earnings",
+            value=f"{format_large_number(lab_earnings)}",
+            inline=False,
+        )
         embed.set_footer(text=f"🏆 Rank: {rank}")
 
         await ctx.send(embed=embed)
@@ -1276,13 +1447,14 @@ class Economy(commands.Cog):
         return await ctx.deposit(
             f"**{self.format_int(amount)}** bucks was **deposited into your bank**"
         )
+
     @commands.command(
         name="withdraw",
         brief="Withdraw bucks from your bank to your wallet",
         example=",withdraw 200",
     )
     @account()
-    @commands.cooldown(1, 30, commands.BucketType.user)
+    @commands.cooldown(1, 10, commands.BucketType.user)
     async def withdraw(self, ctx: Context, amount: BankAmount):
         if str(amount).startswith("-"):
             return await ctx.warning("You **Cannot use negatives**")
@@ -1299,6 +1471,7 @@ class Economy(commands.Cog):
         return await ctx.withdraw(
             f"**{self.format_int(amount)}** bucks was **withdrawn from your bank**"
         )
+
     @commands.command(name="daily", brief="Collect your daily bucks", example=",daily")
     @account()
     async def daily(self, ctx: Context):
@@ -1319,7 +1492,7 @@ class Economy(commands.Cog):
         example=",coinflip 100 heads",
     )
     @account()
-    @commands.cooldown(1, 30, commands.BucketType.user)
+    @commands.cooldown(1, 10, commands.BucketType.user)
     async def coinflip(self, ctx: Context, amount: GambleAmount, choice: str = None):
         try:
             if ctx.author.id not in self.locks:
@@ -1327,18 +1500,24 @@ class Economy(commands.Cog):
 
             async with self.locks[ctx.author.id]:
                 if not choice or choice.lower() not in ["heads", "tails"]:
-                    return await ctx.warning("Please provide either **heads** or **tails**.")
+                    return await ctx.warning(
+                        "Please provide either **heads** or **tails**."
+                    )
 
                 balance = await self.get_balance(ctx.author)
                 if float(amount) > float(balance):
-                    return await ctx.warning(f"You only have **{self.format_int(balance)}** bucks.")
+                    return await ctx.warning(
+                        f"You only have **{self.format_int(balance)}** bucks."
+                    )
 
                 # Initial embed before flipping
                 initial_embed = discord.Embed(
                     description="<a:coinspin:1337492774479724668> Flipping the coin...",
-                    color=self.bot.color
+                    color=self.bot.color,
                 )
-                initial_embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.avatar.url)
+                initial_embed.set_author(
+                    name=ctx.author.display_name, icon_url=ctx.author.avatar.url
+                )
 
                 msg = await ctx.send(embed=initial_embed)
 
@@ -1350,24 +1529,28 @@ class Economy(commands.Cog):
                 won = random.random() < 0.4  # 40% win chance
 
                 # Create result embed
-                result_embed = discord.Embed(color=0x2a8000 if won else 0xFF0000)
-                result_embed.set_author(name="Coinflip Result", icon_url=ctx.author.avatar.url)
+                result_embed = discord.Embed(color=0x2A8000 if won else 0xFF0000)
+                result_embed.set_author(
+                    name="Coinflip Result", icon_url=ctx.author.avatar.url
+                )
 
                 if won:
-                    win_amount = int(float(amount) * get_win(await self.check_item(ctx), 3))
+                    win_amount = int(
+                        float(amount) * get_win(await self.check_item(ctx), 3)
+                    )
                     await self.update_balance(ctx.author, "Add", win_amount)
                     result_embed.add_field(
-                        name="", 
-                        value=f"<:coin2:1337494740014202921> You flipped **{roll_coin}** and **WON** **{self.format_int(win_amount)}** 💵!", 
-                        inline=False
+                        name="",
+                        value=f"<:coin2:1337494740014202921> You flipped **{roll_coin}** and **WON** **{self.format_int(win_amount)}** 💵!",
+                        inline=False,
                     )
 
                 else:
                     await self.update_balance(ctx.author, "Take", amount)
                     result_embed.add_field(
-                        name="", 
-                        value=f"<:startoken2:1337494741041942599> You flipped **{roll_coin}** and **LOST** **{self.format_int(amount)}** 💵.", 
-                        inline=False
+                        name="",
+                        value=f"<:startoken2:1337494741041942599> You flipped **{roll_coin}** and **LOST** **{self.format_int(amount)}** 💵.",
+                        inline=False,
                     )
 
                 # Edit initial message to show result
@@ -1376,8 +1559,12 @@ class Economy(commands.Cog):
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            print(f"Error in coinflip command: {e}")  # Using print instead of self.bot.logger.error
-            await ctx.fail("An error occurred while processing your coinflip. Please try again.")
+            print(
+                f"Error in coinflip command: {e}"
+            )  # Using print instead of self.bot.logger.error
+            await ctx.fail(
+                "An error occurred while processing your coinflip. Please try again."
+            )
 
     @commands.command(
         name="transfer",
@@ -1388,17 +1575,21 @@ class Economy(commands.Cog):
     @account()  # assuming you have an account decorator
     async def transfer(self, ctx: Context, member: Member, amount: int):
         """Transfer bucks from one user to another."""
-        
+
         # Ensure the amount is positive
         if amount <= 0:
-            return await ctx.warning("You **cannot** transfer a negative or zero amount.")
-        
+            return await ctx.warning(
+                "You **cannot** transfer a negative or zero amount."
+            )
+
         # Get the sender's balance
         balance = await self.get_balance(ctx.author)
 
         # Check if the user has enough balance
         if amount > balance:
-            return await ctx.fail(f"You only have **{self.format_int(balance)}** bucks.")
+            return await ctx.fail(
+                f"You only have **{self.format_int(balance)}** bucks."
+            )
 
         # Ensure the recipient has an account
         if not await self.bot.db.fetchrow(
@@ -1412,20 +1603,19 @@ class Economy(commands.Cog):
         )
         await self.update_balance(ctx.author, "Take", amount)
         await self.update_balance(member, "Add", amount)
-        
 
     def format_int(self, amount: int) -> str:
         """Format the amount as a string with commas."""
         return "{:,}".format(amount)
 
-
-    def get_max_bet(self, a: Union[float, int], amount: Union[float, int]) -> Union[float, int]:
+    def get_max_bet(
+        self, a: Union[float, int], amount: Union[float, int]
+    ) -> Union[float, int]:
         """Get the max bet based on certain conditions."""
         b = int(amount / a)
         if b >= 2:
             return amount / 2
         return amount
-
 
     def get_suffix_names(self) -> dict:
         return {
@@ -1478,10 +1668,10 @@ class Economy(commands.Cog):
         brief="Roll against the bot. If you roll higher, you win!",
         example=",gamble 500",
     )
-    @commands.cooldown(1, 30, commands.BucketType.user)
+    @commands.cooldown(1, 10, commands.BucketType.user)
     async def gamble(self, ctx: commands.Context, amount: GambleAmount):
         """User rolls a number against the bot. If the user rolls higher, they win."""
-        
+
         if amount <= 0:
             return await ctx.fail("You must gamble a **positive** amount.")
 
@@ -1489,9 +1679,11 @@ class Economy(commands.Cog):
         balance = await self.bot.db.fetchval(
             "SELECT balance FROM economy WHERE user_id = $1", ctx.author.id
         )
-        
+
         if balance is None or balance < amount:
-            return await ctx.fail(f"You don't have enough bucks! Your balance is **{balance:,}**.")
+            return await ctx.fail(
+                f"You don't have enough bucks! Your balance is **{balance:,}**."
+            )
 
         # Check if the user is a donator
         is_donator = await self.bot.db.fetchrow(
@@ -1513,35 +1705,39 @@ class Economy(commands.Cog):
 
         # Determine win/loss: user wins if they roll higher than the bot
         if user_roll > bot_roll:
-            winnings = int(amount * 2 * multiplier)  # User wins with multiplier if they're a donator
+            winnings = int(
+                amount * 2 * multiplier
+            )  # User wins with multiplier if they're a donator
             await self.bot.db.execute(
                 "UPDATE economy SET balance = balance + $1 WHERE user_id = $2",
-                winnings, ctx.author.id
+                winnings,
+                ctx.author.id,
             )
             embed = discord.Embed(
                 description=(
                     f"You have rolled **{user_roll}** and I have rolled **{bot_roll}**\n"
                     f"💰 You won **{winnings:,} bucks!**"
                 ),
-                color=0x2a8000
+                color=0x2A8000,
             )
             if is_donator:
                 embed.add_field(
                     name="Thank you for being a Booster!",
                     value="You're getting a **1.5x multiplier** for boosting [/greedbot](https://discord.gg/greedbot).",
-                    inline=False
+                    inline=False,
                 )
         else:
             await self.bot.db.execute(
                 "UPDATE economy SET balance = balance - $1 WHERE user_id = $2",
-                amount, ctx.author.id
+                amount,
+                ctx.author.id,
             )
             embed = discord.Embed(
                 description=(
                     f"You have rolled **{user_roll}** and I have rolled **{bot_roll}**\n"
                     f"💰 You lost **{amount:,}** bucks!"
                 ),
-                color=0xFF0000
+                color=0xFF0000,
             )
 
         await ctx.send(embed=embed)
@@ -1551,7 +1747,7 @@ class Economy(commands.Cog):
         brief="Play the crash game! Bet on how high the rocket can go before it crashes.",
         usage=",crash 500",
     )
-    @commands.cooldown(1, 30, commands.BucketType.user)
+    @commands.cooldown(1, 10, commands.BucketType.user)
     async def crash(self, ctx: commands.Context, amount: GambleAmount):
         """Play the crash game with realistic probabilities and anti-cheat measures."""
         if amount <= 0:
@@ -1560,7 +1756,8 @@ class Economy(commands.Cog):
         balance = await self.bot.db.fetchval(
             "UPDATE economy SET balance = balance - $1 "
             "WHERE user_id = $2 AND balance >= $1 RETURNING balance + $1",
-            amount, ctx.author.id
+            amount,
+            ctx.author.id,
         )
 
         if not balance:
@@ -1572,13 +1769,13 @@ class Economy(commands.Cog):
         UPDATE_INTERVAL = 3
 
         def calculate_crash_chance(current_multiplier):
-            return min(0.95, BASE_CRASH_CHANCE + (current_multiplier ** 2.2) / 800)
+            return min(0.95, BASE_CRASH_CHANCE + (current_multiplier**2.2) / 800)
 
         game_state = {
             "active": True,
             "multiplier": 1.0,
             "message": None,
-            "last_update": ctx.message.created_at
+            "last_update": ctx.message.created_at,
         }
 
         class CrashView(discord.ui.View):
@@ -1589,20 +1786,26 @@ class Economy(commands.Cog):
                 self.game_state = game_state
 
             @discord.ui.button(label="Cash Out", style=discord.ButtonStyle.green)
-            async def cashout(self, interaction: discord.Interaction, button: discord.ui.Button):
+            async def cashout(
+                self, interaction: discord.Interaction, button: discord.ui.Button
+            ):
                 await self.handle_action(interaction, "cashout")
 
             @discord.ui.button(label="Exit", style=discord.ButtonStyle.red)
-            async def exit(self, interaction: discord.Interaction, button: discord.ui.Button):
+            async def exit(
+                self, interaction: discord.Interaction, button: discord.ui.Button
+            ):
                 await self.handle_action(interaction, "exit")
 
             async def handle_action(self, interaction, action_type):
                 if interaction.user != ctx.author:
-                    return await interaction.response.send_message("Hey u freak dont touch me..", ephemeral=True)
-                
+                    return await interaction.response.send_message(
+                        "Hey u freak dont touch me..", ephemeral=True
+                    )
+
                 for item in self.children:
                     item.disabled = True
-                
+
                 await interaction.response.edit_message(view=self)
                 self.game_state["active"] = False
 
@@ -1611,7 +1814,8 @@ class Economy(commands.Cog):
                     winnings = int(amount * final_multiplier)
                     await self.bot.db.execute(
                         "UPDATE economy SET balance = balance + $1 WHERE user_id = $2",
-                        winnings, ctx.author.id
+                        winnings,
+                        ctx.author.id,
                     )
                     profit = winnings - amount
                     embed = discord.Embed(
@@ -1622,13 +1826,13 @@ class Economy(commands.Cog):
                             f"**Total Winnings:** {winnings:,} 💵\n"
                             f"**Profit:** +{profit:,} 💵"
                         ),
-                        color=0x2ecc71
+                        color=0x2ECC71,
                     )
                 else:
                     embed = discord.Embed(
-                        title="🚪 Early Exit", 
+                        title="🚪 Early Exit",
                         description=f"Exited at {self.game_state['multiplier']:.2f}x\n**-{amount:,}** 💵",
-                        color=0xe74c3c
+                        color=0xE74C3C,
                     )
 
                 await self.game_state["message"].edit(embed=embed, view=self)
@@ -1638,20 +1842,21 @@ class Economy(commands.Cog):
                 if self.game_state["active"]:
                     await self.bot.db.execute(
                         "UPDATE economy SET balance = balance + $1 WHERE user_id = $2",
-                        amount, ctx.author.id
+                        amount,
+                        ctx.author.id,
                     )
                     embed = discord.Embed(
                         title="⏰ Game Expired",
                         description="Game timed out - bet refunded!",
-                        color=0xf1c40f
+                        color=0xF1C40F,
                     )
                     await self.game_state["message"].edit(embed=embed, view=None)
                     self.game_state["active"] = False
 
         embed = discord.Embed(
             title="🚀 Crash Game Started",
-            description=f"**Bet:** {amount:,} 💵\nCurrent Multiplier: 1.00x", 
-            color=self.bot.color
+            description=f"**Bet:** {amount:,} 💵\nCurrent Multiplier: 1.00x",
+            color=self.bot.color,
         )
         view = CrashView(self.bot)
         view.game_state["message"] = await ctx.send(embed=embed, view=view)
@@ -1660,14 +1865,16 @@ class Economy(commands.Cog):
         try:
             while game_state["active"] and game_state["multiplier"] < MAX_MULTIPLIER:
                 await asyncio.sleep(1)
-                
+
                 current_time = time.time()
                 if current_time - last_update >= UPDATE_INTERVAL:
                     last_update = current_time
-                    
+
                     crash_prob = calculate_crash_chance(game_state["multiplier"])
-                    game_state["multiplier"] *= (1 + MULTIPLIER_GROWTH * random.uniform(0.7, 1.3))
-                    
+                    game_state["multiplier"] *= 1 + MULTIPLIER_GROWTH * random.uniform(
+                        0.7, 1.3
+                    )
+
                     if random.random() < crash_prob:
                         game_state["active"] = False
                         embed = discord.Embed(
@@ -1677,11 +1884,11 @@ class Economy(commands.Cog):
                                 f"**Initial Bet:** {amount:,} 💵\n"
                                 f"**Lost:** -{amount:,} 💵"
                             ),
-                            color=0xe74c3c
+                            color=0xE74C3C,
                         )
                         await view.game_state["message"].edit(embed=embed, view=None)
                         break
-                    
+
                     potential_win = int(amount * game_state["multiplier"])
                     embed = discord.Embed(
                         title=f"🚀 Rocket is at {game_state['multiplier']:.2f}x",
@@ -1690,24 +1897,27 @@ class Economy(commands.Cog):
                             f"**Current Value:** {potential_win:,} 💵\n"
                             f"**Next Update:** {UPDATE_INTERVAL}s"
                         ),
-                        color=self.bot.color
+                        color=self.bot.color,
                     )
                     await view.game_state["message"].edit(embed=embed)
-                    
+
         except Exception as e:
             logger.error(f"Crash game error: {e}")
             await self.bot.db.execute(
                 "UPDATE economy SET balance = balance + $1 WHERE user_id = $2",
-                amount, ctx.author.id
+                amount,
+                ctx.author.id,
             )
-            await view.game_state["message"].edit(content="⚠️ Game error - bet refunded!", embed=None, view=None)
-            
+            await view.game_state["message"].edit(
+                content="⚠️ Game error - bet refunded!", embed=None, view=None
+            )
+
     @commands.command(
         name="ladder",
         brief="Play the ladder game and climb multipliers!",
         example=",ladder 1000",
     )
-    @commands.cooldown(1, 30, commands.BucketType.user)
+    @commands.cooldown(1, 10, commands.BucketType.user)
     async def ladder(self, ctx: commands.Context, amount: GambleAmount):
         """Play a risk/reward ladder game with progressive difficulty."""
         if amount <= 0:
@@ -1721,7 +1931,8 @@ class Economy(commands.Cog):
 
         await self.bot.db.execute(
             "UPDATE economy SET balance = balance - $1 WHERE user_id = $2",
-            amount, ctx.author.id
+            amount,
+            ctx.author.id,
         )
 
         BASE_MULTIPLIERS = [1.25, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 10.0]
@@ -1730,7 +1941,9 @@ class Economy(commands.Cog):
             "current_step": 0,
             "collected": False,
             "crashed": False,
-            "max_multiplier": random.choices(BASE_MULTIPLIERS, weights=PROBABILITY_CURVE)[0]
+            "max_multiplier": random.choices(
+                BASE_MULTIPLIERS, weights=PROBABILITY_CURVE
+            )[0],
         }
 
         class LadderView(discord.ui.View):
@@ -1742,12 +1955,20 @@ class Economy(commands.Cog):
                 self.embed = None
 
             def progress_bar(self):
-                filled = "<:status_online:1302238596580773980>" * (self.state["current_step"] + 1)
-                empty = "<:status_offline:1302238593351421974>" * (len(BASE_MULTIPLIERS) - self.state["current_step"] - 1)
+                filled = "<:status_online:1302238596580773980>" * (
+                    self.state["current_step"] + 1
+                )
+                empty = "<:status_offline:1302238593351421974>" * (
+                    len(BASE_MULTIPLIERS) - self.state["current_step"] - 1
+                )
                 return filled + empty  # Fix for emoji rendering
 
             def current_multiplier(self):
-                return BASE_MULTIPLIERS[self.state["current_step"]] if not self.state["crashed"] else 0
+                return (
+                    BASE_MULTIPLIERS[self.state["current_step"]]
+                    if not self.state["crashed"]
+                    else 0
+                )
 
             async def update_display(self, interaction=None):
                 self.embed.clear_fields()
@@ -1758,12 +1979,13 @@ class Economy(commands.Cog):
                 )
                 self.embed.add_field(
                     name="Ladder Progress",
-                    value=f"{self.progress_bar()}\n" + "\n".join(
-                        f"{'✅' if i <= self.state['current_step'] else '➖'} {multiplier}x" 
+                    value=f"{self.progress_bar()}\n"
+                    + "\n".join(
+                        f"{'✅' if i <= self.state['current_step'] else '➖'} {multiplier}x"
                         for i, multiplier in enumerate(BASE_MULTIPLIERS)
-                    )
+                    ),
                 )
-                
+
                 if interaction:
                     await interaction.response.edit_message(embed=self.embed, view=self)
                 elif self.message:
@@ -1772,40 +1994,51 @@ class Economy(commands.Cog):
                     return self.embed
 
             @discord.ui.button(label="Climb", style=discord.ButtonStyle.green)
-            async def climb(self, interaction: discord.Interaction, button: discord.ui.Button):
+            async def climb(
+                self, interaction: discord.Interaction, button: discord.ui.Button
+            ):
                 if interaction.user != ctx.author:
-                    return await interaction.response.send_message("Nuh uh", ephemeral=True)
-                
+                    return await interaction.response.send_message(
+                        "Nuh uh", ephemeral=True
+                    )
+
                 success_chance = PROBABILITY_CURVE[self.state["current_step"]]
                 if random.random() > success_chance:
                     self.state["crashed"] = True
                     button.disabled = True
-                    self.embed.color = 0xff0000
-                    self.embed.description = f"💥 Crashed at step {self.state['current_step']+1}!"
+                    self.embed.color = 0xFF0000
+                    self.embed.description = (
+                        f"💥 Crashed at step {self.state['current_step']+1}!"
+                    )
                     await self.end_game()
                     return
 
                 self.state["current_step"] += 1
-                
+
                 if self.state["current_step"] >= len(BASE_MULTIPLIERS) - 1:
                     await self.collect(interaction)
                     return
-                    
+
                 await self.update_display(interaction)
 
             @discord.ui.button(label="Collect", style=discord.ButtonStyle.blurple)
-            async def collect(self, interaction: discord.Interaction, button: discord.ui.Button):
+            async def collect(
+                self, interaction: discord.Interaction, button: discord.ui.Button
+            ):
                 if interaction.user != ctx.author:
-                    return await interaction.response.send_message("❌ Not your game!", ephemeral=True)
-                
+                    return await interaction.response.send_message(
+                        "❌ Not your game!", ephemeral=True
+                    )
+
                 winnings = int(amount * self.current_multiplier())
                 await self.bot.db.execute(
                     "UPDATE economy SET balance = balance + $1 WHERE user_id = $2",
-                    winnings, ctx.author.id
+                    winnings,
+                    ctx.author.id,
                 )
-                
+
                 self.state["collected"] = True
-                self.embed.color = 0x00ff00
+                self.embed.color = 0x00FF00
                 self.embed.description = f"💰 Collected at {self.current_multiplier()}x!\n**+{winnings:,}** 💵"
                 await self.end_game()
                 await interaction.response.edit_message(embed=self.embed, view=self)
@@ -1822,22 +2055,19 @@ class Economy(commands.Cog):
                         refund = min(amount, 9223372036854775807)
                         await self.bot.db.execute(
                             "UPDATE economy SET balance = balance + $1 WHERE user_id = $2",
-                            refund, ctx.author.id
+                            refund,
+                            ctx.author.id,
                         )
-                        self.embed.color = 0xffff00
+                        self.embed.color = 0xFFFF00
                         self.embed.description = "⌛ Game timed out - bet refunded!"
                         await self.message.edit(embed=self.embed, view=None)
                     except Exception as e:
                         self.bot.logger.error(f"Error in ladder timeout: {e}")
 
         view = LadderView(self.bot)
-        view.embed = discord.Embed(
-            title="🏁 Ladder Game Started",
-            color=self.bot.color
-        )
+        view.embed = discord.Embed(title="🏁 Ladder Game Started", color=self.bot.color)
         await view.update_display()
         view.message = await ctx.send(embed=view.embed, view=view)
-
 
     async def check_leaderboard(self):
         """Periodically check the leaderboard for the first person to reach 10 million."""
@@ -1857,10 +2087,12 @@ class Economy(commands.Cog):
 
             # Check the first user to hit 10 million and mark them
             for user in users:
-                balance = user['balance']
+                balance = user["balance"]
                 if balance >= 10000000 and self.first_wealthy_user is None:
-                    self.first_wealthy_user = user['user_id']
-                    print(f"User {user['user_id']} reached 10 million and is marked with a diamond emoji!")
+                    self.first_wealthy_user = user["user_id"]
+                    print(
+                        f"User {user['user_id']} reached 10 million and is marked with a diamond emoji!"
+                    )
                     break
 
     @commands.command(
@@ -1875,53 +2107,66 @@ class Economy(commands.Cog):
         if type_ not in ["balance", "earnings"]:
             return await ctx.send("Invalid type! Choose `balance` or `earnings`.")
 
-        query = """
+        query = (
+            """
             SELECT user_id, SUM(balance + bank) AS balance FROM economy
             GROUP BY user_id
             ORDER BY balance DESC
-        """ if type_ == "balance" else """
+        """
+            if type_ == "balance"
+            else """
             SELECT user_id, earnings AS balance FROM economy
             ORDER BY earnings DESC
         """
+        )
         users = await self.bot.db.fetch(query)
 
         if not users:
             return await ctx.send("No users found in the leaderboard.")
 
         # Create chunks of 10 users each for pagination
-        chunks = [users[i:i + 10] for i in range(0, len(users), 10)]
+        chunks = [users[i : i + 10] for i in range(0, len(users), 10)]
         embeds = []
 
         for page, chunk in enumerate(chunks, 1):
             rows = []
-            for idx, user in enumerate(chunk, start=(page-1)*10 + 1):
-                username = self.bot.get_user(user['user_id']) or f"User {user['user_id']}"
-                balance = int(user['balance'])
+            for idx, user in enumerate(chunk, start=(page - 1) * 10 + 1):
+                username = (
+                    self.bot.get_user(user["user_id"]) or f"User {user['user_id']}"
+                )
+                balance = int(user["balance"])
 
                 # Add diamond emoji only to the first person who hits 10 million
-                diamond_emoji = EMOJIS["diamond"] if self.first_wealthy_user == user['user_id'] else ''
-                rows.append(f"`{idx}.` **{username}** - **{format_large_number(balance)}**")
+                diamond_emoji = (
+                    EMOJIS["diamond"]
+                    if self.first_wealthy_user == user["user_id"]
+                    else ""
+                )
+                rows.append(
+                    f"`{idx}.` **{username}** - **{format_large_number(balance)}**"
+                )
 
             embed = Embed(
                 title=f"{type_.title()} Global Leaderboard",
                 description="\n".join(rows),
-                color=self.bot.color
+                color=self.bot.color,
             )
             embed.set_footer(text=f"Page {page}/{len(chunks)}")
             embeds.append(embed)
 
         await ctx.paginate(embeds)
 
-
     @commands.command(
         name="rob",
         brief="Rob another user and take 10% of their balance.",
-        example=",rob @user"
+        example=",rob @user",
     )
-    @commands.cooldown(1, 60, commands.BucketType.user)  # Cooldown of 30 seconds per user
+    @commands.cooldown(
+        1, 60, commands.BucketType.user
+    )  # Cooldown of 30 seconds per user
     async def economy_rob(self, ctx, target: discord.Member):
         """Command to rob another user for 10% of their balance."""
-        
+
         if target.id == ctx.author.id:
             return await ctx.fail("You cannot rob yourself!")
 
@@ -1931,23 +2176,27 @@ class Economy(commands.Cog):
         )
 
         if not target_balance_row:
-            return await ctx.fail(f"{target.display_name} does not have an economy account!")
+            return await ctx.fail(
+                f"{target.display_name} does not have an economy account!"
+            )
 
         target_balance = target_balance_row["balance"]
-        
+
         # Convert target balance to an integer and calculate 10%
         target_balance_int = int(target_balance)  # Ensure we're using integers only
         amount_to_steal = target_balance_int // 10  # Use floor division to take 10%
 
         if amount_to_steal <= 0:
-            return await ctx.fail(f"{target.display_name} doesn't have enough money to rob.")
+            return await ctx.fail(
+                f"{target.display_name} doesn't have enough money to rob."
+            )
 
         # Create the embed for the robbery notification
         rob_embed = discord.Embed(
             title="Robbery Attempt!",
             description=f"{target.mention}, you've been targeted for a robbery by {ctx.author.mention}!\n"
-                        f"You have **15 seconds** to type anything to stop the robbery!",
-            color=self.bot.color
+            f"You have **15 seconds** to type anything to stop the robbery!",
+            color=self.bot.color,
         )
         rob_embed.set_footer(text="Time is ticking...")
 
@@ -1961,7 +2210,7 @@ class Economy(commands.Cog):
             # Wait for the target's response
             response = await self.bot.wait_for("message", check=check, timeout=15.0)
             await rob_message.delete()
-            
+
             # Target stopped the robbery
             await ctx.fail(f"{target.display_name} successfully stopped the robbery!")
             return
@@ -1974,24 +2223,21 @@ class Economy(commands.Cog):
             await self.bot.db.execute(
                 """UPDATE economy SET balance = balance - $1 WHERE user_id = $2""",
                 amount_to_steal,
-                target.id
+                target.id,
             )
 
             await self.bot.db.execute(
                 """UPDATE economy SET balance = balance + $1 WHERE user_id = $2""",
                 amount_to_steal,
-                ctx.author.id
+                ctx.author.id,
             )
 
             await ctx.currency(
                 f"You successfully robbed **${amount_to_steal}** 💵 from {target.display_name}!"
             )
 
-
     @commands.command(
-        name="work",
-        brief="Earn some money by working random jobs.",
-        example=",work"
+        name="work", brief="Earn some money by working random jobs.", example=",work"
     )
     @commands.cooldown(1, 30, commands.BucketType.user)
     async def work(self, ctx):
@@ -2011,7 +2257,9 @@ class Economy(commands.Cog):
                 jobs = [line.strip() for line in file.readlines()]
 
             if not jobs:
-                return await ctx.fail("No jobs are available at the moment. Please try again later!")
+                return await ctx.fail(
+                    "No jobs are available at the moment. Please try again later!"
+                )
 
             # Select a random job
             job = random.choice(jobs)
@@ -2053,7 +2301,9 @@ class Economy(commands.Cog):
                 )
 
         except FileNotFoundError:
-            await ctx.fail("The jobs file is missing. Please contact the administrator.")
+            await ctx.fail(
+                "The jobs file is missing. Please contact the administrator."
+            )
         except Exception as e:
             await ctx.fail("An error occurred while processing your command.")
             raise e  # Log the exception for debugging purposes
@@ -2063,10 +2313,12 @@ class Economy(commands.Cog):
         brief="Earn some money by working the streets.",
         example=",beg",
     )
-    @commands.cooldown(1, 60, commands.BucketType.user)  # Cooldown of 5 seconds per user
+    @commands.cooldown(
+        1, 60, commands.BucketType.user
+    )  # Cooldown of 5 seconds per user
     async def beg(self, ctx: commands.Context):
         """Simulate working for a night and earning money with a random result."""
-        
+
         try:
             # Check if the user is a donator
             is_donator = await self.bot.db.fetchrow(
@@ -2077,7 +2329,7 @@ class Economy(commands.Cog):
             worked_hours = random.randint(1, 10)
 
             # 60% chance to earn more than $100
-            if random.random() < 0.6:  
+            if random.random() < 0.6:
                 earnings = random.randint(100, 5000)  # Earn between $100 and $5000
             else:
                 earnings = random.randint(1, 99)  # Earn between $1 and $99
@@ -2116,13 +2368,13 @@ class Economy(commands.Cog):
                 message = f"You begged for **{worked_hours}** hours tonight and earned **${earnings:,}** 💵. Not too bad!"
 
             # Send the message based on donator status
-            embed = Embed(
-                description=message,
-                color=0x2a8000
-            )
+            embed = Embed(description=message, color=0x2A8000)
 
             if is_donator:
-                embed.add_field(name="Bonus", value="As a booster in **[/greedbot](https://discord.gg/greedbot)**, you earned **1.2x** bonus pay for your support!")
+                embed.add_field(
+                    name="Bonus",
+                    value="As a booster in **[/greedbot](https://discord.gg/greedbot)**, you earned **1.2x** bonus pay for your support!",
+                )
 
             await ctx.send(embed=embed)
 
@@ -2130,17 +2382,17 @@ class Economy(commands.Cog):
             await ctx.fail("An error occurred while processing your command.")
             raise e  # Log the exception for debugging purposes
 
-
-
     @commands.command(
         name="crime",
         brief="Attempt a crime for a chance to earn money or get caught!",
-        example=",crime"
+        example=",crime",
     )
-    @commands.cooldown(1, 30, commands.BucketType.user)  # Cooldown of 12 seconds per user
+    @commands.cooldown(
+        1, 30, commands.BucketType.user
+    )  # Cooldown of 12 seconds per user
     async def crime(self, ctx):
         """Command to simulate committing a crime, possibly earning money or getting caught."""
-        
+
         crimes_file_path = "crimes.txt"  # Path to the crime list
 
         try:
@@ -2149,7 +2401,9 @@ class Economy(commands.Cog):
                 crimes = [line.strip() for line in file.readlines()]
 
             if not crimes:
-                return await ctx.fail("No crimes are available at the moment. Please try again later.")
+                return await ctx.fail(
+                    "No crimes are available at the moment. Please try again later."
+                )
 
             # Select a random crime
             crime = random.choice(crimes)
@@ -2171,18 +2425,24 @@ class Economy(commands.Cog):
                     f"you got away with **{crime}** and made **${earnings:,}**!",
                     f"well done! You managed to pull off **{crime}** and earned **${earnings:,}**!",
                 ]
-                result_message = random.choice(success_messages)  # Pick a random success message
+                result_message = random.choice(
+                    success_messages
+                )  # Pick a random success message
                 # Send currency message on success
                 await ctx.currency(result_message)
             else:
                 # Crime failed, and user gets caught
-                earnings = int(base_earnings * 0.5)  # They lose 50% of the potential earnings
+                earnings = int(
+                    base_earnings * 0.5
+                )  # They lose 50% of the potential earnings
                 failure_messages = [
                     f"you were caught while trying to commit **{crime}** and lost **${earnings:,}** 💵!",
                     f"you got busted for **{crime}** and lost **${earnings:,}** 💵.",
-                    f"your attempt to commit **{crime}** failed, and you lost **${earnings:,}** 💵."
+                    f"your attempt to commit **{crime}** failed, and you lost **${earnings:,}** 💵.",
                 ]
-                result_message = random.choice(failure_messages)  # Pick a random failure message
+                result_message = random.choice(
+                    failure_messages
+                )  # Pick a random failure message
                 # Send fail message on failure
                 await ctx.fail(result_message)
 
@@ -2204,15 +2464,18 @@ class Economy(commands.Cog):
             await self.bot.db.execute(
                 """UPDATE economy SET balance = balance + $1 WHERE user_id = $2""",
                 earnings,
-                ctx.author.id
+                ctx.author.id,
             )
 
         except FileNotFoundError:
-            await ctx.fail("The crimes file is missing. Please contact the administrator.")
+            await ctx.fail(
+                "The crimes file is missing. Please contact the administrator."
+            )
         except Exception as e:
-            await ctx.fail("An error occurred while committing your crime. Please try again later.")
+            await ctx.fail(
+                "An error occurred while committing your crime. Please try again later."
+            )
             raise e  # Log the exception for debugging purposes
-
 
     @commands.command(name="dance", help="Start a Dance Dance Revolution game!")
     @commands.cooldown(1, 30, commands.BucketType.guild)
@@ -2239,10 +2502,11 @@ class Economy(commands.Cog):
                 "> -# Type the corresponding direction, such as right right left\n\n\n"
                 f"**Combo:** {combo_str}"
             ),
-            
             color=self.bot.color,
         )
-        embed.set_thumbnail(url="https://gifdb.com/images/high/break-dance-meme-cat-sims-game-nfrlhp72lcvdjptq.gif")
+        embed.set_thumbnail(
+            url="https://gifdb.com/images/high/break-dance-meme-cat-sims-game-nfrlhp72lcvdjptq.gif"
+        )
         await ctx.send(embed=embed)
 
         # Wait for 30 seconds and clear the active combo if no winner
@@ -2253,16 +2517,15 @@ class Economy(commands.Cog):
             await ctx.send("⏱️ **Time's up!** No one typed the correct combo in time.")
             logger.info(f"Combo timed out for channel {ctx.channel.id}")
 
-
-
-
     @commands.command(
         name="bombs",
         brief="Play the bombs game - avoid bombs to multiply your bet!",
         example=",bombs 1000 2",
     )
-    @commands.cooldown(1, 30, commands.BucketType.user)
-    async def bombs(self, ctx: commands.Context, amount: GambleAmount, bomb_count: int = 2):
+    @commands.cooldown(1, 10, commands.BucketType.user)
+    async def bombs(
+        self, ctx: commands.Context, amount: GambleAmount, bomb_count: int = 2
+    ):
         """Start a bombs game with a grid of tiles and hidden bombs."""
         GRID_SIZE = 4
         total_tiles = GRID_SIZE * GRID_SIZE
@@ -2299,23 +2562,21 @@ class Economy(commands.Cog):
                 for i in range(total_tiles):
                     row = i // GRID_SIZE
                     btn = Button(
-                        style=discord.ButtonStyle.secondary, 
-                        emoji="🎮", 
-                        row=row
+                        style=discord.ButtonStyle.secondary, emoji="🎮", row=row
                     )
                     btn.custom_id = f"bomb:{ctx.author.id}:{i}"
-                    
+
                     async def callback(interaction, tile=btn.custom_id.split(":")[-1]):
                         await self.handle_click(interaction, int(tile))
-                    
+
                     btn.callback = callback
                     self.add_item(btn)
 
                 self.collect_button = Button(
-                    style=discord.ButtonStyle.success, 
-                    label=f"Collect ${int(amount * self.multiplier):,}", 
+                    style=discord.ButtonStyle.success,
+                    label=f"Collect ${int(amount * self.multiplier):,}",
                     emoji="💰",
-                    row=4
+                    row=4,
                 )
                 self.collect_button.callback = self.handle_collect
                 self.add_item(self.collect_button)
@@ -2324,11 +2585,14 @@ class Economy(commands.Cog):
                 """Dynamic multiplier calculation based on game state"""
                 revealed_safe = len(self.revealed - bomb_positions)
                 remaining_safe = (total_tiles - bomb_count) - revealed_safe
-                
-                if remaining_safe <= 1: return 15.0
-                if remaining_safe <= 2: return 10.0
-                if remaining_safe <= 3: return 7.5
-                
+
+                if remaining_safe <= 1:
+                    return 15.0
+                if remaining_safe <= 2:
+                    return 10.0
+                if remaining_safe <= 3:
+                    return 7.5
+
                 progress = revealed_safe / (total_tiles - bomb_count)
                 difficulty = bomb_count / total_tiles
                 return round(1.0 + (difficulty * 5) + (progress * 3), 2)
@@ -2341,9 +2605,9 @@ class Economy(commands.Cog):
 
                 embed = Embed(
                     title="💣 Bombs Game" + (" (GAME OVER)" if self.game_over else ""),
-                    color=0x3498db if not self.game_over else 0xff0000
+                    color=0x3498DB if not self.game_over else 0xFF0000,
                 )
-                
+
                 embed.description = (
                     f"**Avoid the bombs and collect your winnings!**\n\n"
                     f"**Your Bet:** ${amount:,} 💵\n"
@@ -2351,63 +2615,92 @@ class Economy(commands.Cog):
                     f"**Potential Win:** ${potential_win:,} 💵\n"
                     f"**Safe Tiles Remaining:** {remaining_safe}/{total_tiles - bomb_count}"
                 )
-                
+
                 if not self.game_over:
-                    embed.set_footer(text="Click on tiles to reveal them. Avoid bombs to increase your multiplier!")
-                
+                    embed.set_footer(
+                        text="Click on tiles to reveal them. Avoid bombs to increase your multiplier!"
+                    )
+
                 return embed
 
             async def handle_click(self, interaction, tile):
                 """Process tile reveal"""
                 if interaction.user != ctx.author:
-                    return await interaction.response.send_message("This isn't your game!", ephemeral=True)
+                    return await interaction.response.send_message(
+                        "This isn't your game!", ephemeral=True
+                    )
                 if self.game_over or tile in self.revealed:
                     return await interaction.response.defer()
 
                 self.revealed.add(tile)
-                
-                button = next((b for b in self.children if b.custom_id and b.custom_id.endswith(f":{tile}")), None)
+
+                button = next(
+                    (
+                        b
+                        for b in self.children
+                        if b.custom_id and b.custom_id.endswith(f":{tile}")
+                    ),
+                    None,
+                )
                 if button:
                     if tile in bomb_positions:
                         button.emoji = "💣"
                         button.style = discord.ButtonStyle.danger
                         self.game_over = True
-                        await self.end_game(interaction, f"**BOOM!** Lost {amount:,} 💵", 0xff0000)
+                        await self.end_game(
+                            interaction, f"**BOOM!** Lost {amount:,} 💵", 0xFF0000
+                        )
                         return
                     else:
                         button.emoji = "💰"
                         button.style = discord.ButtonStyle.success
                         button.disabled = True
-                
+
                 self.multiplier = self.calculate_multiplier()
-                self.collect_button.label = f"Collect ${int(amount * self.multiplier):,}"
-                
+                self.collect_button.label = (
+                    f"Collect ${int(amount * self.multiplier):,}"
+                )
+
                 revealed_safe = len(self.revealed - bomb_positions)
                 remaining_safe = (total_tiles - bomb_count) - revealed_safe
-                
+
                 if remaining_safe <= 0:
                     winnings = int(amount * self.multiplier)
                     await self.update_balance(winnings)
-                    await self.end_game(interaction, f"**CLEARED!** Won {winnings:,} 💵!", self.bot.color)
+                    await self.end_game(
+                        interaction,
+                        f"**CLEARED!** Won {winnings:,} 💵!",
+                        self.bot.color,
+                    )
                     return
 
-                await interaction.response.edit_message(embed=self.create_embed(), view=self)
+                await interaction.response.edit_message(
+                    embed=self.create_embed(), view=self
+                )
 
             async def handle_collect(self, interaction):
                 """Process collect action"""
                 if interaction.user != ctx.author:
-                    return await interaction.response.send_message("This isn't your game!", ephemeral=True)
-                
+                    return await interaction.response.send_message(
+                        "This isn't your game!", ephemeral=True
+                    )
+
                 winnings = int(amount * self.multiplier)
                 await self.update_balance(winnings)
-                await self.end_game(interaction, f"**COLLECTED!** Won {winnings:,} 💵!", self.bot.color)
+                await self.end_game(
+                    interaction, f"**COLLECTED!** Won {winnings:,} 💵!", self.bot.color
+                )
 
             async def end_game(self, interaction, description, color):
                 """Cleanup game ending"""
                 self.game_over = True
-                
+
                 for i, button in enumerate(self.children):
-                    if hasattr(button, 'custom_id') and button.custom_id and button.custom_id.startswith("bomb:"):
+                    if (
+                        hasattr(button, "custom_id")
+                        and button.custom_id
+                        and button.custom_id.startswith("bomb:")
+                    ):
                         tile_id = int(button.custom_id.split(":")[-1])
                         if tile_id in bomb_positions:
                             button.emoji = "💣"
@@ -2415,13 +2708,13 @@ class Economy(commands.Cog):
                         elif tile_id not in self.revealed:
                             button.emoji = "⬜"
                         button.disabled = True
-                
+
                 self.collect_button.disabled = True
-                
+
                 embed = self.create_embed()
                 embed.description = description
                 embed.color = color
-                
+
                 await interaction.response.edit_message(embed=embed, view=self)
                 self.stop()
 
@@ -2429,7 +2722,8 @@ class Economy(commands.Cog):
                 """Update player balance"""
                 await self.bot.db.execute(
                     "UPDATE economy SET balance = balance + $1 WHERE user_id = $2",
-                    winnings, ctx.author.id
+                    winnings,
+                    ctx.author.id,
                 )
 
             async def on_timeout(self):
@@ -2443,11 +2737,15 @@ class Economy(commands.Cog):
         view = BombView(self.bot)
         view.message = await ctx.send(embed=view.create_embed(), view=view)
 
-    @commands.command(name="crack", description="Play Crack to unlock the safe and earn money.")
+    @commands.command(
+        name="crack", description="Play Crack to unlock the safe and earn money."
+    )
     @commands.cooldown(1, 30, commands.BucketType.guild)
     async def crack(self, ctx):
         progress = 0.0
-        avatar_b64 = base64.b64encode(await ctx.author.display_avatar.read()).decode('utf-8')  # Avatar in base64
+        avatar_b64 = base64.b64encode(await ctx.author.display_avatar.read()).decode(
+            "utf-8"
+        )  # Avatar in base64
 
         difficulty_choices = {
             "easy": self.generate_easy_question,
@@ -2456,18 +2754,26 @@ class Economy(commands.Cog):
         }
 
         await ctx.send("-# Choose a difficulty: **easy, medium, or hard.**")
-        
+
         def check(msg):
-            return msg.author == ctx.author and msg.channel == ctx.channel and msg.content.lower() in difficulty_choices
+            return (
+                msg.author == ctx.author
+                and msg.channel == ctx.channel
+                and msg.content.lower() in difficulty_choices
+            )
 
         try:
-            difficulty_msg = await self.bot.wait_for('message', timeout=10.0, check=check)
+            difficulty_msg = await self.bot.wait_for(
+                "message", timeout=10.0, check=check
+            )
             difficulty = difficulty_msg.content.lower()
 
             safe_amount = self.get_random_amount(difficulty)
             progress_per_question = 1 / 5
 
-            message = await ctx.send("-# Answer the following questions to unlock the safe.")
+            message = await ctx.send(
+                "-# Answer the following questions to unlock the safe."
+            )
 
             for _ in range(5):
                 question_func = difficulty_choices[difficulty]
@@ -2480,18 +2786,29 @@ class Economy(commands.Cog):
                     return m.author == ctx.author and m.channel == ctx.channel
 
                 try:
-                    response = await self.bot.wait_for('message', timeout=30.0, check=answer_check)
-                    
+                    response = await self.bot.wait_for(
+                        "message", timeout=30.0, check=answer_check
+                    )
+
                     if response.content.isdigit() and int(response.content) == answer:
                         progress += progress_per_question
 
-                        buffer = self.generate_pie_chart(ctx.author.name, progress, avatar_b64)
-                        file = discord.File(buffer, filename=f"{ctx.author.name}_safe_progress.png")
+                        buffer = self.generate_pie_chart(
+                            ctx.author.name, progress, avatar_b64
+                        )
+                        file = discord.File(
+                            buffer, filename=f"{ctx.author.name}_safe_progress.png"
+                        )
 
-                        await message.edit(content=f"-# Correct! Progress: **{int(progress * 100)}%**", attachments=[file])
+                        await message.edit(
+                            content=f"-# Correct! Progress: **{int(progress * 100)}%**",
+                            attachments=[file],
+                        )
 
                     else:
-                        incorrect_msg = await ctx.send("-# Incorrect answer, the game has stopped.")
+                        incorrect_msg = await ctx.send(
+                            "-# Incorrect answer, the game has stopped."
+                        )
                         await asyncio.sleep(3)
                         await incorrect_msg.delete()
                         await message.delete()
@@ -2505,21 +2822,28 @@ class Economy(commands.Cog):
                     break  # Exit the loop
 
             # Final result after all questions (or game stop)
-            earnings = int(progress * safe_amount)  # Calculate earnings based on progress and safe amount
+            earnings = int(
+                progress * safe_amount
+            )  # Calculate earnings based on progress and safe amount
             await self.bot.db.execute(
                 """UPDATE economy SET balance = balance + $1 WHERE user_id = $2""",
                 earnings,
-                ctx.author.id
+                ctx.author.id,
             )
-            await ctx.currency(f"Game over! You earned **${earnings}** credits from the safe!")
+            await ctx.currency(
+                f"Game over! You earned **${earnings}** credits from the safe!"
+            )
 
         except asyncio.TimeoutError:
-            await ctx.fail("You took too long to select a difficulty. Please try again.")
+            await ctx.fail(
+                "You took too long to select a difficulty. Please try again."
+            )
             await message.delete()
 
-
-    @commands.command(name="fish", description="Go fishing and catch a random fish for money!")
-    @commands.cooldown(1, 30, commands.BucketType.user)
+    @commands.command(
+        name="fish", description="Go fishing and catch a random fish for money!"
+    )
+    @commands.cooldown(1, 10, commands.BucketType.user)
     async def fish(self, ctx):
         # Define different fish with their rarity and price (rarity is a value from 1 to 100, higher rarity = rarer)
         fish_data = {
@@ -2543,7 +2867,6 @@ class Economy(commands.Cog):
             "Rainbow Trout": {"rarity": 0.60, "price": 350},
             "Tilapia": {"rarity": 0.55, "price": 400},
             "Cod": {"rarity": 0.70, "price": 120},
-
             # Medium Rarity Fish (rarity between 0.4 - 0.6)
             "Bluegill": {"rarity": 0.50, "price": 5500},
             "Perch": {"rarity": 0.55, "price": 6000},
@@ -2555,7 +2878,6 @@ class Economy(commands.Cog):
             "Squid": {"rarity": 0.47, "price": 7000},
             "Mahi-Mahi": {"rarity": 0.55, "price": 7500},
             "Barracuda": {"rarity": 0.49, "price": 8000},
-
             # High Rarity Fish (rarity between 0.2 - 0.4)
             "King Salmon": {"rarity": 0.30, "price": 9000},
             "Stingray": {"rarity": 0.25, "price": 9500},
@@ -2567,7 +2889,6 @@ class Economy(commands.Cog):
             "Goliath Grouper": {"rarity": 0.17, "price": 19000},
             "Golden Trout": {"rarity": 0.19, "price": 20000},
             "Flying Fish": {"rarity": 0.28, "price": 22000},
-
             # Ultra Rarity Fish (rarity between 0.01 - 0.20)
             "Leopard Shark": {"rarity": 0.10, "price": 25000},
             "Titanic Squid": {"rarity": 0.05, "price": 30000},
@@ -2581,12 +2902,11 @@ class Economy(commands.Cog):
             "Megalodon Tooth Fish": {"rarity": 0.01, "price": 100000},
         }
 
-
         # Show the loading message while the user fishes
         fishing_embed = discord.Embed(
             title="<:fishsus:1337411037594386493> Fishing...",
             description="You cast your line, waiting for something to bite <a:loading2:1337411183195717713>",
-            color=self.bot.color
+            color=self.bot.color,
         )
         fishing_message = await ctx.send(embed=fishing_embed)
 
@@ -2595,9 +2915,9 @@ class Economy(commands.Cog):
 
         # Randomly determine which fish the user catches based on rarity
         fish_choice = random.choices(
-            list(fish_data.keys()), 
-            weights=[fish_data[fish]["rarity"] for fish in fish_data], 
-            k=1
+            list(fish_data.keys()),
+            weights=[fish_data[fish]["rarity"] for fish in fish_data],
+            k=1,
         )[0]
 
         # Get the fish price
@@ -2607,34 +2927,39 @@ class Economy(commands.Cog):
         caught_embed = discord.Embed(
             title="🎣 You Caught a Fish!",
             description=f"Congratulations! You caught a **{fish_choice}** and earned **${fish_price}** 💵!",
-            color=self.bot.color
+            color=self.bot.color,
         )
         await fishing_message.edit(embed=caught_embed)
 
-
-
         # Update the user's fish caught history in the database
-        user_fish = await self.bot.db.fetchval('''
+        user_fish = await self.bot.db.fetchval(
+            """
             SELECT fish_caught FROM user_fish WHERE user_id = $1
-        ''', ctx.author.id)
+        """,
+            ctx.author.id,
+        )
 
         if user_fish:
             user_fish += f", {fish_choice}"
         else:
             user_fish = fish_choice
 
-        await self.bot.db.execute('''
+        await self.bot.db.execute(
+            """
             INSERT INTO user_fish (user_id, fish_caught) 
             VALUES ($1, $2) 
             ON CONFLICT(user_id) 
             DO UPDATE SET fish_caught = $2
-        ''', ctx.author.id, user_fish)
+        """,
+            ctx.author.id,
+            user_fish,
+        )
 
         # Update the user's balance
         await self.bot.db.execute(
             """UPDATE economy SET balance = balance + $1 WHERE user_id = $2""",
             fish_price,
-            ctx.author.id
+            ctx.author.id,
         )
 
     @commands.command(name="myfish", description="Show the list of fish you've caught.")
@@ -2642,43 +2967,52 @@ class Economy(commands.Cog):
     async def myfish(self, ctx):
         """Display all the fish the user has caught."""
         # Retrieve the user's caught fish data from the database
-        user_fish_data = await self.bot.db.fetchval('''
+        user_fish_data = await self.bot.db.fetchval(
+            """
             SELECT fish_caught FROM user_fish WHERE user_id = $1
-        ''', ctx.author.id)
+        """,
+            ctx.author.id,
+        )
 
         if user_fish_data:
             # Split the caught fish string and count occurrences
-            fish_list = user_fish_data.split(', ')
+            fish_list = user_fish_data.split(", ")
             fish_count = {}
             for fish in fish_list:
                 fish_count[fish] = fish_count.get(fish, 0) + 1
 
             # Build the list of caught fish with their quantities
-            fish_list_display = "\n".join([f"**{fish}**: {count}x" for fish, count in fish_count.items()])
+            fish_list_display = "\n".join(
+                [f"**{fish}**: {count}x" for fish, count in fish_count.items()]
+            )
 
             # Create the embed message
             fish_embed = discord.Embed(
                 title=f"{ctx.author.name}'s Caught Fish",
                 description=f"You've caught the following fish:\n{fish_list_display}",
-                color=self.bot.color
+                color=self.bot.color,
             )
-            fish_embed.set_thumbnail(url="https://i.seadn.io/gae/6E1B1A-8Q2h-9ddUhJGMmH4Vdfz_8VMmYDcLBy1lSq5HtSuvBF6vYeZF1csYAqttATn98mzBVE6qOg51tGiHXIidu_Bopwuez0lOHw?auto=format&dpr=1&w=1000")  # Replace with the actual fish PNG URL
+            fish_embed.set_thumbnail(
+                url="https://i.seadn.io/gae/6E1B1A-8Q2h-9ddUhJGMmH4Vdfz_8VMmYDcLBy1lSq5HtSuvBF6vYeZF1csYAqttATn98mzBVE6qOg51tGiHXIidu_Bopwuez0lOHw?auto=format&dpr=1&w=1000"
+            )  # Replace with the actual fish PNG URL
             fish_embed.set_author(name=ctx.author.name, icon_url=ctx.author.avatar.url)
-            
+
             await ctx.send(embed=fish_embed)
         else:
             # Create the embed message when no fish are caught
             no_fish_embed = discord.Embed(
                 title=f"{ctx.author.name}'s Caught Fish",
                 description="You haven't caught any fish yet!",
-                color=self.bot.color
+                color=self.bot.color,
             )
-            no_fish_embed.set_thumbnail(url="https://i.seadn.io/gae/6E1B1A-8Q2h-9ddUhJGMmH4Vdfz_8VMmYDcLBy1lSq5HtSuvBF6vYeZF1csYAqttATn98mzBVE6qOg51tGiHXIidu_Bopwuez0lOHw?auto=format&dpr=1&w=1000")  # Replace with the actual fish PNG URL
-            no_fish_embed.set_author(name=ctx.author.name, icon_url=ctx.author.avatar.url)
-            
+            no_fish_embed.set_thumbnail(
+                url="https://i.seadn.io/gae/6E1B1A-8Q2h-9ddUhJGMmH4Vdfz_8VMmYDcLBy1lSq5HtSuvBF6vYeZF1csYAqttATn98mzBVE6qOg51tGiHXIidu_Bopwuez0lOHw?auto=format&dpr=1&w=1000"
+            )  # Replace with the actual fish PNG URL
+            no_fish_embed.set_author(
+                name=ctx.author.name, icon_url=ctx.author.avatar.url
+            )
+
             await ctx.send(embed=no_fish_embed)
-
-
 
     @commands.group(invoke_without_command=True)
     async def lab(self, ctx):
@@ -2693,16 +3027,28 @@ class Economy(commands.Cog):
         if user_lab:
             return await ctx.fail("You already own a laboratory!")
 
-        balance = await self.bot.db.fetchval("SELECT balance FROM economy WHERE user_id = $1", ctx.author.id)
+        balance = await self.bot.db.fetchval(
+            "SELECT balance FROM economy WHERE user_id = $1", ctx.author.id
+        )
         cost = 5_000_000  # 5 million
 
         if balance < cost:
-            return await ctx.fail(f"You do not have enough cash to buy a laboratory.\nYou need **{cost:,}** 💵")
+            return await ctx.fail(
+                f"You do not have enough cash to buy a laboratory.\nYou need **{cost:,}** 💵"
+            )
 
-        await self.bot.db.execute("UPDATE economy SET balance = balance - $1 WHERE user_id = $2", cost, ctx.author.id)
-        await self.bot.db.execute("INSERT INTO labs (user_id) VALUES ($1)", ctx.author.id)
+        await self.bot.db.execute(
+            "UPDATE economy SET balance = balance - $1 WHERE user_id = $2",
+            cost,
+            ctx.author.id,
+        )
+        await self.bot.db.execute(
+            "INSERT INTO labs (user_id) VALUES ($1)", ctx.author.id
+        )
 
-        await ctx.success(f"You have successfully bought a **Laboratory**! <:ampoule:1337841915177205875>")
+        await ctx.success(
+            f"You have successfully bought a **Laboratory**! <:ampoule:1337841915177205875>"
+        )
 
     @lab.command()
     async def upgrade(self, ctx):
@@ -2716,15 +3062,25 @@ class Economy(commands.Cog):
         upgrade_cost = 329_142 * level
         storage_increase = 164_571
 
-        balance = await self.bot.db.fetchval("SELECT balance FROM economy WHERE user_id = $1", ctx.author.id)
+        balance = await self.bot.db.fetchval(
+            "SELECT balance FROM economy WHERE user_id = $1", ctx.author.id
+        )
         if balance < upgrade_cost:
-            return await ctx.fail(f"You do not have enough cash to upgrade.\nYou need **{upgrade_cost:,}** 💵")
+            return await ctx.fail(
+                f"You do not have enough cash to upgrade.\nYou need **{upgrade_cost:,}** 💵"
+            )
 
         new_storage = user_lab["storage"] + storage_increase
-        await self.bot.db.execute("UPDATE economy SET balance = balance - $1 WHERE user_id = $2", upgrade_cost, ctx.author.id)
+        await self.bot.db.execute(
+            "UPDATE economy SET balance = balance - $1 WHERE user_id = $2",
+            upgrade_cost,
+            ctx.author.id,
+        )
         await self.update_lab(ctx.author.id, level=level + 1, storage=new_storage)
 
-        await ctx.success(f"Your **Laboratory** has been upgraded to Level **{level + 1}**! 📈")
+        await ctx.success(
+            f"Your **Laboratory** has been upgraded to Level **{level + 1}**! 📈"
+        )
 
     @lab.command()
     @commands.cooldown(1, 10, commands.BucketType.guild)
@@ -2733,8 +3089,9 @@ class Economy(commands.Cog):
 
         if amount < 1 or amount > 5:
 
-            return await ctx.fail("You can only buy between **1** and **5** ampoules at a time!")
-
+            return await ctx.fail(
+                "You can only buy between **1** and **5** ampoules at a time!"
+            )
 
         user_lab = await self.get_lab(ctx.author.id)
         if not user_lab:
@@ -2743,20 +3100,32 @@ class Economy(commands.Cog):
         max_ampoules = 50
         current_ampoules = user_lab.get("ampoules", 1)
         if current_ampoules + amount > max_ampoules:
-            return await ctx.fail(f"You already have the maximum **{max_ampoules}** ampoules.")
+            return await ctx.fail(
+                f"You already have the maximum **{max_ampoules}** ampoules."
+            )
 
         cost_per_ampoule = 10_276
         total_cost = amount * cost_per_ampoule
 
-        balance = await self.bot.db.fetchval("SELECT balance FROM economy WHERE user_id = $1", ctx.author.id)
+        balance = await self.bot.db.fetchval(
+            "SELECT balance FROM economy WHERE user_id = $1", ctx.author.id
+        )
         if balance < total_cost:
-            return await ctx.fail(f"You do not have enough cash to buy **{amount}** ampoules.\nTotal cost: **{total_cost:,}** 💵")
+            return await ctx.fail(
+                f"You do not have enough cash to buy **{amount}** ampoules.\nTotal cost: **{total_cost:,}** 💵"
+            )
 
         new_ampoules = user_lab["ampoules"] + amount
-        await self.bot.db.execute("UPDATE economy SET balance = balance - $1 WHERE user_id = $2", total_cost, ctx.author.id)
+        await self.bot.db.execute(
+            "UPDATE economy SET balance = balance - $1 WHERE user_id = $2",
+            total_cost,
+            ctx.author.id,
+        )
         await self.update_lab(ctx.author.id, ampoules=new_ampoules)
 
-        await ctx.success(f"You bought **{amount}** ampoules! Your earnings per hour increased. <:ampoule:1337841915177205875>")
+        await ctx.success(
+            f"You bought **{amount}** ampoules! Your earnings per hour increased. <:ampoule:1337841915177205875>"
+        )
 
     @lab.command()
     async def collect(self, ctx):
@@ -2770,10 +3139,16 @@ class Economy(commands.Cog):
         if earnings == 0:
             return await ctx.fail("You have no earnings to collect.")
 
-        await self.bot.db.execute("UPDATE economy SET balance = balance + $1 WHERE user_id = $2", earnings, ctx.author.id)
+        await self.bot.db.execute(
+            "UPDATE economy SET balance = balance + $1 WHERE user_id = $2",
+            earnings,
+            ctx.author.id,
+        )
         await self.update_lab(ctx.author.id, earnings=0)
 
-        await ctx.success(f"You collected **{earnings:,}** 💵 from your laboratory! <:ampoule:1337841915177205875>")
+        await ctx.success(
+            f"You collected **{earnings:,}** 💵 from your laboratory! <:ampoule:1337841915177205875>"
+        )
 
     @lab.command()
     async def status(self, ctx):
@@ -2791,83 +3166,99 @@ class Economy(commands.Cog):
         next_upgrade_cost = 329_142 * level
 
         embed = discord.Embed(title="Laboratory Status", color=self.bot.color)
-        embed.add_field(name="Ampoules <:ampoule:1337841915177205875>", value=f"```{ampoules:,}```", inline=True)
+        embed.add_field(
+            name="Ampoules <:ampoule:1337841915177205875>",
+            value=f"```{ampoules:,}```",
+            inline=True,
+        )
         embed.add_field(name="Upgrade State", value=f"```{level}```", inline=True)
-        embed.add_field(name="Earnings per Hour", value=f"```💵 {earnings_per_hour:,}```", inline=False)
-        embed.add_field(name="Next Upgrade Cost", value=f"```💵 {next_upgrade_cost:,}```", inline=False)
-        embed.add_field(name="Current Earnings", value=f"```💵 {earnings:,}```", inline=True)
-        embed.add_field(name="Storage Limit", value=f"```💵 {storage:,}```", inline=True)
+        embed.add_field(
+            name="Earnings per Hour",
+            value=f"```💵 {earnings_per_hour:,}```",
+            inline=False,
+        )
+        embed.add_field(
+            name="Next Upgrade Cost",
+            value=f"```💵 {next_upgrade_cost:,}```",
+            inline=False,
+        )
+        embed.add_field(
+            name="Current Earnings", value=f"```💵 {earnings:,}```", inline=True
+        )
+        embed.add_field(
+            name="Storage Limit", value=f"```💵 {storage:,}```", inline=True
+        )
         await ctx.send(embed=embed)
-
-
 
     @commands.command(
         name="scratch",
         brief="Buy a scratch card and test your luck",
         example=",scratch 1000",
     )
-    @commands.cooldown(1, 30, commands.BucketType.user)
+    @commands.cooldown(1, 10, commands.BucketType.user)
     @account()
     async def scratch(self, ctx: commands.Context, amount: GambleAmount):
         """
         Buy a scratch card with 9 covered squares.
-        Match 3 symbols to win: 
-        - 💎 (10x) 
-        - 💰 (5x) 
-        - 🎲 (3x) 
+        Match 3 symbols to win:
+        - 💎 (10x)
+        - 💰 (5x)
+        - 🎲 (3x)
         - 🎯 (2x)
         """
         balance = await self.bot.db.fetchval(
             "SELECT balance FROM economy WHERE user_id = $1", ctx.author.id
         )
-        
+
         if balance < amount:
-            return await ctx.fail(f"You don't have enough money! Your balance is ${balance:,}")
-        
+            return await ctx.fail(
+                f"You don't have enough money! Your balance is ${balance:,}"
+            )
+
         await self.update_balance(ctx.author, "Take", amount)
-        
-        symbols = {
-            "💎": 10,
-            "💰": 5, 
-            "🎲": 3, 
-            "🎯": 2  
-        }
-        
+
+        symbols = {"💎": 10, "💰": 5, "🎲": 3, "🎯": 2}
+
         grid_symbols = []
         symbol_list = list(symbols.keys())
-        
+
         winning_symbol = None
         will_win = random.random() < 0.2
-        
+
         if will_win:
             winning_symbol = random.choice(symbol_list)
             winning_positions = random.sample(range(9), 3)
-            
+
             for i in range(9):
                 if i in winning_positions:
                     grid_symbols.append(winning_symbol)
                 else:
                     random_symbol = random.choice(symbol_list)
-                    while random_symbol == winning_symbol and grid_symbols.count(winning_symbol) >= 2:
+                    while (
+                        random_symbol == winning_symbol
+                        and grid_symbols.count(winning_symbol) >= 2
+                    ):
                         random_symbol = random.choice(symbol_list)
                     grid_symbols.append(random_symbol)
         else:
             for i in range(9):
                 available_symbols = symbol_list.copy()
-                
+
                 for symbol in symbol_list:
                     if grid_symbols.count(symbol) >= 2:
                         if symbol in available_symbols:
                             available_symbols.remove(symbol)
-                
+
                 if not available_symbols:
                     symbol_counts = {s: grid_symbols.count(s) for s in symbol_list}
                     min_count = min(symbol_counts.values())
-                    least_common = [s for s, c in symbol_counts.items() if c == min_count]
+                    least_common = [
+                        s for s, c in symbol_counts.items() if c == min_count
+                    ]
                     grid_symbols.append(random.choice(least_common))
                 else:
                     grid_symbols.append(random.choice(available_symbols))
-        
+
         class ScratchCardView(discord.ui.View):
             def __init__(self, ctx, bot, grid_symbols, amount, symbols):
                 super().__init__(timeout=60)
@@ -2879,141 +3270,150 @@ class Economy(commands.Cog):
                 self.scratched = [False] * 9
                 self.message = None
                 self.game_ended = False
-                
+
                 for i in range(9):
                     row = i // 3
                     button = discord.ui.Button(
-                        label="❓", 
+                        label="❓",
                         style=discord.ButtonStyle.secondary,
-                        row=row, 
-                        custom_id=str(i)
+                        row=row,
+                        custom_id=str(i),
                     )
                     button.callback = self.scratch_callback
                     self.add_item(button)
-                
 
             async def scratch_callback(self, interaction: discord.Interaction):
                 if interaction.user != self.ctx.author:
-                    return await interaction.response.send_message("This isn't your scratch card!", ephemeral=True)
-                
+                    return await interaction.response.send_message(
+                        "This isn't your scratch card!", ephemeral=True
+                    )
+
                 if self.game_ended:
                     return await interaction.response.defer()
-                
+
                 button_idx = int(interaction.data["custom_id"])
-                
+
                 self.scratched[button_idx] = True
-                
+
                 await self.update_view(interaction)
-                
+
                 await self.check_win(interaction)
-            
+
             async def update_view(self, interaction):
-                for i, (button, scratched) in enumerate(zip(self.children[:9], self.scratched)):
+                for i, (button, scratched) in enumerate(
+                    zip(self.children[:9], self.scratched)
+                ):
                     if scratched:
                         button.label = self.grid_symbols[i]
                         button.disabled = True
-                
-                await interaction.response.edit_message(embed=self.get_embed(), view=self)
-            
+
+                await interaction.response.edit_message(
+                    embed=self.get_embed(), view=self
+                )
+
             async def check_win(self, interaction=None):
                 if self.game_ended:
                     return
-                
+
                 symbol_counts = {}
                 for i, scratched in enumerate(self.scratched):
                     if scratched:
                         symbol = self.grid_symbols[i]
                         symbol_counts[symbol] = symbol_counts.get(symbol, 0) + 1
-                
+
                 for symbol, count in symbol_counts.items():
                     if count >= 3:
                         self.game_ended = True
                         multiplier = self.symbols[symbol]
                         winnings = int(self.amount * multiplier)
-                        
+
                         await self.bot.db.execute(
                             "UPDATE economy SET balance = balance + $1 WHERE user_id = $2",
-                            winnings, self.ctx.author.id
+                            winnings,
+                            self.ctx.author.id,
                         )
-                        
+
                         for button in self.children:
                             button.disabled = True
-                        
+
                         self.scratched = [True] * 9
                         for i, button in enumerate(self.children[:9]):
                             button.label = self.grid_symbols[i]
-                        
+
                         win_embed = discord.Embed(
                             title="🎊 Scratch Card Winner! 🎊",
                             description=f"You matched 3 {symbol} symbols and won **${winnings:,}**!\n"
-                                       f"Multiplier: {multiplier}x",
-                            color=0x2ecc71
+                            f"Multiplier: {multiplier}x",
+                            color=0x2ECC71,
                         )
-                        
+
                         if interaction:
-                            await interaction.edit_original_response(embed=win_embed, view=self)
+                            await interaction.edit_original_response(
+                                embed=win_embed, view=self
+                            )
                         elif self.message:
                             await self.message.edit(embed=win_embed, view=self)
                         return True
-                
+
                 if all(self.scratched) and not self.game_ended:
                     self.game_ended = True
                     for button in self.children:
                         button.disabled = True
-                    
+
                     loss_embed = discord.Embed(
                         title="❌ Scratch Card - No Match",
                         description=f"You didn't match 3 symbols. Better luck next time!\n"
-                                   f"You lost **${self.amount:,}**.",
-                        color=0xe74c3c
+                        f"You lost **${self.amount:,}**.",
+                        color=0xE74C3C,
                     )
-                    
+
                     if interaction:
-                        await interaction.edit_original_response(embed=loss_embed, view=self)
+                        await interaction.edit_original_response(
+                            embed=loss_embed, view=self
+                        )
                     elif self.message:
                         await self.message.edit(embed=loss_embed, view=self)
                     return False
-                
+
                 return False
-            
+
             def get_embed(self):
                 embed = discord.Embed(
                     title="🎫 Scratch Card",
                     description=f"Scratch to reveal symbols. Match 3 to win!\n"
-                               f"Cost: **${self.amount:,}**\n\n"
-                               f"Rewards:\n"
-                               f"- 💎 = 10x\n"
-                               f"- 💰 = 5x\n"
-                               f"- 🎲 = 3x\n"
-                               f"- 🎯 = 2x",
-                    color=self.ctx.bot.color
+                    f"Cost: **${self.amount:,}**\n\n"
+                    f"Rewards:\n"
+                    f"- 💎 = 10x\n"
+                    f"- 💰 = 5x\n"
+                    f"- 🎲 = 3x\n"
+                    f"- 🎯 = 2x",
+                    color=self.ctx.bot.color,
                 )
                 return embed
-            
+
             async def on_timeout(self):
                 if not self.game_ended:
                     for button in self.children:
                         button.disabled = True
-                    
+
                     timeout_embed = discord.Embed(
                         title="⏰ Scratch Card - Timed Out",
                         description="The scratch card game timed out. All squares have been revealed.",
-                        color=0xf39c12
+                        color=0xF39C12,
                     )
-                    
+
                     self.scratched = [True] * 9
                     for i, button in enumerate(self.children[:9]):
                         button.label = self.grid_symbols[i]
-                    
+
                     await self.message.edit(embed=timeout_embed, view=self)
-                    
+
                     await self.check_win()
-        
+
         view = ScratchCardView(ctx, self.bot, grid_symbols, amount, symbols)
         embed = view.get_embed()
         view.message = await ctx.send(embed=embed, view=view)
 
 
-
-async def setup(bot):    
+async def setup(bot):
     await bot.add_cog(Economy(bot))

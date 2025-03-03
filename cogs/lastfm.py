@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 from typing import Generator, List
 from PIL import Image
 from io import BytesIO
@@ -17,6 +18,10 @@ from PIL import ImageDraw, ImageFont
 from tool.worker import offloaded
 import requests
 from PIL import ImageOps
+import hashlib
+import urllib.parse
+from config import Authorization
+
 
 @offloaded
 def generate_collage(track_info):
@@ -24,10 +29,10 @@ def generate_collage(track_info):
     collage_size = 900
     padding = 2
     text_height = 20
-    
+
     total_size = collage_size + padding * 4
     collage = Image.new("RGB", (total_size, total_size), color="black")
-    
+
     try:
         font = ImageFont.truetype("arial.ttf", 15)
     except:
@@ -47,63 +52,74 @@ def generate_collage(track_info):
             try:
                 x = (i % 3) * (size + padding) + padding
                 y = (i // 3) * (size + padding) + padding
-                
-                response = session.get(info['url'], timeout=5)
+
+                response = session.get(info["url"], timeout=5)
                 if response.status_code == 200:
                     try:
                         image_data = BytesIO(response.content)
-                        img = Image.open(image_data).convert('RGB')
-                        
+                        img = Image.open(image_data).convert("RGB")
+
                         img_w, img_h = img.size
-                        ratio = min(size/img_w, size/img_h)
-                        new_size = (int(img_w*ratio), int(img_h*ratio))
-                        
+                        ratio = min(size / img_w, size / img_h)
+                        new_size = (int(img_w * ratio), int(img_h * ratio))
+
                         img = img.resize(new_size, Image.Resampling.LANCZOS)
-                        
-                        new_img = Image.new('RGB', (size, size), 'black')
+
+                        new_img = Image.new("RGB", (size, size), "black")
                         paste_x = (size - new_size[0]) // 2
                         paste_y = (size - new_size[1]) // 2
                         new_img.paste(img, (paste_x, paste_y))
-                        
+
                         collage.paste(new_img, (x, y))
-                        
+
                         draw = ImageDraw.Draw(collage)
                         text = f"{shorten(info['title'], 30)} {info['plays']}"
-                        
+
                         text_width = draw.textlength(text, font=font)
                         text_x = x + (size - text_width) / 2
                         text_y = y + size - text_height - 5
-                        
+
                         bg_padding = 6
                         draw.rectangle(
                             [
                                 text_x - bg_padding,
-                                text_y - bg_padding/2,
+                                text_y - bg_padding / 2,
                                 text_x + text_width + bg_padding,
-                                text_y + text_height + bg_padding/2
+                                text_y + text_height + bg_padding / 2,
                             ],
-                            fill='black'
+                            fill="black",
                         )
-                        
-                        outline_color = 'black'
+
+                        outline_color = "black"
                         for adj in range(-1, 2):
                             for adj2 in range(-1, 2):
-                                draw.text((text_x+adj, text_y+adj2), text, font=font, fill=outline_color)
-                        draw.text((text_x, text_y), text, font=font, fill='white')
-                        
+                                draw.text(
+                                    (text_x + adj, text_y + adj2),
+                                    text,
+                                    font=font,
+                                    fill=outline_color,
+                                )
+                        draw.text((text_x, text_y), text, font=font, fill="white")
+
                     except Exception as e:
                         print(f"Error processing image {i}: {e}")
                         draw = ImageDraw.Draw(collage)
-                        draw.rectangle([x, y, x+size, y+size], fill='#2F3136', outline='#202225')
-                        
+                        draw.rectangle(
+                            [x, y, x + size, y + size],
+                            fill="#2F3136",
+                            outline="#202225",
+                        )
+
             except Exception as e:
                 print(f"Error fetching image {i}: {e}")
                 draw = ImageDraw.Draw(collage)
-                draw.rectangle([x, y, x+size, y+size], fill='#2F3136', outline='#202225')
+                draw.rectangle(
+                    [x, y, x + size, y + size], fill="#2F3136", outline="#202225"
+                )
 
     try:
-        final_collage = ImageOps.expand(collage, border=2, fill='#202225')
-        
+        final_collage = ImageOps.expand(collage, border=2, fill="#202225")
+
         output = BytesIO()
         final_collage.save(output, format="PNG", quality=95, optimize=True)
         output.seek(0)
@@ -284,9 +300,7 @@ class LastFMLikes(discord.ui.View, menus.MenuPages):
         else:
             return interaction.user == self.ctx.author
 
-    @discord.ui.button(
-        emoji=EMOJIS["pages_previous"], style=discord.ButtonStyle.grey
-    )
+    @discord.ui.button(emoji=EMOJIS["pages_previous"], style=discord.ButtonStyle.grey)
     async def before_page(self, interaction, button):  # type: ignore
         if self.current_page == self._source.get_max_pages() - 1:
             return await interaction.response.defer()
@@ -296,9 +310,7 @@ class LastFMLikes(discord.ui.View, menus.MenuPages):
             await self.show_checked_page(self.current_page - 1)
         # await interaction.response.defer()
 
-    @discord.ui.button(
-        emoji=EMOJIS['next'], style=discord.ButtonStyle.grey
-    )
+    @discord.ui.button(emoji=EMOJIS["next"], style=discord.ButtonStyle.grey)
     async def next_page(self, interaction, button):  # type: ignore
         if self.current_page == self._source.get_max_pages() - 1:
             return await interaction.response.defer()
@@ -307,9 +319,7 @@ class LastFMLikes(discord.ui.View, menus.MenuPages):
         else:
             await self.show_checked_page(self.current_page + 1)
 
-    @discord.ui.button(
-        emoji=EMOJIS["stop"], style=discord.ButtonStyle.grey
-    )
+    @discord.ui.button(emoji=EMOJIS["stop"], style=discord.ButtonStyle.grey)
     async def delete(self, interaction, button):  # type: ignore
         return await interaction.response.send_modal(
             DeleteInput(self.bot, self.ctx, self.data)
@@ -328,6 +338,66 @@ class LastFMHTTPRequester:
         async with aiohttp.ClientSession() as session:
             async with session.get(self.BASE_URL, params=params) as resp:
                 return await resp.json()
+
+
+class LastFMLoginView(discord.ui.View):
+    def __init__(self, ctx, username=None):
+        super().__init__(timeout=60)
+        self.ctx = ctx
+        self.username = username
+        self.value = None
+
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
+
+        try:
+            await self.message.edit(view=self)
+        except:
+            pass
+
+    @discord.ui.button(label="OAuth Login", style=discord.ButtonStyle.green)
+    async def oauth_login(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        if interaction.user.id != self.ctx.author.id:
+            return await interaction.response.send_message(
+                "This is not your login choice.", ephemeral=True
+            )
+
+        self.value = "oauth"
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(view=self)
+        self.stop()
+
+    @discord.ui.button(label="Username Only", style=discord.ButtonStyle.gray)
+    async def username_only(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        if interaction.user.id != self.ctx.author.id:
+            return await interaction.response.send_message(
+                "This is not your login choice.", ephemeral=True
+            )
+
+        self.value = "username"
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(view=self)
+        self.stop()
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.red)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.ctx.author.id:
+            return await interaction.response.send_message(
+                "This is not your login choice.", ephemeral=True
+            )
+
+        self.value = "cancel"
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(view=self)
+        self.stop()
 
 
 class LastFM(commands.Cog):
@@ -394,51 +464,143 @@ class LastFM(commands.Cog):
         name="set",
         aliases=["link"],
         brief="Link a LastFM account to your user",
-        example=",lastfm set sudosql_dev",
+        example=",lastfm set yurrion",
     )
-    async def set(self, ctx: Context, *, username: str):
+    async def set(self, ctx: Context, *, username: str = None):
+        if username is None:
+            return await ctx.fail("Please provide a LastFM username.")
+
         if await self.bot.redis.get(f"lfindex:{ctx.author.id}"):
             return await ctx.fail("You are already setting your last.fm username.")
+
+        # Validate username first
         req = await self.bot.session.get(f"https://www.last.fm/user/{username}")
         if req.status == 404:
             return await ctx.fail("Invalid username.")
 
-        await self.bot.db.execute(
-            "INSERT INTO lastfm.conf VALUES ($1, $2, $3, $4) ON CONFLICT (user_id) DO UPDATE SET username = $2",
-            ctx.author.id,
-            username,
-            "👍",
-            "👎",
+        # Create and send the confirmation view
+        embed = discord.Embed(
+            title="LastFM Login Options",
+            description=(
+                "Please choose how you want to connect your LastFM account:\n\n"
+                "**OAuth Login**: Full integration with LastFM. This allows:\n"
+                "• Scrobbling tracks while playing music in voice channels\n"
+                "• Loving/unloving tracks directly from Discord\n"
+                "• Access to more LastFM features\n\n"
+                "**Username Only**: Basic integration. Only allows viewing your LastFM stats."
+            ),
+            color=0x2B2D31,
         )
-        artists, tracks = await asyncio.gather(
-            *[
-                self.requester.get(method="user.gettopartists", user=username),
-                self.requester.get(method="user.gettoptracks", user=username),
-            ]
-        )
-        if artists:
-            records = [
-                {"name": artist["name"], "plays": int(artist["playcount"])}
-                for artist in artists["topartists"]["artist"]
-            ]
+
+        view = LastFMLoginView(ctx, username)
+        view.message = await ctx.send(embed=embed, view=view)
+
+        await view.wait()
+
+        if view.value == "cancel":
+            return await ctx.fail("LastFM setup cancelled.")
+        elif view.value == "oauth":
+            return await self.lastfm_login_cmd(ctx)
+        elif view.value == "username":
+            if session_key := await self.bot.db.fetchval(
+                "SELECT session_key FROM lastfm.conf WHERE user_id = $1", ctx.author.id
+            ):
+                await self.bot.db.execute(
+                    "UPDATE lastfm.conf SET session_key = NULL WHERE user_id = $1",
+                    ctx.author.id,
+                )
             await self.bot.db.execute(
-                "INSERT INTO lastfm.users (user_id, username, artists) VALUES ($1, $2, $3) ON CONFLICT (user_id) DO UPDATE SET artists = $3",
+                "INSERT INTO lastfm.conf VALUES ($1, $2, $3, $4) ON CONFLICT (user_id) DO UPDATE SET username = $2",
                 ctx.author.id,
                 username,
-                orjson.dumps(records).decode(),
+                "👍",
+                "👎",
             )
-        if tracks:
-            records = [
-                {"name": track["name"], "plays": int(track["playcount"])}
-                for track in tracks["toptracks"]["track"]
-            ]
-            await self.bot.db.execute(
-                "INSERT INTO lastfm.users (user_id, username, tracks) VALUES ($1, $2, $3) ON CONFLICT (user_id) DO UPDATE SET tracks = $3",
-                ctx.author.id,
-                username,
-                orjson.dumps(records).decode(),
+            artists, tracks = await asyncio.gather(
+                *[
+                    self.requester.get(method="user.gettopartists", user=username),
+                    self.requester.get(method="user.gettoptracks", user=username),
+                ]
             )
-        return await ctx.success(f"**last.fm username** set to `{username}`")
+            if artists:
+                records = [
+                    {"name": artist["name"], "plays": int(artist["playcount"])}
+                    for artist in artists["topartists"]["artist"]
+                ]
+                await self.bot.db.execute(
+                    "INSERT INTO lastfm.users (user_id, username, artists) VALUES ($1, $2, $3) ON CONFLICT (user_id) DO UPDATE SET artists = $3",
+                    ctx.author.id,
+                    username,
+                    orjson.dumps(records).decode(),
+                )
+            if tracks:
+                records = [
+                    {"name": track["name"], "plays": int(track["playcount"])}
+                    for track in tracks["toptracks"]["track"]
+                ]
+                await self.bot.db.execute(
+                    "INSERT INTO lastfm.users (user_id, username, tracks) VALUES ($1, $2, $3) ON CONFLICT (user_id) DO UPDATE SET tracks = $3",
+                    ctx.author.id,
+                    username,
+                    orjson.dumps(records).decode(),
+                )
+            await self.bot.redis.set(f"lfindex:{ctx.author.id}", "1", ex=60)
+            await ctx.success(
+                f"Successfully set your Last.fm username to **{username}**."
+            )
+
+            try:
+                await self.index_user(ctx.author.id, artists, tracks)
+                await self.bot.redis.delete(f"lfindex:{ctx.author.id}")
+            except Exception as e:
+                await self.bot.redis.delete(f"lfindex:{ctx.author.id}")
+                await ctx.fail(f"Failed to index your Last.fm data: {e}")
+
+    @lastfm.command(
+        name="login", brief="Login to LastFM using OAuth", example=",lastfm login"
+    )
+    async def lastfm_login_cmd(self, ctx: Context):
+        """Login to LastFM using OAuth authentication"""
+        try:
+            if not hasattr(Authorization, "LastFM"):
+                return await ctx.fail(
+                    "LastFM authorization is not properly configured."
+                )
+            tracking_id = hashlib.md5(
+                f"{ctx.author.id}{datetime.datetime.now().timestamp()}".encode()
+            ).hexdigest()
+
+            if not hasattr(Authorization.LastFM, "pending_auth"):
+                Authorization.LastFM.pending_auth = {}
+
+            Authorization.LastFM.pending_auth[tracking_id] = ctx.author.id
+
+            callback_url = f"{Authorization.LastFM.cb_url}?tracking_id={tracking_id}"
+
+            auth_url = (
+                f"https://www.last.fm/api/auth/?"
+                f"api_key={Authorization.LastFM.api_key}&"
+                f"cb={urllib.parse.quote(callback_url)}"
+            )
+
+            embed = discord.Embed(
+                title="LastFM Authentication",
+                description=(
+                    f"Click [here]({auth_url}) to authenticate with LastFM\n\n"
+                ),
+                color=0x2B2D31,
+            )
+
+            try:
+                await ctx.author.send(embed=embed)
+                return await ctx.success("Check your DMs for the login link!")
+            except discord.Forbidden:
+                return await ctx.fail(
+                    "I couldn't send you a DM. Please enable DMs from server members."
+                )
+
+        except Exception as e:
+            return await ctx.fail(f"An error occurred: {str(e)}")
 
     @lastfm.command(
         name="refresh", brief="Refresh your lastFM data", example=",lastfm refresh"
@@ -449,7 +611,9 @@ class LastFM(commands.Cog):
                 "SELECT * FROM lastfm.conf WHERE user_id = $1", ctx.author.id
             )
         ):
-            return await ctx.fail("You do **not** have a **Last.FM account linked** to link an account do ,lf set")
+            return await ctx.fail(
+                "You do **not** have a **Last.FM account linked** to link an account do ,lf set"
+            )
         artists, tracks = await asyncio.gather(
             *[
                 self.requester.get(method="user.gettopartists", user=conf.username),
@@ -652,8 +816,6 @@ class LastFM(commands.Cog):
             )
             return await asyncio.gather(*[m.add_reaction(r) for r in reacts])
 
-
-
     @lastfm.command(
         name="collage",
         aliases=["lc"],
@@ -661,14 +823,18 @@ class LastFM(commands.Cog):
         example=",lastfm collage [timespan]",
     )
     @commands.cooldown(1, 5, commands.BucketType.guild)
-    async def lastfm_recentartists(self, ctx: commands.Context, timespan: str = "overall"):
+    async def lastfm_recentartists(
+        self, ctx: commands.Context, timespan: str = "overall"
+    ):
         user = ctx.author
         if not (
             conf := await self.bot.db.fetchrow(
                 "SELECT * FROM lastfm.conf WHERE user_id = $1", user.id
             )
         ):
-            return await ctx.fail("You do **not** have a **Last.FM account linked** to link an account do ,lf set")
+            return await ctx.fail(
+                "You do **not** have a **Last.FM account linked** to link an account do ,lf set"
+            )
 
         period_map = {
             "7d": "7day",
@@ -678,22 +844,24 @@ class LastFM(commands.Cog):
             "1y": "12month",
             "overall": "overall",
             "lifetime": "overall",
-            "alltime": "overall"
+            "alltime": "overall",
         }
-        
+
         period = period_map.get(timespan.lower(), "overall")
 
         if period not in period_map.values():
-            return await ctx.fail("Invalid timespan. Valid options are 7d, 1m, 3m, 6m, 1y, and lifetime.")
+            return await ctx.fail(
+                "Invalid timespan. Valid options are 7d, 1m, 3m, 6m, 1y, and lifetime."
+            )
 
         data = await self.requester.get(
-            method="user.gettoptracks", 
-            user=conf.username, 
+            method="user.gettoptracks",
+            user=conf.username,
             limit=9,  # Only request what we need
-            period=period
+            period=period,
         )
         message = await ctx.normal("Generating collage...")
-        
+
         if "error" in data:
             return await ctx.fail("Invalid username.")
 
@@ -708,46 +876,63 @@ class LastFM(commands.Cog):
         for track in tracks[:9]:  # Limit to 9 tracks
             # Get album info to fetch higher quality images
             album_data = await self.requester.get(
-            method="track.getInfo",
-            track=track['name'],
-            artist=track['artist']['name'],
-            username=conf.username
+                method="track.getInfo",
+                track=track["name"],
+                artist=track["artist"]["name"],
+                username=conf.username,
             )
-            
+
             # Try to get image from album info first, then fallback to track images
             image_url = None
-            if 'track' in album_data and 'album' in album_data['track']:
-                images = album_data['track']['album'].get('image', [])
-                image_url = next((img.get("#text") for img in images if img.get("size") == "large" and img.get("#text")), None)
-                
+            if "track" in album_data and "album" in album_data["track"]:
+                images = album_data["track"]["album"].get("image", [])
+                image_url = next(
+                    (
+                        img.get("#text")
+                        for img in images
+                        if img.get("size") == "large" and img.get("#text")
+                    ),
+                    None,
+                )
+
             if not image_url:
-                image_url = next((img.get("#text") for img in track.get("image", []) if img.get("size") == "large" and img.get("#text")), None)
-            
-            track_info.append({
-            'url': image_url or default_image_url,
-            'title': f"{track['artist']['name']} - {track['name']}",
-            'plays': f"({track['playcount']} plays)"
-            })
+                image_url = next(
+                    (
+                        img.get("#text")
+                        for img in track.get("image", [])
+                        if img.get("size") == "large" and img.get("#text")
+                    ),
+                    None,
+                )
+
+            track_info.append(
+                {
+                    "url": image_url or default_image_url,
+                    "title": f"{track['artist']['name']} - {track['name']}",
+                    "plays": f"({track['playcount']} plays)",
+                }
+            )
 
         # Fill remaining slots if needed
         while len(track_info) < 9:
-            track_info.append({
-            'url': default_image_url,
-            'title': "No track",
-            'plays': ""
-            })
+            track_info.append(
+                {"url": default_image_url, "title": "No track", "plays": ""}
+            )
 
         # Generate the collage with text
         collage = await generate_collage(track_info)
         file = discord.File(collage, "top_tracks_collage.png")
 
-        timespan_display = timespan.lower() if timespan.lower() != "overall" else "all time"
+        timespan_display = (
+            timespan.lower() if timespan.lower() != "overall" else "all time"
+        )
         embed = discord.Embed(
             title=f"{user.display_name}'s Top Tracks - {timespan_display}",
             color=0x2B2D31,
         ).set_image(url="attachment://top_tracks_collage.png")
 
         await message.edit(content=None, attachments=[file], embed=embed)
+
     @lastfm.command(
         name="reaction",
         aliases=["react", "reacts"],
@@ -812,7 +997,9 @@ class LastFM(commands.Cog):
         if not await self.bot.db.fetchrow(
             "SELECT * FROM lastfm.conf WHERE user_id = $1", ctx.author.id
         ):
-            return await ctx.fail("You do **not** have a **Last.FM account linked** to link an account do ,lf set")
+            return await ctx.fail(
+                "You do **not** have a **Last.FM account linked** to link an account do ,lf set"
+            )
 
         if code in ["clear", "reset", "delete", "remove"]:
             await self.bot.db.execute(
@@ -860,7 +1047,9 @@ class LastFM(commands.Cog):
         if not await self.bot.db.fetchrow(
             "SELECT * FROM lastfm.conf WHERE user_id = $1", ctx.author.id
         ):
-            return await ctx.fail("You do **not** have a **Last.FM account linked** to link an account do ,lf set")
+            return await ctx.fail(
+                "You do **not** have a **Last.FM account linked** to link an account do ,lf set"
+            )
 
         if command in ["clear", "reset", "delete", "remove"]:
             await self.bot.db.execute(
@@ -889,7 +1078,9 @@ class LastFM(commands.Cog):
                 "SELECT * FROM lastfm.conf WHERE user_id = $1", ctx.author.id
             )
         ):
-            return await ctx.fail("You do **not** have a **Last.FM account linked** to link an account do ,lf set")
+            return await ctx.fail(
+                "You do **not** have a **Last.FM account linked** to link an account do ,lf set"
+            )
 
         if not artist:
             data = (
@@ -1039,7 +1230,9 @@ class LastFM(commands.Cog):
                 "SELECT * FROM lastfm.conf WHERE user_id = $1", ctx.author.id
             )
         ):
-            return await ctx.fail("You do **not** have a **Last.FM account linked** to link an account do ,lf set")
+            return await ctx.fail(
+                "You do **not** have a **Last.FM account linked** to link an account do ,lf set"
+            )
         if not artist_name:
             data = await self.requester.get(
                 method="user.getrecenttracks", user=conf.username
@@ -1101,17 +1294,21 @@ class LastFM(commands.Cog):
                 )
             )
         return await ctx.paginate(embeds)
-    
+
     @lastfm_whoknows.command(
-        name="global", 
+        name="global",
         brief="Shows what other users listen to the current track globally",
-        example=",lastfm whoknows global Juice Wrld"
+        example=",lastfm whoknows global Juice Wrld",
     )
     async def lastfm_whoknows_global(self, ctx: Context, *, artist_name: str = None):
-        if not (conf := await self.bot.db.fetchrow(
-            "SELECT * FROM lastfm.conf WHERE user_id = $1", ctx.author.id
-        )):
-            return await ctx.fail("You do **not** have a **Last.FM account linked** to link an account do ,lf set")
+        if not (
+            conf := await self.bot.db.fetchrow(
+                "SELECT * FROM lastfm.conf WHERE user_id = $1", ctx.author.id
+            )
+        ):
+            return await ctx.fail(
+                "You do **not** have a **Last.FM account linked** to link an account do ,lf set"
+            )
 
         if not artist_name:
             data = await self.requester.get(
@@ -1135,7 +1332,9 @@ class LastFM(commands.Cog):
                     if artist["name"].lower() == artist_name.lower()
                 )
                 if plays > 0:
-                    user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
+                    user = self.bot.get_user(user_id) or await self.bot.fetch_user(
+                        user_id
+                    )
                     return {
                         "user_id": user_id,
                         "username": user.display_name if user else "Unknown",
@@ -1143,7 +1342,9 @@ class LastFM(commands.Cog):
                     }
                 return None
 
-            data = await asyncio.gather(*[process_user(user_data) for user_data in users_data])
+            data = await asyncio.gather(
+                *[process_user(user_data) for user_data in users_data]
+            )
             data = [item for item in data if item]
 
             data.sort(key=lambda x: x["plays"], reverse=True)
@@ -1174,7 +1375,7 @@ class LastFM(commands.Cog):
 
             if not embeds:
                 return await ctx.fail("No plays found for this artist.")
-                
+
             return await ctx.paginate(embeds)
 
     @lastfm.command(
@@ -1190,17 +1391,17 @@ class LastFM(commands.Cog):
                 "SELECT * FROM lastfm.conf WHERE user_id = $1", user.id
             )
         ):
-            return await ctx.fail("You do **not** have a **Last.FM account linked** to link an account do ,lf set")
+            return await ctx.fail(
+                "You do **not** have a **Last.FM account linked** to link an account do ,lf set"
+            )
 
-        data = await self.requester.get(
-            method="user.gettopartists", user=conf.username
-        )
+        data = await self.requester.get(method="user.gettopartists", user=conf.username)
         if "error" in data:
             return await ctx.fail("Invalid username.")
 
         artists = [
             f"> `{i+1}.` **{artist['name']}** - {artist['playcount']} plays"
-            for i, artist in enumerate(data["topartists"]["artist"]) 
+            for i, artist in enumerate(data["topartists"]["artist"])
         ]
         embeds = []
         for i, chunk in enumerate(chunks(artists, 10), start=1):
@@ -1209,13 +1410,14 @@ class LastFM(commands.Cog):
                     title=f"{conf.username}'s top artists",
                     description="\n".join(chunk),
                     color=0x2B2D31,
-                ).set_thumbnail(url=user.avatar.url if user else ctx.author.default_avatar.url)
+                ).set_thumbnail(
+                    url=user.avatar.url if user else ctx.author.default_avatar.url
+                )
             )
         if not embeds:
             return await ctx.fail("No artists found.")
 
         return await ctx.paginate(embeds)
-
 
     @lastfm.command(
         name="toptracks",
@@ -1230,11 +1432,11 @@ class LastFM(commands.Cog):
                 "SELECT * FROM lastfm.conf WHERE user_id = $1", user.id
             )
         ):
-            return await ctx.fail("You do **not** have a **Last.FM account linked** to link an account do ,lf set")
+            return await ctx.fail(
+                "You do **not** have a **Last.FM account linked** to link an account do ,lf set"
+            )
 
-        data = await self.requester.get(
-            method="user.gettoptracks", user=conf.username
-        )
+        data = await self.requester.get(method="user.gettoptracks", user=conf.username)
         if "error" in data:
             return await ctx.fail("Invalid username.")
 
@@ -1249,7 +1451,9 @@ class LastFM(commands.Cog):
                     title=f"{conf.username}'s top tracks",
                     description="\n".join(chunk),
                     color=0x2B2D31,
-                ).set_thumbnail(url=user.avatar.url if user else ctx.author.default_avatar.url)
+                ).set_thumbnail(
+                    url=user.avatar.url if user else ctx.author.default_avatar.url
+                )
             )
         if not embeds:
             return await ctx.fail("No tracks found.")
@@ -1269,11 +1473,11 @@ class LastFM(commands.Cog):
                 "SELECT * FROM lastfm.conf WHERE user_id = $1", user.id
             )
         ):
-            return await ctx.fail("You do **not** have a **Last.FM account linked** to link an account do ,lf set")
+            return await ctx.fail(
+                "You do **not** have a **Last.FM account linked** to link an account do ,lf set"
+            )
 
-        data = await self.requester.get(
-            method="user.gettopalbums", user=conf.username
-        )
+        data = await self.requester.get(method="user.gettopalbums", user=conf.username)
         if "error" in data:
             return await ctx.fail("Invalid username.")
 
@@ -1288,15 +1492,15 @@ class LastFM(commands.Cog):
                     title=f"{conf.username}'s top albums",
                     description="\n".join(chunk),
                     color=0x2B2D31,
-                ).set_thumbnail(url=user.avatar.url if user else ctx.author.default_avatar.url)
+                ).set_thumbnail(
+                    url=user.avatar.url if user else ctx.author.default_avatar.url
+                )
             )
         if not embeds:
             return await ctx.fail("No albums found.")
 
         return await ctx.paginate(embeds)
 
-    
-    
     @commands.command(
         name="fm",
         brief="View the last song you listened to on LastFM",
@@ -1313,35 +1517,32 @@ class LastFM(commands.Cog):
     )
     async def wk(self, ctx: Context, *, artist_name: str = None):
         return await self.lastfm_whoknows(ctx, artist_name=artist_name)
-    
+
     @commands.command(
         name="globalwhoknows",
         brief="Shows what other users listen to the current track globally",
         example=",globalwhoknows Juice Wrld",
-        aliases=["gwk", "globalwk"]
+        aliases=["gwk", "globalwk"],
     )
     async def globalwhoknows(self, ctx: Context, *, artist_name: str = None):
         return await self.lastfm_whoknows_global(ctx, artist_name=artist_name)
-    
+
     @lastfm.command(
         name="taste",
         brief="Compare your music taste with another user",
         example=",lastfm taste @user [period]",
     )
     async def lastfm_taste(
-        self, 
-        ctx: Context, 
-        member: discord.Member,
-        period: str = "overall"
+        self, ctx: Context, member: discord.Member, period: str = "overall"
     ):
         if member.id == ctx.author.id:
             return await ctx.fail("You cannot compare your taste with yourself")
 
         configs = await self.bot.db.fetch(
             """SELECT * FROM lastfm.conf WHERE user_id = any($1::bigint[])""",
-            [ctx.author.id, member.id]
+            [ctx.author.id, member.id],
         )
-        
+
         if len(configs) != 2:
             return await ctx.fail(
                 f"{'You' if not any(c.user_id == ctx.author.id for c in configs) else member.display_name} does not have a LastFM account linked"
@@ -1355,13 +1556,15 @@ class LastFM(commands.Cog):
             "1y": "12month",
             "overall": "overall",
             "lifetime": "overall",
-            "alltime": "overall"
+            "alltime": "overall",
         }
-        
+
         period = period_map.get(period.lower(), "overall")
-        
+
         if period not in period_map.values():
-            return await ctx.fail("Invalid period. Valid options are: 7d, 1m, 3m, 6m, 1y, and overall")
+            return await ctx.fail(
+                "Invalid period. Valid options are: 7d, 1m, 3m, 6m, 1y, and overall"
+            )
 
         async with ctx.typing():
             tasks = [
@@ -1369,17 +1572,20 @@ class LastFM(commands.Cog):
                     method="user.gettopartists",
                     user=conf.username,
                     period=period,
-                    limit=1000
-                ) for conf in configs
+                    limit=1000,
+                )
+                for conf in configs
             ]
-            
+
             data = await asyncio.gather(*tasks)
-            
+
             artists_data = []
             for i, response in enumerate(data):
                 if "error" in response:
-                    return await ctx.fail(f"Failed to fetch data for {configs[i].username}")
-                
+                    return await ctx.fail(
+                        f"Failed to fetch data for {configs[i].username}"
+                    )
+
                 artists = {}
                 for artist in response["topartists"]["artist"]:
                     artists[artist["name"]] = int(artist["playcount"])
@@ -1416,7 +1622,7 @@ class LastFM(commands.Cog):
             embed = discord.Embed(
                 title=f"Taste comparison - {ctx.author.display_name} v {member.display_name}",
                 description=description,
-                color=0x2B2D31
+                color=0x2B2D31,
             )
 
             return await ctx.send(embed=embed)
@@ -1424,9 +1630,11 @@ class LastFM(commands.Cog):
     @commands.command(
         name="taste",
         brief="Compare your music taste with another user",
-        example=",taste @user [period]"
+        example=",taste @user [period]",
     )
-    async def taste(self, ctx: Context, member: discord.Member, period: str = "overall"):
+    async def taste(
+        self, ctx: Context, member: discord.Member, period: str = "overall"
+    ):
         return await self.lastfm_taste(ctx, member, period)
 
     @lastfm.command(
@@ -1440,27 +1648,31 @@ class LastFM(commands.Cog):
                 "SELECT * FROM lastfm.conf WHERE user_id = $1", ctx.author.id
             )
         ):
-            return await ctx.fail("You do **not** have a **Last.FM account linked** to link an account do ,lf set")
+            return await ctx.fail(
+                "You do **not** have a **Last.FM account linked** to link an account do ,lf set"
+            )
 
         if number <= 0:
             return await ctx.fail("Please provide a positive number")
 
         # Get user info to check total scrobbles
         user_info = await self.requester.get(method="user.getinfo", user=conf.username)
-        
+
         if "error" in user_info:
             return await ctx.fail("Failed to fetch user information")
-            
+
         total_scrobbles = int(user_info["user"]["playcount"])
-        
+
         if number > total_scrobbles:
-            return await ctx.fail(f"You only have {total_scrobbles:,} scrobbles in total")
-            
+            return await ctx.fail(
+                f"You only have {total_scrobbles:,} scrobbles in total"
+            )
+
         # Calculate the page and index
         page_size = 200  # Last.fm API returns max 200 tracks per page
         page = (total_scrobbles - number) // page_size + 1
         index = (total_scrobbles - number) % page_size
-        
+
         async with ctx.typing():
             try:
                 # Fetch the specific page of recent tracks
@@ -1468,62 +1680,60 @@ class LastFM(commands.Cog):
                     method="user.getrecenttracks",
                     user=conf.username,
                     limit=page_size,
-                    page=page
+                    page=page,
                 )
-                
+
                 if "error" in recent_tracks:
                     return await ctx.fail("Failed to fetch track information")
-                
+
                 tracks = recent_tracks["recenttracks"]["track"]
-                
+
                 if not tracks or len(tracks) <= index:
                     return await ctx.fail("Could not find the track for this milestone")
-                
+
                 milestone_track = tracks[index]
-                
+
                 # Get additional track info
                 track_info = await self.requester.get(
                     method="track.getInfo",
                     artist=milestone_track["artist"]["#text"],
                     track=milestone_track["name"],
-                    username=conf.username
+                    username=conf.username,
                 )
-                
+
                 # Create embed
                 embed = discord.Embed(
                     title=f"Milestone #{number:,}",
                     description=f"**[{milestone_track['name']}]({milestone_track['url']})** by **[{milestone_track['artist']['#text']}](https://www.last.fm/music/{milestone_track['artist']['#text'].replace(' ', '+')})** was your {number:,} scrobble",
-                    color=0x2B2D31
+                    color=0x2B2D31,
                 )
-                
+
                 # Add album if available
                 if "album" in milestone_track and milestone_track["album"]["#text"]:
                     embed.add_field(
                         name="Album",
                         value=milestone_track["album"]["#text"],
-                        inline=True
+                        inline=True,
                     )
-                
+
                 # Add date if available
                 if "date" in milestone_track and milestone_track["date"]["#text"]:
                     embed.add_field(
-                        name="Date",
-                        value=milestone_track["date"]["#text"],
-                        inline=True
+                        name="Date", value=milestone_track["date"]["#text"], inline=True
                     )
-                
+
                 # Add thumbnail if available
                 if milestone_track["image"] and milestone_track["image"][-1]["#text"]:
                     embed.set_thumbnail(url=milestone_track["image"][-1]["#text"])
-                
+
                 # Add user info in footer
                 embed.set_footer(
                     text=f"{conf.username} • Total Scrobbles: {total_scrobbles:,}",
-                    icon_url=ctx.author.display_avatar.url
+                    icon_url=ctx.author.display_avatar.url,
                 )
-                
+
                 return await ctx.send(embed=embed)
-                
+
             except Exception as e:
                 return await ctx.fail(f"An error occurred: {str(e)}")
 
@@ -1534,6 +1744,41 @@ class LastFM(commands.Cog):
     )
     async def milestone(self, ctx: Context, number: int):
         return await self.lastfm_milestone(ctx, number)
+
+    async def index_user(
+        self, user_id: int, artists_data: dict, tracks_data: dict
+    ) -> None:
+        """Index a user's LastFM data into the database"""
+        try:
+            if artists_data:
+                records = [
+                    {"name": artist["name"], "plays": int(artist["playcount"])}
+                    for artist in artists_data["topartists"]["artist"]
+                ]
+                await self.bot.db.execute(
+                    """INSERT INTO lastfm.users (user_id, artists) 
+                    VALUES ($1, $2) ON CONFLICT (user_id) 
+                    DO UPDATE SET artists = $2""",
+                    user_id,
+                    orjson.dumps(records).decode(),
+                )
+
+            if tracks_data:
+                records = [
+                    {"name": track["name"], "plays": int(track["playcount"])}
+                    for track in tracks_data["toptracks"]["track"]
+                ]
+                await self.bot.db.execute(
+                    """INSERT INTO lastfm.users (user_id, tracks) 
+                    VALUES ($1, $2) ON CONFLICT (user_id) 
+                    DO UPDATE SET tracks = $2""",
+                    user_id,
+                    orjson.dumps(records).decode(),
+                )
+
+        except Exception as e:
+            raise Exception(f"Failed to index LastFM data: {str(e)}")
+
 
 async def setup(bot):
     await bot.add_cog(LastFM(bot))

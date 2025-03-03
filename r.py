@@ -1,5 +1,6 @@
 from loguru import logger
 from discord.globals import set_global
+
 set_global("logger", logger)
 
 from gc import get_referents

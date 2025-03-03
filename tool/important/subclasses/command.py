@@ -12,10 +12,12 @@ import unicodedata
 from loguru import logger
 from fast_string_match import closest_match
 
+
 @dataclass
 class MultipleArguments:
     first: str
     second: str
+
 
 DISCORD_ROLE_MENTION = re.compile(r"<@&(\d+)>")
 DISCORD_ID = re.compile(r"(\d+)")
@@ -25,19 +27,25 @@ DISCORD_MESSAGE = re.compile(
     r"(?:https?://)?(?:canary\.|ptb\.|www\.)?discord(?:app)?.(?:com/channels|gg)/(?P<guild_id>[0-9]{17,22})/(?P<channel_id>[0-9]{17,22})/(?P<message_id>[0-9]{17,22})"
 )
 
+
 class NonStrictMessage(commands.Converter):
     async def convert(self, ctx: Context, argument: str):
         if match := DISCORD_MESSAGE.match(argument):
             return match.group(3)
         return argument
 
+
 def has_permissions(**permissions):
     async def predicate(ctx: commands.Context):
-        if ctx.author.id in ctx.bot.owner_ids or ctx.author.guild_permissions.administrator:
+        if (
+            ctx.author.id in ctx.bot.owner_ids
+            or ctx.author.guild_permissions.administrator
+        ):
             return True
 
         missing_permissions = {
-            perm for perm, required in permissions.items()
+            perm
+            for perm, required in permissions.items()
             if required and not getattr(ctx.author.guild_permissions, perm, False)
         }
 
@@ -60,27 +68,64 @@ def has_permissions(**permissions):
 
     return commands.check(predicate)
 
+
 permissions = [
-    "create_instant_invite", "kick_members", "ban_members", "administrator",
-    "manage_channels", "manage_guild", "add_reactions", "view_audit_log",
-    "priority_speaker", "stream", "read_messages", "manage_members",
-    "send_messages", "send_tts_messages", "manage_messages", "embed_links",
-    "attach_files", "read_message_history", "mention_everyone", "external_emojis",
-    "view_guild_insights", "connect", "speak", "mute_members", "deafen_members",
-    "move_members", "use_voice_activation", "change_nickname", "manage_nicknames",
-    "manage_roles", "manage_webhooks", "manage_expressions", "use_application_commands",
-    "request_to_speak", "manage_events", "manage_threads", "create_public_threads",
-    "create_private_threads", "external_stickers", "send_messages_in_threads",
-    "use_embedded_activities", "moderate_members", "use_soundboard", "create_expressions",
-    "use_external_sounds", "send_voice_messages"
+    "create_instant_invite",
+    "kick_members",
+    "ban_members",
+    "administrator",
+    "manage_channels",
+    "manage_guild",
+    "add_reactions",
+    "view_audit_log",
+    "priority_speaker",
+    "stream",
+    "read_messages",
+    "manage_members",
+    "send_messages",
+    "send_tts_messages",
+    "manage_messages",
+    "embed_links",
+    "attach_files",
+    "read_message_history",
+    "mention_everyone",
+    "external_emojis",
+    "view_guild_insights",
+    "connect",
+    "speak",
+    "mute_members",
+    "deafen_members",
+    "move_members",
+    "use_voice_activation",
+    "change_nickname",
+    "manage_nicknames",
+    "manage_roles",
+    "manage_webhooks",
+    "manage_expressions",
+    "use_application_commands",
+    "request_to_speak",
+    "manage_events",
+    "manage_threads",
+    "create_public_threads",
+    "create_private_threads",
+    "external_stickers",
+    "send_messages_in_threads",
+    "use_embedded_activities",
+    "moderate_members",
+    "use_soundboard",
+    "create_expressions",
+    "use_external_sounds",
+    "send_voice_messages",
 ]
 
 commands.has_permissions = has_permissions
+
 
 @dataclass
 class FakePermissionEntry:
     role: discord.Role
     permissions: Union[str, List[str]]
+
 
 def validate_permissions(perms: Union[str, List[str]]):
     if isinstance(perms, str):
@@ -90,9 +135,12 @@ def validate_permissions(perms: Union[str, List[str]]):
             raise commands.CommandError(f"`{p}` is not a valid permission")
     return True
 
+
 class FakePermissionConverter(commands.Converter):
-    async def convert(self, ctx: Context, argument: str) -> Optional[FakePermissionEntry]:
-        args = [arg.strip() for arg in re.split(r'[ ,]', argument, 1)]
+    async def convert(
+        self, ctx: Context, argument: str
+    ) -> Optional[FakePermissionEntry]:
+        args = [arg.strip() for arg in re.split(r"[ ,]", argument, 1)]
         if len(args) != 2:
             raise commands.CommandError("please include a `,` between arguments")
         args[0] = await Role().convert(ctx, args[0])
@@ -100,12 +148,14 @@ class FakePermissionConverter(commands.Converter):
         validate_permissions(perms)
         return FakePermissionEntry(role=args[0], permissions=perms)
 
+
 class Argument(commands.Converter):
     async def convert(self, ctx: Context, argument: str) -> Optional[MultipleArguments]:
-        args = [arg.strip() for arg in re.split(r'[ ,]', argument, 1)]
+        args = [arg.strip() for arg in re.split(r"[ ,]", argument, 1)]
         if len(args) != 2:
             raise commands.CommandError("please include a `,` between arguments")
         return MultipleArguments(first=args[0], second=args[1])
+
 
 class Location(commands.Converter):
     async def convert(self, ctx: Context, argument: str):
@@ -119,8 +169,11 @@ class Location(commands.Converter):
                 return data.get("location")
             raise commands.CommandError(f"Location **{argument}** not found")
 
+
 class Emoji(commands.EmojiConverter):
-    async def convert(self, ctx: "Context", argument: str) -> Optional[Union[discord.Emoji, discord.PartialEmoji]]:
+    async def convert(
+        self, ctx: "Context", argument: str
+    ) -> Optional[Union[discord.Emoji, discord.PartialEmoji]]:
         try:
             return await super().convert(ctx, argument)
         except commands.EmojiNotFound:
@@ -133,6 +186,7 @@ class Emoji(commands.EmojiConverter):
                     raise commands.EmojiNotFound(argument)
             return argument
 
+
 class Sticker(GuildStickerConverter):
     async def convert(self, ctx: "Context", argument: str) -> Optional[GuildSticker]:
         if argument.isnumeric():
@@ -142,10 +196,11 @@ class Sticker(GuildStickerConverter):
                 raise
         return await super().convert(ctx, argument)
 
+
 class TextChannel(commands.TextChannelConverter):
     async def convert(self, ctx: Context, argument: str):
         argument = argument.replace(" ", "-")
-        
+
         try:
             return await super().convert(ctx, argument)
         except Exception:
@@ -157,12 +212,15 @@ class TextChannel(commands.TextChannelConverter):
                 return channel
         except ValueError:
             pass
-            
-        channels = [c for c in ctx.guild.text_channels if argument.lower() in c.name.lower()]
+
+        channels = [
+            c for c in ctx.guild.text_channels if argument.lower() in c.name.lower()
+        ]
         if channels:
             return channels[0]
 
         raise commands.ChannelNotFound(f"Text channel `{argument}` not found")
+
 
 class CategoryChannel(commands.CategoryChannelConverter):
     async def convert(self, ctx: Context, argument: str):
@@ -174,6 +232,7 @@ class CategoryChannel(commands.CategoryChannelConverter):
                     return category
             raise commands.ChannelNotFound(f"Category '{argument}' not found")
 
+
 class VoiceChannel(commands.VoiceChannelConverter):
     async def convert(self, ctx: Context, argument: str):
         try:
@@ -184,13 +243,18 @@ class VoiceChannel(commands.VoiceChannelConverter):
                     return vc
             raise commands.ChannelNotFound(f"Voice channel '{argument}' not found")
 
+
 class User(commands.UserConverter):
     async def convert(self, ctx: Context, argument: str):
         try:
             return await super().convert(ctx, argument)
         except commands.UserNotFound:
             for user in ctx.bot.users:
-                if argument.lower() in (user.name.lower(), user.display_name.lower(), str(user).lower()):
+                if argument.lower() in (
+                    user.name.lower(),
+                    user.display_name.lower(),
+                    str(user).lower(),
+                ):
                     return user
             try:
                 if argument.isdigit():
@@ -199,15 +263,20 @@ class User(commands.UserConverter):
                 pass
             raise commands.UserNotFound(f"User '{argument}' not found")
 
+
 class Member(commands.MemberConverter):
     async def convert(self, ctx: Context, argument: str):
         try:
             return await super().convert(ctx, argument)
         except commands.MemberNotFound:
             for member in ctx.guild.members:
-                if argument.lower() in (member.name.lower(), member.display_name.lower()):
+                if argument.lower() in (
+                    member.name.lower(),
+                    member.display_name.lower(),
+                ):
                     return member
             raise commands.MemberNotFound(f"Member '{argument}' not found")
+
 
 class RolePosition(commands.CommandError):
     def __init__(self, message, **kwargs):
@@ -215,30 +284,40 @@ class RolePosition(commands.CommandError):
         self.kwargs = kwargs
         super().__init__(self.message)
 
+
 def link(url: str) -> bool:
     try:
-        return any(url.lower().endswith(ext) for ext in ('.png', '.jpg', '.jpeg', '.gif'))
+        return any(
+            url.lower().endswith(ext) for ext in (".png", ".jpg", ".jpeg", ".gif")
+        )
     except:
         return False
+
 
 async def get_file_ext(url: str) -> str:
     file_ext1 = url.split("/")[-1].split(".")[1]
     return file_ext1.split("?")[0] if "?" in file_ext1 else file_ext1[:3]
+
 
 class Image(commands.Converter):
     async def convert(self, ctx: Context, argument: str = None) -> Optional[bytes]:
         if argument is None:
             if not ctx.message.attachments:
                 raise commands.BadArgument("No image was provided.")
-            return await ctx.message.attachments[0].read()  # Changed to read() instead of to_file()
+            return await ctx.message.attachments[
+                0
+            ].read()  # Changed to read() instead of to_file()
         async with Session() as session:
             async with session.get(argument) as response:  # Changed request() to get()
                 if response.status != 200:
                     raise commands.BadArgument("Failed to fetch image.")
                 return await response.read()
 
+
 class VoiceMessage(commands.Converter):
-    async def convert(self, ctx: "Context", argument: str = None, fail: bool = True) -> Optional[str]:
+    async def convert(
+        self, ctx: "Context", argument: str = None, fail: bool = True
+    ) -> Optional[str]:
         if argument and link(argument):
             return argument
         if fail:
@@ -256,8 +335,11 @@ class VoiceMessage(commands.Converter):
                 await ctx.send_help(ctx.command.qualified_name)
             assert False
 
+
 class Stickers(commands.Converter):
-    async def convert(self, ctx: "Context", argument: str, fail: bool = True) -> Optional[str]:
+    async def convert(
+        self, ctx: "Context", argument: str, fail: bool = True
+    ) -> Optional[str]:
         if argument and link(argument):
             return argument
         if fail:
@@ -277,8 +359,11 @@ class Stickers(commands.Converter):
                 await ctx.send_help(ctx.command.qualified_name)
             assert False
 
+
 class Attachment(commands.Converter):
-    async def convert(self, ctx: "Context", argument: str, fail: bool = True) -> Optional[str]:
+    async def convert(
+        self, ctx: "Context", argument: str, fail: bool = True
+    ) -> Optional[str]:
         if argument and link(argument):
             return argument
         if fail:
@@ -304,35 +389,39 @@ class Attachment(commands.Converter):
             assert False
         return None
 
+
 class Message(commands.MessageConverter):
     async def convert(self, ctx: Context, argument: str):
         if "discord.com/channels/" in argument:
-            guild_id, channel_id, message_id = argument.split("/channels/")[1].split("/")
+            guild_id, channel_id, message_id = argument.split("/channels/")[1].split(
+                "/"
+            )
             if guild := ctx.bot.get_guild(guild_id):
                 if channel := guild.get_channel(channel_id):
                     return await channel.fetch_message(message_id)
         return await ctx.channel.fetch_message(argument)
 
+
 class NonAssignedRole(commands.RoleConverter):
     async def convert(self, ctx: Context, arg: str):
         roles = []
         arguments = [a.strip() for a in arg.split(",")]
-        
+
         for argument in arguments:
             try:
                 role = await super().convert(ctx, argument)
             except commands.RoleNotFound:
                 role = discord.utils.find(
-                    lambda r: argument.lower() in r.name.lower(),
-                    ctx.guild.roles
+                    lambda r: argument.lower() in r.name.lower(), ctx.guild.roles
                 )
-            
+
             if not role or role.is_default():
                 raise commands.RoleNotFound(argument)
-                
+
             roles.append(role)
-            
+
         return roles
+
 
 class Role(commands.RoleConverter):
     def __init__(self, assign: bool = True):
@@ -341,36 +430,43 @@ class Role(commands.RoleConverter):
     async def convert(self, ctx: Context, arg: str):
         roles = []
         arguments = [a.strip() for a in arg.split(",")]
-        
+
         for argument in arguments:
             role = None
-            
+
             try:
                 role = await super().convert(ctx, argument)
             except commands.RoleNotFound:
                 # Make role lookup more efficient by using discord.utils.get
                 role = discord.utils.get(
-                    ctx.guild.roles,
-                    name=argument
+                    ctx.guild.roles, name=argument
                 ) or discord.utils.find(
-                    lambda r: argument.lower() in r.name.lower(),
-                    ctx.guild.roles
+                    lambda r: argument.lower() in r.name.lower(), ctx.guild.roles
                 )
-                    
+
             if not role or role.is_default():
                 raise commands.RoleNotFound(argument)
 
             if self.assign:
                 if role >= ctx.author.top_role and ctx.author.id != ctx.guild.owner_id:
-                    msg = "the same as your top role" if role == ctx.author.top_role else "above your top role"
+                    msg = (
+                        "the same as your top role"
+                        if role == ctx.author.top_role
+                        else "above your top role"
+                    )
                     raise RolePosition(f"{role.mention} is **{msg}**")
-                    
-                if role > ctx.guild.me.top_role and ctx.author.id not in ctx.bot.owner_ids and ctx.author.id != ctx.guild.owner_id:
+
+                if (
+                    role > ctx.guild.me.top_role
+                    and ctx.author.id not in ctx.bot.owner_ids
+                    and ctx.author.id != ctx.guild.owner_id
+                ):
                     raise RolePosition(f"{role.mention} is **above my role**")
-                    
+
             roles.append(role)
-            
+
         return roles
+
 
 class Command(commands.Command):
     def __init__(self, *args, **kwargs):
@@ -389,26 +485,27 @@ class Command(commands.Command):
                 WHERE guild_id = $1 AND command = $2
                 """,
                 ctx.guild.id,
-                ctx.command.qualified_name
+                ctx.command.qualified_name,
             )
 
             if not data:
                 return await self.invoke_command(ctx)
 
-            if data['status']:
-                if data['whitelist'] and ctx.author.id in data['whitelist']:
+            if data["status"]:
+                if data["whitelist"] and ctx.author.id in data["whitelist"]:
                     return await self.invoke_command(ctx)
                 return await ctx.reply(
                     "This command is disabled in this server.",
-                    mention_author=False  # Added to prevent unnecessary mentions
+                    mention_author=False,  # Added to prevent unnecessary mentions
                 )
-                
+
             return await self.invoke_command(ctx)
 
         except Exception as e:
             logger.error(f"{ctx.command}: {e}")
             await ctx.fail("An error occurred while executing this command.")
             raise
+
 
 def Feature(*args, **kwargs):
     return commands.command(cls=Command, *args, **kwargs)

@@ -10,6 +10,7 @@ from tools import timeit
 from cashews import cache
 import humanize
 from cogs.miscellaneous import get_donator
+
 cache.setup("mem://")
 
 
@@ -40,7 +41,7 @@ class AI:
             data = await load_json("/root/www.blackbox.ai.cookies.json")
             self._cookies = {cookie["name"]: cookie["value"] for cookie in data}
         return self._cookies
-    
+
     async def _prompt(self, prompt: str, expert: str = "") -> str:
         prompt = (
             prompt.replace("'", "\u2018")
@@ -134,7 +135,7 @@ class AI:
             .replace("blackbox", "greed")
         )
         return ret
-    
+
     @cache(ttl=30000, key="aiii:{prompt}")
     async def generate(self, prompt: str):
         __prompt = "You are being used as a chatbot for my discord bot do not return any html or any markdown or any json content just a string with the answer to the question asked"
@@ -142,7 +143,6 @@ class AI:
         text = await self._prompt(__prompt)
         return text
 
-    
     async def generate_response(self, prompt: str) -> Optional[AIResponse]:
         data = None
         t = None
@@ -167,8 +167,8 @@ class ai(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.ai = AI()
-#        self.bot.loop.create_task(self.task())
-        self.future = None # I need to add a future for revalidating ai keys - lim
+        #        self.bot.loop.create_task(self.task())
+        self.future = None  # I need to add a future for revalidating ai keys - lim
 
     async def task(self):
         while True:
@@ -176,7 +176,6 @@ class ai(commands.Cog):
                 await self.future
             await asyncio.sleep(300)
             await self.bot.close()
-    
 
     def split_text(self, text: str, chunk_size: int = 1999):
         # Split the text into chunks of `chunk_size` characters
@@ -187,7 +186,9 @@ class ai(commands.Cog):
         """Command to ask the AI a question."""
         if not await get_donator(ctx, ctx.author.id):
             raise commands.CommandError("this command is for donators only")
-        message = await ctx.normal("<:moon:1336683823894757508> please wait whilst I generate a response...")
+        message = await ctx.normal(
+            "<:moon:1336683823894757508> please wait whilst I generate a response..."
+        )
         try:
             response = await self.ai.generate_response(question)
             if len(response.text) > 1000:
@@ -200,13 +201,22 @@ class ai(commands.Cog):
                 ]
                 return await ctx.alternative_paginate(embeds, message=message)
             else:
-                await message.edit(embeds=[
-                    discord.Embed(title=question[:100],color=self.bot.color, description=response.text).set_footer(text=f"⏰ took {humanize.naturaldelta(response.time_elapsed, minimum_unit='microseconds')}")]
+                await message.edit(
+                    embeds=[
+                        discord.Embed(
+                            title=question[:100],
+                            color=self.bot.color,
+                            description=response.text,
+                        ).set_footer(
+                            text=f"⏰ took {humanize.naturaldelta(response.time_elapsed, minimum_unit='microseconds')}"
+                        )
+                    ]
                 )
         except Exception as e:
             if ctx.author.name == "aiohttp":
                 raise e
             raise commands.CommandError("that was a flagged prompt")
+
 
 async def setup(bot):
     await bot.add_cog(ai(bot))

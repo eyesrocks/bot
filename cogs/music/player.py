@@ -2,7 +2,15 @@ from __future__ import annotations
 from contextlib import suppress
 from typing import TYPE_CHECKING, Optional, List
 from cashews import cache
-from discord import ClientException, Embed, Guild, HTTPException, Member, Message, Client
+from discord import (
+    ClientException,
+    Embed,
+    Guild,
+    HTTPException,
+    Member,
+    Message,
+    Client,
+)
 from discord.opus import OpusNotLoaded
 from discord.utils import escape_markdown
 from wavelink.filters import Equalizer, Timescale, Karaoke, Rotation, Vibrato, LowPass
@@ -16,67 +24,47 @@ from aiohttp import ClientSession
 from discord.ext.commands import Context as BaseContext
 from typing import Union
 
+
 class Context(BaseContext):
     voice_client: CoffinPlayer
+
+
 @property
 def nightcore() -> Timescale:
-    return Timescale(
-        speed=1.3,
-        pitch=1.3,
-        rate=1,
-        tag="NightCore"
-    )
+    return Timescale(speed=1.3, pitch=1.3, rate=1, tag="NightCore")
+
 
 @property
 def chipmunk() -> Timescale:
-    return Timescale(
-        speed=1.05,
-        pitch=1.35,
-        rate=1.25,
-        tag="ChipMunk"
-    )
+    return Timescale(speed=1.05, pitch=1.35, rate=1.25, tag="ChipMunk")
+
 
 @property
 def karaoke() -> Karaoke:
     return Karaoke(
-        level=1.0,
-        mono_level=1.0,
-        filter_band=220.0,
-        filter_width=100.0,
-        tag="Karaoke_"
+        level=1.0, mono_level=1.0, filter_band=220.0, filter_width=100.0, tag="Karaoke_"
     )
+
 
 @property
 def eightd() -> Rotation:
-    return Rotation(
-        rotation_hertz=0.2,
-        tag="8D"
-    )
+    return Rotation(rotation_hertz=0.2, tag="8D")
+
 
 @property
 def vaporwave() -> Equalizer:
-    return Equalizer(
-        levels=[
-            (0, 0.3),
-            (1, 0.3)
-        ],
-        tag="Vaporwave"
-    )
+    return Equalizer(levels=[(0, 0.3), (1, 0.3)], tag="Vaporwave")
+
 
 @property
 def vibrato() -> Vibrato:
-    return Vibrato(
-        frequency=10,
-        depth=0.9,
-        tag="Vibrato"
-    )
+    return Vibrato(frequency=10, depth=0.9, tag="Vibrato")
+
 
 @property
 def soft() -> LowPass:
-    return LowPass(
-        smoothing=20.0,
-        tag="Soft"
-    )
+    return LowPass(smoothing=20.0, tag="Soft")
+
 
 @property
 def boost() -> Equalizer:
@@ -95,10 +83,11 @@ def boost() -> Equalizer:
             (10, 0.05),
             (11, 0.05),
             (12, 0.10),
-            (13, 0.10)
+            (13, 0.10),
         ],
-        tag="Boost"
+        tag="Boost",
     )
+
 
 @property
 def metal() -> Equalizer:
@@ -118,17 +107,16 @@ def metal() -> Equalizer:
             (11, 0.100),
             (12, 0.200),
             (13, 0.250),
-            (14, 0.300)
+            (14, 0.300),
         ],
-        tag="Metal"
+        tag="Metal",
     )
+
 
 @property
 def flat() -> Equalizer:
-    return Equalizer(
-        levels=[(i, 0.0) for i in range(15)],
-        tag="Flat"
-    )
+    return Equalizer(levels=[(i, 0.0) for i in range(15)], tag="Flat")
+
 
 @property
 def piano() -> Equalizer:
@@ -147,10 +135,12 @@ def piano() -> Equalizer:
             (10, 0.0),
             (11, 0.5),
             (12, 0.25),
-            (13, -0.025)
+            (13, -0.025),
         ],
-        tag="Piano"
+        tag="Piano",
     )
+
+
 class CoffinPlayer(BasePlayer):
     bot: Client
     guild: Guild
@@ -170,13 +160,13 @@ class CoffinPlayer(BasePlayer):
     @property
     def dj(self) -> Member:
         return self.context.author
-    
+
     @property
     def requester(self) -> Optional[Member]:
         track = self.current
         if not track:
             return
-        
+
         return self.guild.get_member(getattr(track.extras, "requester_id") or 0)
 
     @classmethod
@@ -210,7 +200,6 @@ class CoffinPlayer(BasePlayer):
 
     async def get_tracks(self, query: str) -> Optional[Track]:
         """Try YouTube first, then fall back to SoundCloud if no results found"""
-        # Try YouTube search first
         try:
             tracks = await self.node.get_tracks(query=f"ytsearch:{query}")
             if tracks:
@@ -218,7 +207,6 @@ class CoffinPlayer(BasePlayer):
         except Exception:
             pass
 
-        # Fall back to SoundCloud if YouTube search failed or returned no results
         try:
             tracks = await self.node.get_tracks(query=f"scsearch:{query}")
             if tracks:
@@ -240,7 +228,6 @@ class CoffinPlayer(BasePlayer):
         populate: bool = False,
         max_populate: int = 5,
     ) -> Track:
-        # If track is a string, search for it using our custom get_tracks method
         if isinstance(track, str):
             result = await self.get_tracks(track)
             if not result:
@@ -269,7 +256,9 @@ class CoffinPlayer(BasePlayer):
         await super().pause(value)
         await self.refresh_panel()
 
-    async def embed(self, track: Union[Track, str]) -> Embed:
+    async def embed(
+        self, track: Union[Track, str], scrobbling_users_count: int = 0
+    ) -> Embed:
         member = self.requester
         if track.source.startswith("youtube"):
             deserialized = await self.deserialize(track.title)
@@ -288,13 +277,21 @@ class CoffinPlayer(BasePlayer):
                 f"{format_duration(track.length)} Remaining",
             ]
         )
+
+        if hasattr(track, "scrobbling_users") and track.scrobbling_users:
+            footer.append(
+                f"{track.scrobbling_users} {'user is' if track.scrobbling_users == 1 else 'users are'} scrobbling"
+            )
+
         embed = Embed(
             description=f"Now playing [**{escape_markdown(deserialized)}**]({track.uri}) by **{track.author}**"
         )
-        
-        # Add thumbnail/image based on source
-        if hasattr(track, 'artwork') and track.artwork:  # Check if artwork exists
-            embed.set_thumbnail(url=track.artwork)
+
+        if hasattr(track, "artwork") and track.artwork:
+            if track.source == "youtube":
+                embed.set_image(url=track.artwork)
+            else:
+                embed.set_thumbnail(url=track.artwork)
 
         embed.set_footer(
             text=" • ".join(footer),
@@ -302,18 +299,34 @@ class CoffinPlayer(BasePlayer):
         )
         return embed
 
-    async def send_panel(self, track: Track) -> Optional[Message]:
-        embed = await self.embed(track)
-
-        with suppress(HTTPException):
+    async def send_panel(
+        self, track: Track, scrobbling_users_count: int = 0
+    ) -> Optional[Message]:
+        try:
+            track.scrobbling_users = scrobbling_users_count
+        except (AttributeError, TypeError):
+            embed = await self.embed(track, scrobbling_users_count)
             self.controller = await self.context.send(embed=embed, view=Panel(self))
+            return self.controller
+
+        embed = await self.embed(track)
+        self.controller = await self.context.send(embed=embed, view=Panel(self))
+        return self.controller
 
     async def refresh_panel(self):
         if not self.controller:
             return
 
+        if not self.current:
+            return
+
+        scrobbling_users = 0
+        if hasattr(self.current, "scrobbling_users"):
+            scrobbling_users = self.current.scrobbling_users
+
+        embed = await self.embed(self.current)
         with suppress(HTTPException):
-            await self.controller.edit(view=Panel(self))
+            await self.controller.edit(embed=embed, view=Panel(self))
 
     def pretty_source(self, track: Track) -> tuple[str | None, str | None]:
         if track.source == "spotify":
@@ -365,6 +378,7 @@ class CoffinPlayer(BasePlayer):
                 await self.controller.delete()
 
         return await super().disconnect()
+
 
 async def setup(bot):
     pass

@@ -32,6 +32,10 @@ import tempfile
 import os
 import urllib.parse
 import orjson
+from urllib.parse import parse_qs, urlparse
+from tool.managers.bing.bing import BingService
+from redis.asyncio import Redis
+
 
 @dataclass
 class SearchResult:
@@ -39,11 +43,13 @@ class SearchResult:
     link: str
     snippet: str
 
+
 @dataclass
 class TweetItem:
     url: str
     text: str
     footer: str
+
 
 @dataclass
 class Result:
@@ -54,63 +60,117 @@ class Result:
     extended_links: List[SearchResult] = field(default_factory=list)
 
 
-
 class GoogleScraper:
     def __init__(self):
         self.headers = {
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0 Safari/537.36"
-            )
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36"
+            ),
+            "Accept-Language": "en-US,en;q=0.9",
         }
 
-    async def search(self, query: str, num_pages: int = 3) -> list[SearchResult]:
+    async def search(self, query: str, num_pages: int = 3) -> List[SearchResult]:
         results = []
-        
-        for page in range(num_pages):
-            start = page * 10
-            url = URL.build(
-                scheme="https",
-                host="www.google.com",
-                path="/search",
-                query={
+
+        async with aiohttp.ClientSession(headers=self.headers) as session:
+            for page in range(num_pages):
+                start = page * 10
+                params = {
                     "q": query,
                     "start": str(start),
                     "safe": "active",
-                    "num": "100"
+                    "num": "20",  # Increased from 10 to get more results per page
                 }
-            )
 
-            async with aiohttp.ClientSession(headers=self.headers) as session:
-                async with session.get(url) as response:
-                    if response.status != 200:
-                        continue
-                    content = await response.text()
+                try:
+                    async with session.get(
+                        "https://www.google.com/search",
+                        params=params,
+                        timeout=aiohttp.ClientTimeout(total=10),
+                    ) as response:
+                        if response.status != 200:
+                            continue
 
-            soup = BeautifulSoup(content, 'html.parser')
-            search_divs = soup.find_all('div', class_=['g', 'tF2Cxc'])
+                        content = await response.text()
+                        soup = BeautifulSoup(content, "lxml")
 
-            for div in search_divs:
-                title_elem = div.find('h3')
-                link_elem = div.find('a')
-                snippet_elem = div.find('div', class_=['VwiC3b', 'yXK7lf'])
+                        # Main search result containers
+                        result_blocks = soup.find_all("div", class_="MjjYud")
 
-                if title_elem and link_elem:
-                    title = title_elem.get_text()
-                    link = link_elem.get('href')
-                    snippet = snippet_elem.get_text() if snippet_elem else "No description available"
+                        for block in result_blocks:
+                            # Extract title
+                            title_elem = block.find("h3", class_="LC20lb")
+                            if not title_elem:
+                                continue
 
-                    if link.startswith('/url?'):
-                        link = urllib.parse.parse_qs(urllib.parse.urlparse(link).query)['q'][0]
+                            # Extract link
+                            link_elem = block.find("a", href=True)
+                            if not link_elem:
+                                continue
 
-                    if link.startswith('http'):
-                        results.append(SearchResult(
-                            title=title,
-                            link=link,
-                            snippet=snippet
-                        ))
+                            link = link_elem["href"]
+                            if link.startswith("/url?"):
+                                parsed = parse_qs(urlparse(link).query)
+                                link = parsed.get("q", [""])[0]
+
+                            # Extract snippet
+                            snippet_elem = block.find(
+                                "div", class_=["VwiC3b", "lyLwlc"]
+                            )
+                            snippet = (
+                                snippet_elem.get_text(strip=True, separator=" ")
+                                if snippet_elem
+                                else ""
+                            )
+
+                            # Handle featured snippets
+                            if "ULSxyf" in block.get("class", []):
+                                snippet = block.get_text(strip=True, separator=" ")
+
+                            # Handle different result types
+                            result_type = "unknown"
+                            if "g" in block.get("class", []):
+                                result_type = "organic"
+                            elif "ULSxyf" in block.get("class", []):
+                                result_type = "featured_snippet"
+
+                            if link.startswith("http") and result_type in [
+                                "organic",
+                                "featured_snippet",
+                            ]:
+                                results.append(
+                                    SearchResult(
+                                        title=title_elem.get_text(strip=True),
+                                        link=link,
+                                        snippet=snippet,
+                                    )
+                                )
+
+                except (aiohttp.ClientError, asyncio.TimeoutError):
+                    continue
 
         return results
+
+    def parse_tweets(self, soup: BeautifulSoup) -> List[TweetItem]:
+        tweets = []
+        tweet_blocks = soup.find_all("div", {"data-testid": "tweet"})
+
+        for tweet in tweet_blocks:
+            url_elem = tweet.find("a", {"href": True})
+            text_elem = tweet.find("div", {"data-testid": "tweetText"})
+            footer_elem = tweet.find("div", {"role": "group"})
+
+            if all((url_elem, text_elem, footer_elem)):
+                tweets.append(
+                    TweetItem(
+                        url=url_elem["href"],
+                        text=text_elem.get_text(strip=True),
+                        footer=footer_elem.get_text(strip=True),
+                    )
+                )
+
+        return tweets
 
 
 class GoogleImages:
@@ -124,7 +184,7 @@ class GoogleImages:
 
     async def search(self, query: str, num_pages: int = 5) -> list[str]:
         results = []
-        
+
         for page in range(num_pages):
             url = URL.build(
                 scheme="https",
@@ -134,8 +194,8 @@ class GoogleImages:
                     "q": query,
                     "tbm": "isch",
                     "safe": "active",
-                    "start": str(page * 20)
-                }
+                    "start": str(page * 20),
+                },
             )
 
             async with aiohttp.ClientSession(headers=self.headers) as session:
@@ -144,15 +204,19 @@ class GoogleImages:
                         continue
                     content = await response.text()
 
-            soup = BeautifulSoup(content, 'html.parser')
-            for img in soup.find_all('img'):
-                if src := img.get('src'):
-                    if src.startswith('http') and not src.startswith('https://www.google.com'):
+            soup = BeautifulSoup(content, "html.parser")
+            for img in soup.find_all("img"):
+                if src := img.get("src"):
+                    if src.startswith("http") and not src.startswith(
+                        "https://www.google.com"
+                    ):
                         results.append(src)
         logger.info(results)
         return results[:100]
-    
+
+
 client = Client()
+
 
 @dataclass
 class Badge:
@@ -218,31 +282,39 @@ class RobloxUserModel:
         try:
             return await self.original.get_follower_count()
         except TooManyRequests:
-            raise CommandError("The Roblox API rate limit has been exceeded. Please try again later.")
-
+            raise CommandError(
+                "The Roblox API rate limit has been exceeded. Please try again later."
+            )
 
     async def following_count(self) -> int:
         """Fetch the count of users the user is following."""
         try:
             return await self.original.get_following_count()
         except TooManyRequests:
-            raise CommandError("The Roblox API rate limit has been exceeded. Please try again later.")
+            raise CommandError(
+                "The Roblox API rate limit has been exceeded. Please try again later."
+            )
 
     async def friend_count(self) -> int:
         """Fetch the count of friends."""
         try:
             return await self.original.get_friend_count()
         except TooManyRequests:
-            raise CommandError("The Roblox API rate limit has been exceeded. Please try again later.")
+            raise CommandError(
+                "The Roblox API rate limit has been exceeded. Please try again later."
+            )
 
     async def presence(self) -> Optional[Presence]:
         """Fetch the presence status of the user."""
         presence = await self.original.get_presence()
-        return Presence(
-            status=presence.user_presence_type.name,
-            location=presence.last_location,
-            last_online=presence.last_online,
-        ) if presence else None
+        return (
+            Presence(
+                status=presence.user_presence_type.name,
+                location=presence.last_location,
+            )
+            if presence
+            else None
+        )
 
     @cache(ttl=3600, key="names:{self.id}")
     async def names(self) -> List[str]:
@@ -261,7 +333,9 @@ class RobloxUserModel:
         except (UserNotFound, BadRequest, app_commands.errors.CommandInvokeError):
             return None
         except TooManyRequests:
-            raise CommandError("The Roblox API rate limit has been exceeded. Please try again later.")
+            raise CommandError(
+                "The Roblox API rate limit has been exceeded. Please try again later."
+            )
 
         if isinstance(user, User):
             return cls(
@@ -282,53 +356,56 @@ class RobloxUserModel:
             if user := await cls.fetch(argument):
                 return user
         raise CommandError("No **Roblox user** found with that name!")
-    
+
+
 @cache(ttl=3600)
 async def fetch_instagram_data(username):
     """Fetch Instagram profile data using GraphQL API with fingerlogger.infoing."""
-    
-    url = f"https://www.instagram.com/api/v1/users/web_profile_info/?username={username}"
+
+    url = (
+        f"https://www.instagram.com/api/v1/users/web_profile_info/?username={username}"
+    )
 
     # Browser-like headers with fingerlogger.infoing
     headers = {
-        'authority': 'www.instagram.com',
-        'accept': '*/*',
-        'accept-language': 'en-US,en;q=0.9',
-        'cookie': 'csrftoken=5o2PA4bwEeq1wdDxc_9znG; datr=p49-Z3asiKca3ndgFsFI6CBm; ig_did=A3A1170B-1845-42A7-8102-008D6C7E9642; mid=Z36PpwALAAGD0PLqzGxxxFkjkg3G; sessionid=61688220172%3AUeUQEM8RZtp0Ba%3A10%3AAYdveNJCG_h5eaNW5z_1D-KrQgCzksMGXEsnlzy26w; ds_user_id=61688220172; wd=576x945;', # Add your Instagram cookie here for authentication
-        'dpr': '2',
-        'referer': f'https://www.instagram.com/{username}/',
-        'sec-ch-prefers-color-scheme': 'dark',
-        'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120"',
-        'sec-ch-ua-full-version-list': '"Not_A Brand";v="8.0.0.0", "Chromium";v="120.0.6099.71"',
-        'sec-ch-ua-mobile': '?0',
-        'sec-ch-ua-model': '""',
-        'sec-ch-ua-platform': '"Windows"',
-        'sec-ch-ua-platform-version': '"15.0.0"',
-        'sec-fetch-dest': 'empty',
-        'sec-fetch-mode': 'cors',
-        'sec-fetch-site': 'same-origin',
-        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.71 Safari/537.36',
-        'viewport-width': '1920',
-        'x-asbd-id': '129477',
-        'x-csrftoken': '', # Add CSRF token here
-        'x-ig-app-id': '936619743392459',
-        'x-ig-www-claim': '0',
-        'x-requested-with': 'XMLHttpRequest'
+        "authority": "www.instagram.com",
+        "accept": "*/*",
+        "accept-language": "en-US,en;q=0.9",
+        "cookie": "csrftoken=5o2PA4bwEeq1wdDxc_9znG; datr=p49-Z3asiKca3ndgFsFI6CBm; ig_did=A3A1170B-1845-42A7-8102-008D6C7E9642; mid=Z36PpwALAAGD0PLqzGxxxFkjkg3G; sessionid=61688220172%3AUeUQEM8RZtp0Ba%3A10%3AAYdveNJCG_h5eaNW5z_1D-KrQgCzksMGXEsnlzy26w; ds_user_id=61688220172; wd=576x945;",  # Add your Instagram cookie here for authentication
+        "dpr": "2",
+        "referer": f"https://www.instagram.com/{username}/",
+        "sec-ch-prefers-color-scheme": "dark",
+        "sec-ch-ua": '"Not_A Brand";v="8", "Chromium";v="120"',
+        "sec-ch-ua-full-version-list": '"Not_A Brand";v="8.0.0.0", "Chromium";v="120.0.6099.71"',
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-model": '""',
+        "sec-ch-ua-platform": '"Windows"',
+        "sec-ch-ua-platform-version": '"15.0.0"',
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.71 Safari/537.36",
+        "viewport-width": "1920",
+        "x-asbd-id": "129477",
+        "x-csrftoken": "",  # Add CSRF token here
+        "x-ig-app-id": "936619743392459",
+        "x-ig-www-claim": "0",
+        "x-requested-with": "XMLHttpRequest",
     }
 
     try:
         response = requests.get(url, headers=headers)
-        
+
         if response.status_code == 200:
             data = response.json()
-            if 'data' in data and 'user' in data['data']:
-                return data['data']['user'], None
+            if "data" in data and "user" in data["data"]:
+                return data["data"]["user"], None
             return None, "User data not found"
         elif response.status_code == 404:
             return None, "Profile not found"
         else:
             return None, f"Error: Status code {response.status_code}"
-    
+
     except requests.RequestException as e:
         return None, f"Request failed: {str(e)}"
     except ValueError as e:
@@ -338,29 +415,29 @@ async def fetch_instagram_data(username):
 @cache(ttl=3600, key="instagram_stories:{username}")
 async def fetch_instagram_stories(username):
     headers = {
-        'authority': 'www.instagram.com',
-        'accept': '*/*',
-        'accept-language': 'en-US,en;q=0.9',
-        'cookie': 'csrftoken=5o2PA4bwEeq1wdDxc_9znG; datr=p49-Z3asiKca3ndgFsFI6CBm; ig_did=A3A1170B-1845-42A7-8102-008D6C7E9642; mid=Z36PpwALAAGD0PLqzGxxxFkjkg3G; sessionid=61688220172%3AUeUQEM8RZtp0Ba%3A10%3AAYdveNJCG_h5eaNW5z_1D-KrQgCzksMGXEsnlzy26w; ds_user_id=61688220172; wd=576x945;', # Add your Instagram cookie here for authentication
-        'dpr': '2',
-        'referer': f'https://www.instagram.com/{username}/',
-        'sec-ch-prefers-color-scheme': 'dark',
-        'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120"',
-        'sec-ch-ua-full-version-list': '"Not_A Brand";v="8.0.0.0", "Chromium";v="120.0.6099.71"',
-        'sec-ch-ua-mobile': '?0',
-        'sec-ch-ua-model': '""',
-        'sec-ch-ua-platform': '"Windows"',
-        'sec-ch-ua-platform-version': '"15.0.0"',
-        'sec-fetch-dest': 'empty',
-        'sec-fetch-mode': 'cors',
-        'sec-fetch-site': 'same-origin',
-        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.71 Safari/537.36',
-        'viewport-width': '1920',
-        'x-asbd-id': '129477',
-        'x-csrftoken': '',
-        'x-ig-app-id': '936619743392459',
-        'x-ig-www-claim': '0',
-        'x-requested-with': 'XMLHttpRequest'
+        "authority": "www.instagram.com",
+        "accept": "*/*",
+        "accept-language": "en-US,en;q=0.9",
+        "cookie": "csrftoken=5o2PA4bwEeq1wdDxc_9znG; datr=p49-Z3asiKca3ndgFsFI6CBm; ig_did=A3A1170B-1845-42A7-8102-008D6C7E9642; mid=Z36PpwALAAGD0PLqzGxxxFkjkg3G; sessionid=61688220172%3AUeUQEM8RZtp0Ba%3A10%3AAYdveNJCG_h5eaNW5z_1D-KrQgCzksMGXEsnlzy26w; ds_user_id=61688220172; wd=576x945;",  # Add your Instagram cookie here for authentication
+        "dpr": "2",
+        "referer": f"https://www.instagram.com/{username}/",
+        "sec-ch-prefers-color-scheme": "dark",
+        "sec-ch-ua": '"Not_A Brand";v="8", "Chromium";v="120"',
+        "sec-ch-ua-full-version-list": '"Not_A Brand";v="8.0.0.0", "Chromium";v="120.0.6099.71"',
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-model": '""',
+        "sec-ch-ua-platform": '"Windows"',
+        "sec-ch-ua-platform-version": '"15.0.0"',
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.71 Safari/537.36",
+        "viewport-width": "1920",
+        "x-asbd-id": "129477",
+        "x-csrftoken": "",
+        "x-ig-app-id": "936619743392459",
+        "x-ig-www-claim": "0",
+        "x-requested-with": "XMLHttpRequest",
     }
 
     async with aiohttp.ClientSession(headers=headers) as session:
@@ -368,20 +445,22 @@ async def fetch_instagram_stories(username):
             profile_url = f"https://i.instagram.com/api/v1/users/web_profile_info/?username={username}"
             async with session.get(profile_url) as resp:
                 profile_data = await resp.json()
-                
+
                 if "data" not in profile_data or "user" not in profile_data["data"]:
                     raise ValueError("Invalid profile response structure")
-                    
+
                 user_id = profile_data["data"]["user"]["id"]
 
-            stories_url = f"https://i.instagram.com/api/v1/feed/reels_media/?reel_ids={user_id}"
+            stories_url = (
+                f"https://i.instagram.com/api/v1/feed/reels_media/?reel_ids={user_id}"
+            )
             async with session.get(stories_url) as resp:
                 stories_data = await resp.json()
                 logger.info(stories_data)
-                
+
                 if "reels_media" not in stories_data or not stories_data["reels_media"]:
                     return []
-                    
+
                 return [
                     item["image_versions2"]["candidates"][0]["url"]
                     for item in stories_data["reels_media"][0]["items"]
@@ -394,15 +473,13 @@ async def fetch_instagram_stories(username):
 
 
 TWITTER_BEARER_TOKENS = [
-    'AAAAAAAAAAAAAAAAAAAAAFF3xQEAAAAAxq%2BVlmthJYK6LmfQT7P7arVPrRk%3DGG8roGZ2JVKlAn3dPNU4RtJ6ltjQ6r4EaA4lWCPD4495qywjxG',
-    'AAAAAAAAAAAAAAAAAAAAAKSjxwEAAAAA5hdVoyx6WEE5nu7mRd5URE1RS8Q%3DYC3CN5b2CRKZAYe51pgyjaVqDn4yQ6WFEBVC8I48fWch8SmmY5',
+    "AAAAAAAAAAAAAAAAAAAAAFF3xQEAAAAAxq%2BVlmthJYK6LmfQT7P7arVPrRk%3DGG8roGZ2JVKlAn3dPNU4RtJ6ltjQ6r4EaA4lWCPD4495qywjxG",
+    "AAAAAAAAAAAAAAAAAAAAAKSjxwEAAAAA5hdVoyx6WEE5nu7mRd5URE1RS8Q%3DYC3CN5b2CRKZAYe51pgyjaVqDn4yQ6WFEBVC8I48fWch8SmmY5",
     # Add more tokens here if available
 ]
 
 profile_cache = {}
 CACHE_EXPIRY_TIME = 3600  # Cache expiration time in seconds (1 hour)
-
-
 
 
 class TwitterAPIClient:
@@ -435,35 +512,45 @@ class TwitterAPIClient:
 
     def make_request_with_limit_handling(self, url):
         headers = {"Authorization": f"Bearer {self.get_next_token()}"}
-        
+
         # Make the request and handle rate limits
         response = self.session.get(url, headers=headers)
-        
+
         if response.status_code == 200:
             return response.json()
         elif response.status_code == 429:  # Rate limit hit
-            retry_after = int(response.headers.get("Retry-After", 60))  # Get retry time from header
+            retry_after = int(
+                response.headers.get("Retry-After", 60)
+            )  # Get retry time from header
             logger.info(f"Rate limit hit. Retrying in {retry_after} seconds...")
             time.sleep(retry_after)  # Wait for the retry period
             return self.make_request_with_limit_handling(url)  # Retry after waiting
         else:
             logger.info(f"Error: {response.status_code}, {response.text}")
             return None
-        
+
     def get_twitter_profile(self, username):
         # Check the cache first
-        if username in profile_cache and time.time() - profile_cache[username]['time'] < CACHE_EXPIRY_TIME:
-            return profile_cache[username]['data']
-        
+        if (
+            username in profile_cache
+            and time.time() - profile_cache[username]["time"] < CACHE_EXPIRY_TIME
+        ):
+            return profile_cache[username]["data"]
+
         url = f"https://api.twitter.com/2/users/by/username/{username}?user.fields=username,public_metrics,name,profile_image_url"
         result = self.make_request_with_queue(url)
-        
+
         if result:
-            profile_cache[username] = {'data': result['data'], 'time': time.time()}  # Cache the result
-            return result['data']
+            profile_cache[username] = {
+                "data": result["data"],
+                "time": time.time(),
+            }  # Cache the result
+            return result["data"]
         return None
-    
-SHZ_API_KEY = '153315b3a7msh91fdaf0f92e2df7p1abcfbjsn1a9bc21996f7'
+
+
+SHZ_API_KEY = "153315b3a7msh91fdaf0f92e2df7p1abcfbjsn1a9bc21996f7"
+
 
 class Socials(commands.Cog):
     def __init__(self, bot):
@@ -475,37 +562,36 @@ class Socials(commands.Cog):
         self.pinterest = Pinterest()
         self.services = {
             "youtube": compile(
-             "(?:https?:\/\/)?(?:www\.|m\.)?(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})"
+                "(?:https?:\/\/)?(?:www\.|m\.)?(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})"
             ),
             "SoundCloud": (
-            r"(?:https?:\/\/)?(?:www\.)?soundcloud\.com\/(?P<username>[a-zA-Z0-9_-]+)\/(?P<slug>[a-zA-Z0-9_-]+)",
-            r"(?:https?:\/\/)?(?:www\.)?soundcloud\.app\.goo\.gl\/([a-zA-Z0-9_-]+)", 
-            r"(?:https?:\/\/)?on\.soundcloud\.com\/([a-zA-Z0-9_-]+)"
+                r"(?:https?:\/\/)?(?:www\.)?soundcloud\.com\/(?P<username>[a-zA-Z0-9_-]+)\/(?P<slug>[a-zA-Z0-9_-]+)",
+                r"(?:https?:\/\/)?(?:www\.)?soundcloud\.app\.goo\.gl\/([a-zA-Z0-9_-]+)",
+                r"(?:https?:\/\/)?on\.soundcloud\.com\/([a-zA-Z0-9_-]+)",
             ),
             "tiktok": compile(
-               r"(?:https?:\/\/)?(?:www\.|m\.)?(?:vm\.)?tiktok\.com\/(?:@[\w.-]+\/)?(?:video\/|t\/)?([a-zA-Z0-9-_]+)"
+                r"(?:https?:\/\/)?(?:www\.|m\.)?(?:vm\.)?tiktok\.com\/(?:@[\w.-]+\/)?(?:video\/|t\/)?([a-zA-Z0-9-_]+)"
             ),
             "instagram": compile(
-            r"(?:https?:\/\/)?(?:www\.|m\.)?instagram\.com\/(?:p|reels?)\/([a-zA-Z0-9-_]+)"
+                r"(?:https?:\/\/)?(?:www\.|m\.)?instagram\.com\/(?:p|reels?)\/([a-zA-Z0-9-_]+)"
             ),
             "twitter": compile(
-            r"(?:https?:\/\/)?(?:www\.|m\.)?(?:twitter\.com|x\.com)\/(?:#!\/)?(?:\w+)\/status(?:es)?\/(\d+)"
+                r"(?:https?:\/\/)?(?:www\.|m\.)?(?:twitter\.com|x\.com)\/(?:#!\/)?(?:\w+)\/status(?:es)?\/(\d+)"
             ),
             "xiaohongshu": compile(
-            r"(?:https?:\/\/)?(?:www\.)?xiaohongshu\.com\/(?:discovery|explore)\/(?:[a-zA-Z0-9]+)"
+                r"(?:https?:\/\/)?(?:www\.)?xiaohongshu\.com\/(?:discovery|explore)\/(?:[a-zA-Z0-9]+)"
             ),
         }
 
         self.ytdl = YoutubeDL(
             {
-            "format": "bestaudio/best",
-            
-            "quiet": True, 
-            "verbose": False,
-            'merge_output_format': 'mp4',
-            'headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            },
+                "format": "bestaudio/best",
+                "quiet": True,
+                "verbose": False,
+                "merge_output_format": "mp4",
+                "headers": {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+                },
             }
         )
 
@@ -544,8 +630,6 @@ class Socials(commands.Cog):
         if data:
             return DefaultMunch.fromDict(data)
 
-
-
     @commands.Cog.listener("on_message")
     async def check_service(self, message: Message):
         if message.author.bot or not message.guild or not message.content:
@@ -579,7 +663,9 @@ class Socials(commands.Cog):
 
                 async with ctx.typing():
                     arguments = (
-                        list(match.groupdict().values()) if match.groupdict() else [URL(match.group())]
+                        list(match.groupdict().values())
+                        if match.groupdict()
+                        else [URL(match.group())]
                     )
                     self.bot.dispatch(f"{service.lower()}_request", ctx, *arguments)
 
@@ -607,7 +693,7 @@ class Socials(commands.Cog):
                     buffer: bytes = await response.read()
         except Exception as e:
             return logger.error(f"Youtube request: {e}")
-            
+
         embed = Embed(
             description=f"[{data.title}]({data.webpage_url})",
             url=str(url),
@@ -624,21 +710,29 @@ class Socials(commands.Cog):
             async with ctx.typing():
                 for attempt in range(3):
                     try:
-                        await ctx.send(embed=embed, file=File(BytesIO(buffer), filename=f"{data.title}.{data.ext}"))
+                        await ctx.send(
+                            embed=embed,
+                            file=File(
+                                BytesIO(buffer), filename=f"{data.title}.{data.ext}"
+                            ),
+                        )
                         break
                     except (IndexError, ConnectionError) as e:
                         if attempt == 2:
-                            logger.error(f"Failed to send YouTube video after 3 attempts: {e}")
-                            return await ctx.error("Failed to process the YouTube video. Please try again later.")
+                            logger.error(
+                                f"Failed to send YouTube video after 3 attempts: {e}"
+                            )
+                            return await ctx.error(
+                                "Failed to process the YouTube video. Please try again later."
+                            )
                         await asyncio.sleep(1)
         except Exception as e:
             logger.error(f"Error in YouTube request handler: {e}")
             await ctx.warning("An error occurred while processing your request.")
 
-
     def get_high_res_profile_image(self, profile_image_url):
         if profile_image_url:
-            return profile_image_url.replace('_normal', '')
+            return profile_image_url.replace("_normal", "")
         return profile_image_url
 
     @commands.Cog.listener()
@@ -663,54 +757,64 @@ class Socials(commands.Cog):
         )
 
         if author := data.get("uploader"):
-            embed.set_author(name=author, icon_url=data.thumbnail if data.thumbnail else None)
+            embed.set_author(
+                name=author, icon_url=data.thumbnail if data.thumbnail else None
+            )
 
         embed.set_footer(text=f"uploaded {naturaltime(data.upload_date)}")
 
-        await ctx.send(embed=embed, file=File(BytesIO(buffer), filename=f"{data.title}.{data.ext}"))
+        await ctx.send(
+            embed=embed, file=File(BytesIO(buffer), filename=f"{data.title}.{data.ext}")
+        )
 
     @commands.Cog.listener()
     async def on_soundcloud_request(self, ctx, username, slug):
-        
+
         url = f"https://soundcloud.com/{username}/{slug}"
-        
+
         ydl_opts = {
-            'format': 'bestaudio/best',
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-            'quiet': True,
-            'logtostderr': True,
-            'extract_flat': False,
-            'no_warnings': True,
-            'outtmpl': '%(title)s.%(ext)s'
+            "format": "bestaudio/best",
+            "postprocessors": [
+                {
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "mp3",
+                    "preferredquality": "192",
+                }
+            ],
+            "quiet": True,
+            "logtostderr": True,
+            "extract_flat": False,
+            "no_warnings": True,
+            "outtmpl": "%(title)s.%(ext)s",
         }
 
         final_file = None
         try:
             with YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True)
-                title = info['title']
+                title = info["title"]
                 final_file = f"{title}.mp3"
-                
+
                 embed = Embed(
                     title=title,
                     url=url,
-                    description=f"Duration: {info.get('duration_string', 'Unknown')}"
+                    description=f"Duration: {info.get('duration_string', 'Unknown')}",
                 )
-                
-                if uploader := info.get('uploader'):
+
+                if uploader := info.get("uploader"):
                     embed.set_author(
                         name=uploader,
-                        icon_url=ctx.author.avatar.url if ctx.author.avatar else ctx.author.default_avatar.url
+                        icon_url=(
+                            ctx.author.avatar.url
+                            if ctx.author.avatar
+                            else ctx.author.default_avatar.url
+                        ),
                     )
-                    
-                if thumbnail := info.get('thumbnail'):
+
+                if thumbnail := info.get("thumbnail"):
                     embed.set_thumbnail(url=thumbnail)
-                    
-                if views := info.get('view_count'):
+
+                if views := info.get("view_count"):
                     embed.set_footer(text=f"{views:,} plays")
 
                 await ctx.send(
@@ -719,8 +823,8 @@ class Socials(commands.Cog):
                         fp=final_file,
                         filename=f"{title}.mp3",
                         description="voice-message",
-                        spoiler=False
-                    )
+                        spoiler=False,
+                    ),
                 )
         except Exception as e:
             logger.error(f"SoundCloud request failed: {e}")
@@ -739,16 +843,16 @@ class Socials(commands.Cog):
         try:
             with tempfile.TemporaryDirectory() as temp_dir:
                 ydl_opts = {
-                    'format': 'best',
-                    'outtmpl': f'{temp_dir}/%(title)s.%(ext)s',
-                    'merge_output_format': 'mp4',
+                    "format": "best",
+                    "outtmpl": f"{temp_dir}/%(title)s.%(ext)s",
+                    "merge_output_format": "mp4",
                 }
-                
+
                 with YoutubeDL(ydl_opts) as ydl:
                     video_info = ydl.extract_info(str(url), download=True)
                     video_path = ydl.prepare_filename(video_info)
-                    
-                    with open(video_path, 'rb') as f:
+
+                    with open(video_path, "rb") as f:
                         buffer = f.read()
 
         except Exception as e:
@@ -757,7 +861,11 @@ class Socials(commands.Cog):
         embed = Embed(
             description=f"[{data.title}]({data.webpage_url})",
             url=url,
-            timestamp=datetime.strptime(str(data.upload_date), "%Y%m%d") if data.upload_date else None,
+            timestamp=(
+                datetime.strptime(str(data.upload_date), "%Y%m%d")
+                if data.upload_date
+                else None
+            ),
         )
 
         if author := data.get("uploader"):
@@ -768,7 +876,7 @@ class Socials(commands.Cog):
         metrics = []
         if likes := data.get("like_count"):
             metrics.append(f"❤️ {likes:,}")
-        if reposts := data.get("repost_count"): 
+        if reposts := data.get("repost_count"):
             metrics.append(f"🔁 {reposts:,}")
         if comments := data.get("comment_count"):
             metrics.append(f"💬 {comments:,}")
@@ -776,43 +884,49 @@ class Socials(commands.Cog):
         if metrics:
             embed.set_footer(text=" • ".join(metrics))
 
-        await ctx.send(embed=embed, file=File(BytesIO(buffer), filename=f"{data.title}.mp4"))
-
+        await ctx.send(
+            embed=embed, file=File(BytesIO(buffer), filename=f"{data.title}.mp4")
+        )
 
     def extract_soundcloud_url_parts(self, track: str) -> tuple[str, str]:
         """Extract username and slug from SoundCloud track URL or format string."""
         # Check if it's already a URL
         main_pattern, *short_patterns = self.services["SoundCloud"]
-        
+
         # Try main pattern first
         if match := search(main_pattern, track):
             return match.group("username"), match.group("slug")
-            
+
         # Try to resolve short URLs
         for pattern in short_patterns:
             if match := search(pattern, track):
                 # Fetch the resolved URL
                 short_url = track
-                if not track.startswith(('http://', 'https://')):
+                if not track.startswith(("http://", "https://")):
                     short_url = f"https://{track}"
-                    
+
                 # Use a synchronous request here since we're in a sync method
                 import requests
+
                 try:
                     response = requests.get(short_url, allow_redirects=True)
                     if response.status_code == 200:
                         # Try to match the resolved URL
                         if resolved_match := search(main_pattern, response.url):
-                            return resolved_match.group("username"), resolved_match.group("slug")
+                            return resolved_match.group(
+                                "username"
+                            ), resolved_match.group("slug")
                 except:
                     pass
-        
+
         # If it's not a URL, assume it's in format "artist/track-name"
         if "/" in track:
             username, slug = track.split("/", 1)
             return username.strip(), slug.strip()
-            
-        raise commands.CommandError("Invalid SoundCloud track format. Use 'artist/track-name' or a valid SoundCloud URL.")
+
+        raise commands.CommandError(
+            "Invalid SoundCloud track format. Use 'artist/track-name' or a valid SoundCloud URL."
+        )
 
     @app_commands.command(
         name="soundcloud",
@@ -854,24 +968,10 @@ class Socials(commands.Cog):
 
             if avatar_url := await user.avatar_url():
                 embed.set_thumbnail(url=avatar_url)
-
-            if presence := await user.presence():
-                embed.add_field(
-                    name="Presence",
-                    value=(
-                        f"Status: {presence.status}\n"
-                        f"Location: {presence.location}\n"
-                        f"Last Online: {format_dt(presence.last_online, 'R')}"
-                    ),
-                    inline=False,
-                )
-
             if badges := await user.badges():
                 embed.add_field(
                     name="Badges",
-                    value="\n".join(
-                        f"[{badge.name}]({badge.url})" for badge in badges
-                    ),
+                    value="\n".join(f"[{badge.name}]({badge.url})" for badge in badges),
                     inline=False,
                 )
 
@@ -887,39 +987,43 @@ class Socials(commands.Cog):
             )
             await interaction.followup.send(embed=embed)
         except TooManyRequests:
-            await interaction.followup.send("The Roblox API rate limit has been exceeded. Please try again later.", ephemeral=True)
+            await interaction.followup.send(
+                "The Roblox API rate limit has been exceeded. Please try again later.",
+                ephemeral=True,
+            )
         except Exception as e:
             logger.error(f"Roblox command error: {e}")
-            await interaction.followup.send("An error occurred while fetching the Roblox profile.", ephemeral=True)
+            await interaction.followup.send(
+                "An error occurred while fetching the Roblox profile.", ephemeral=True
+            )
 
-
-
-
-    @commands.command(name='twitter',aliases = ['x'])
+    @commands.command(name="twitter", aliases=["x"])
     @commands.cooldown(1, 5, commands.BucketType.guild)
     async def twitter(self, ctx, username: str):
         """
         Discord command to fetch Twitter profile details.
         """
         profile_data = self.api_client.get_twitter_profile(username)
-        
+
         if profile_data:
-            metrics = profile_data['public_metrics']
-            high_res_image = self.get_high_res_profile_image(profile_data.get('profile_image_url'))
-            
+            metrics = profile_data["public_metrics"]
+            high_res_image = self.get_high_res_profile_image(
+                profile_data.get("profile_image_url")
+            )
+
             # Retrieve values safely, and provide defaults if missing
             def get_profile_info(key, default="N/A"):
                 return profile_data.get(key, default)
 
             # Extract relevant user data
-            name = get_profile_info('name')
-            username_twitter = get_profile_info('username')
-            bio = get_profile_info('description')
-            followers = metrics.get('followers_count', 0)
-            following = metrics.get('following_count', 0)
-            tweets = metrics.get('tweet_count', 0)
+            name = get_profile_info("name")
+            username_twitter = get_profile_info("username")
+            bio = get_profile_info("description")
+            followers = metrics.get("followers_count", 0)
+            following = metrics.get("following_count", 0)
+            tweets = metrics.get("tweet_count", 0)
             twitter_url = f"https://twitter.com/{username_twitter}"
-            
+
             # Format numbers with commas
             followers_str = f"{followers:,}"
             following_str = f"{following:,}"
@@ -932,7 +1036,7 @@ class Socials(commands.Cog):
             # Construct the Embed with the same style as TikTok
             embed = Embed(
                 description=f"**[{name} (@{username_twitter})]({twitter_url})**",
-                color=self.bot.color
+                color=self.bot.color,
             )
 
             # Add fields for Tweets, Following, and Followers (inline for layout like TikTok)
@@ -948,24 +1052,29 @@ class Socials(commands.Cog):
             embed.set_author(name=author_name, icon_url=author_avatar_url)
 
             # Set the footer with Twitter logo
-            embed.set_footer(text="Twitter", icon_url="https://abs.twimg.com/icons/apple-touch-icon-192x192.png")
+            embed.set_footer(
+                text="Twitter",
+                icon_url="https://abs.twimg.com/icons/apple-touch-icon-192x192.png",
+            )
 
             # Send the embed message to the Discord channel
             await ctx.send(embed=embed)
 
             # Log data for debugging (optional)
-            logger.info(f"Twitter Profile Data for {username_twitter}:\n"
-                  f"Name: {name}\n"
-                  f"Bio: {bio}\n"
-                  f"Followers: {followers_str}\n"
-                  f"Following: {following_str}\n"
-                  f"Tweets: {tweets_str}\n"
-                  f"Profile Image: {high_res_image}")
+            logger.info(
+                f"Twitter Profile Data for {username_twitter}:\n"
+                f"Name: {name}\n"
+                f"Bio: {bio}\n"
+                f"Followers: {followers_str}\n"
+                f"Following: {following_str}\n"
+                f"Tweets: {tweets_str}\n"
+                f"Profile Image: {high_res_image}"
+            )
 
         else:
-            await ctx.send("Failed to fetch Twitter profile information. Please check the username.")
-
-          
+            await ctx.send(
+                "Failed to fetch Twitter profile information. Please check the username."
+            )
 
     @commands.command(
         name="roblox",
@@ -996,7 +1105,7 @@ class Socials(commands.Cog):
                         ),
                         inline=False,
                     )
-                
+
                 if badges := await user.badges():
                     embed.add_field(
                         name="Badges",
@@ -1005,7 +1114,7 @@ class Socials(commands.Cog):
                         ),
                         inline=False,
                     )
-                
+
                 if names := await user.names():
                     embed.add_field(
                         name="Previous Names",
@@ -1017,14 +1126,17 @@ class Socials(commands.Cog):
                     text=f"Followers: {await user.follower_count()} | Following: {await user.following_count()} | Friends: {await user.friend_count()}"
                 )
             except TooManyRequests:
-                return await ctx.fail("The Roblox API rate limit has been exceeded. Please try again later.")
+                return await ctx.fail(
+                    "The Roblox API rate limit has been exceeded. Please try again later."
+                )
             except Exception as e:
                 return logger.error(f"Roblox command: {e}")
         await ctx.send(embed=embed)
 
-
-    @commands.command(name="tiktok", aliases = ["tt"])
-    @commands.cooldown(1, 5, commands.BucketType.user)  # Apply rate limit of 5 seconds per user
+    @commands.command(name="tiktok", aliases=["tt"])
+    @commands.cooldown(
+        1, 5, commands.BucketType.user
+    )  # Apply rate limit of 5 seconds per user
     async def tiktok(self, ctx, username: str):
         """
         Discord command to fetch TikTok profile details.
@@ -1033,7 +1145,7 @@ class Socials(commands.Cog):
         querystring = {"uniqueId": username}
         headers = {
             "x-rapidapi-key": "153315b3a7msh91fdaf0f92e2df7p1abcfbjsn1a9bc21996f7",  # Use your own API key here
-            "x-rapidapi-host": "tiktok-api23.p.rapidapi.com"
+            "x-rapidapi-host": "tiktok-api23.p.rapidapi.com",
         }
 
         try:
@@ -1080,13 +1192,17 @@ class Socials(commands.Cog):
                     # Create the embed
                     embed = Embed(
                         description=f"**[{full_name} (@{username_tiktok})]({tiktok_url})**\n {bio}",
-                        color=self.bot.color
+                        color=self.bot.color,
                     )
 
                     # Add fields for Likes, Followers, and Following with formatted numbers
                     embed.add_field(name="Likes", value=f"{likes_str}", inline=True)
-                    embed.add_field(name="Followers", value=f"{followers_str}", inline=True)
-                    embed.add_field(name="Following", value=f"{following_str}", inline=True)
+                    embed.add_field(
+                        name="Followers", value=f"{followers_str}", inline=True
+                    )
+                    embed.add_field(
+                        name="Following", value=f"{following_str}", inline=True
+                    )
 
                     # Set the thumbnail of the user profile
                     if profile_picture_url:
@@ -1096,117 +1212,159 @@ class Socials(commands.Cog):
                     embed.set_author(name=author_name, icon_url=author_avatar_url)
 
                     # Set footer with TikTok logo
-                    embed.set_footer(text="TikTok", icon_url="https://cdn.discordapp.com/emojis/1309200047677898763.png")
+                    embed.set_footer(
+                        text="TikTok",
+                        icon_url="https://cdn.discordapp.com/emojis/1309200047677898763.png",
+                    )
 
                     # Send the embed message to the Discord channel
                     await ctx.send(embed=embed)
 
                     # Log the data for debugging purposes
-                    logger.info(f"TikTok Profile Data for {username_tiktok}:\n"
-                          f"Full Name: {full_name}\n"
-                          f"Bio: {bio}\n"
-                          f"Followers: {followers_str}\n"
-                          f"Following: {following_str}\n"
-                          f"Likes: {likes_str}\n"
-                          f"Video Count: {video_count}\n"
-                          f"Profile Picture URL: {profile_picture_url}")
+                    logger.info(
+                        f"TikTok Profile Data for {username_tiktok}:\n"
+                        f"Full Name: {full_name}\n"
+                        f"Bio: {bio}\n"
+                        f"Followers: {followers_str}\n"
+                        f"Following: {following_str}\n"
+                        f"Likes: {likes_str}\n"
+                        f"Video Count: {video_count}\n"
+                        f"Profile Picture URL: {profile_picture_url}"
+                    )
                 else:
-                    await ctx.fail(f"Sorry, could not fetch data for TikTok user {username}.")
+                    await ctx.fail(
+                        f"Sorry, could not fetch data for TikTok user {username}."
+                    )
             else:
-                await ctx.fail(f"Failed to fetch TikTok profile for {username}. Status Code: {response.status_code}")
+                await ctx.fail(
+                    f"Failed to fetch TikTok profile for {username}. Status Code: {response.status_code}"
+                )
 
         except requests.RequestException as e:
             await ctx.fail(f"An error occurred while fetching the TikTok profile: {e}")
 
-
-
-
     @commands.command(
-        name = "google",
-        aliases = ["g", "ddg", "search"],
-        brief = "Search the web using Google.",
-        example = ",google how to make a sandwich"
+        name="google",
+        aliases=["g", "ddg", "search", "bing"],
+        brief="Search the web using Google.",
+        example=",google how to make a sandwich",
     )
-    async def google(self, ctx: Context, *, query: str):
+    async def search(self, ctx: Context, *, query: str):
         """Search the web using Google."""
         async with ctx.typing():
-            scraper = GoogleScraper()
-            results = await scraper.search(query)
+            bing = BingService(redis=self.bot.redis, ttl=3600)
 
-            if not results:
-                return await ctx.fail("No results found for that query.")
+            try:
+                results = await bing.search(query, safe=True, pages=1)
 
-            embeds = []
-            for i in range(0, len(results), 3):
-                embed = Embed(title=f"Search Results")
-                for result in results[i:i+3]:
-                    embed.add_field(
-                        name=result.title,
-                        value=f"[{result.snippet}]({result.link})",
-                        inline=False
-                    )
-                    embed.set_footer(text=f"Page {i // 3 + 1}")
-                embeds.append(embed)
+                if not results.results:
+                    return await ctx.fail("No results found for that query.")
+
+                embeds = []
+                for i in range(0, len(results.results), 3):
+                    embed = Embed(title="Search Results")
+                    for result in results.results[i : i + 3]:
+                        embed.add_field(
+                            name=result.title,
+                            value=f"[{result.description}]({result.url})",
+                            inline=False,
+                        )
+                        embed.set_footer(text=f"Page {i // 3 + 1}")
+                    embeds.append(embed)
+
+                if results.knowledge_panel:
+                    kp = results.knowledge_panel
+                    kp_embed = Embed(title=kp.title)
+                    kp_embed.description = kp.description
+                    if kp.url:
+                        kp_embed.url = kp.url
+                    if kp.additional_info:
+                        for key, value in kp.additional_info.items():
+                            kp_embed.add_field(name=key, value=value, inline=True)
+                    embeds.insert(0, kp_embed)
+
+            except KeyError as e:
+                if str(e) == "'results'":
+                    logger.error("Bing search error: No results found")
+                    return await ctx.fail("No results found for that query.")
+                else:
+                    logger.error(f"Bing search error: {e}")
+                    return await ctx.fail("An error occurred while searching.")
+
         await ctx.paginate(embeds)
-
 
     @commands.command(
         name="instagram",
         aliases=["ig"],
         brief="Fetch Instagram profile details.",
-        example=",instagram username"
+        example=",instagram username",
     )
     async def instagram(self, ctx: commands.Context, username: str):
         """Fetch Instagram profile details."""
         url = f"https://www.instagram.com/{username}"
         data, error = await fetch_instagram_data(username)
-        
+
         if data:
             followers = f"{data.get('edge_followed_by', {}).get('count', 0):,}"
             following = f"{data.get('edge_follow', {}).get('count', 0):,}"
-            
-            status_indicators = []
-            if data.get('is_private'):
-                status_indicators.append('🔒')
-            if data.get('is_verified'):
-                status_indicators.append('<:Verified:1302156329502375968>')
-            if data.get('is_joined_recently'):
-                status_indicators.append('<:newjoin:1326569644693127234>')
 
-            bio_links = data.get('bio_links', [])
-            b = f'🔗 {len(bio_links)}' if bio_links else None
-            
-            status_suffix = f" {' '.join(status_indicators)}" if status_indicators else ""
-            
+            status_indicators = []
+            if data.get("is_private"):
+                status_indicators.append("🔒")
+            if data.get("is_verified"):
+                status_indicators.append("<:Verified:1302156329502375968>")
+            if data.get("is_joined_recently"):
+                status_indicators.append("<:newjoin:1326569644693127234>")
+
+            bio_links = data.get("bio_links", [])
+            b = f"🔗 {len(bio_links)}" if bio_links else None
+
+            status_suffix = (
+                f" {' '.join(status_indicators)}" if status_indicators else ""
+            )
+
             embed_description = f"**[{data.get('full_name')} (@{data.get('username')})]({url})**{status_suffix}\n{data.get('biography', '')}"
-            
+
             if b:
                 embed_description += f"\n [{b}]({url})"
-            
-            embed = Embed(
-                description=embed_description,
-                color=self.bot.color
+
+            embed = Embed(description=embed_description, color=self.bot.color)
+
+            embed.add_field(
+                name="Posts",
+                value=f"{data.get('edge_owner_to_timeline_media', {}).get('count', 0):,}",
+                inline=True,
             )
-            
-            embed.add_field(name="Posts", value=f"{data.get('edge_owner_to_timeline_media', {}).get('count', 0):,}", inline=True)
             embed.add_field(name="Followers", value=followers, inline=True)
             embed.add_field(name="Following", value=following, inline=True)
-            
-            if profile_pic := data.get('profile_pic_url_hd'):
+
+            if profile_pic := data.get("profile_pic_url_hd"):
                 embed.set_thumbnail(url=profile_pic)
-                
-            embed.set_author(name=ctx.author.name, icon_url=ctx.author.avatar.url if ctx.author.avatar else ctx.author.default_avatar.url)
-            embed.set_footer(text="Instagram", icon_url="https://www.instagram.com/static/images/ico/favicon-192.png/68d99ba29cc8.png")
-            
+
+            embed.set_author(
+                name=ctx.author.name,
+                icon_url=(
+                    ctx.author.avatar.url
+                    if ctx.author.avatar
+                    else ctx.author.default_avatar.url
+                ),
+            )
+            embed.set_footer(
+                text="Instagram",
+                icon_url="https://www.instagram.com/static/images/ico/favicon-192.png/68d99ba29cc8.png",
+            )
+
             await ctx.send(embed=embed)
         else:
-            await ctx.fail(f"Could not fetch Instagram profile for {username}. Error: {error}")
+            await ctx.fail(
+                f"Could not fetch Instagram profile for {username}. Error: {error}"
+            )
 
     @commands.command(
-        name = "igstory",
-        aliases = ["igstories"],
-        brief = "Fetch Instagram stories.",
-        example = ",igstory wohtour",
+        name="igstory",
+        aliases=["igstories"],
+        brief="Fetch Instagram stories.",
+        example=",igstory wohtour",
     )
     @commands.is_owner()
     async def igstory(self, ctx: Context, username: str):
@@ -1219,7 +1377,7 @@ class Socials(commands.Cog):
             await ctx.fail(f"Could not fetch Instagram stories for {username}.")
 
     @commands.group(
-        name = "fortnite",
+        name="fortnite",
     )
     async def fortnite(self, ctx: Context):
         """Fortnite related commands."""
@@ -1227,15 +1385,16 @@ class Socials(commands.Cog):
             await ctx.send_help(ctx.command)
 
     @fortnite.command(
-        name = "shop",
-        aliases = ["store"],
-        brief = "Display the current Fortnite shop.",
+        name="shop",
+        aliases=["store"],
+        brief="Display the current Fortnite shop.",
     )
     async def fortnite_shop(self, ctx: Context):
         """Display the current Fortnite shop."""
         embed = Embed(title="Fortnite Item Shop", color=self.bot.color)
         embed.set_image(url=self.shop_url)
         await ctx.send(embed=embed)
+
 
 async def setup(bot):
     await bot.add_cog(Socials(bot))

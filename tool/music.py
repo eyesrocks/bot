@@ -207,7 +207,7 @@ class Player(pomice.Player):
         self.loop: Union[str, bool] = False
         self.bot: Optional[Greed] = None
 
-    @property 
+    @property
     def bound_channel(self) -> Optional[discord.TextChannel]:
         if not self._bound_channel and self.channel:
             if self.channel.category:
@@ -237,23 +237,27 @@ class Player(pomice.Player):
 
     def _format_socket_channel(self):
         return {
-            "voice": {
-                "id": self.channel.id,
-                "name": self.channel.name,
-                "members": [
-                    {
-                        "id": member.id,
-                        "name": str(member),
-                        "avatar": (
-                            member.display_avatar.url if member.display_avatar else None
-                        ),
-                    }
-                    for member in self.channel.members
-                    if not member.bot
-                ],
-            }
-            if self.channel
-            else None,
+            "voice": (
+                {
+                    "id": self.channel.id,
+                    "name": self.channel.name,
+                    "members": [
+                        {
+                            "id": member.id,
+                            "name": str(member),
+                            "avatar": (
+                                member.display_avatar.url
+                                if member.display_avatar
+                                else None
+                            ),
+                        }
+                        for member in self.channel.members
+                        if not member.bot
+                    ],
+                }
+                if self.channel
+                else None
+            ),
             "text": {"id": self.bound_channel.id, "name": self.bound_channel.name},
         }
 
@@ -323,7 +327,7 @@ class Player(pomice.Player):
             if track:
                 await self.play(track)
                 self.track = track
-                
+
                 if self.bound_channel and self.loop != "track":
                     try:
                         if self.message:
@@ -496,8 +500,8 @@ class Music(commands.Cog):
     async def on_voice_state_update(
         self,
         member: discord.Member,
-        before: discord.VoiceState, 
-        after: discord.VoiceState
+        before: discord.VoiceState,
+        after: discord.VoiceState,
     ):
         if not hasattr(self.bot, "node"):
             return
@@ -526,18 +530,20 @@ class Music(commands.Cog):
             raise commands.CommandError("You must be in a voice channel")
 
         if (
-            ctx.guild.me.voice 
-            and ctx.guild.me.voice.channel 
+            ctx.guild.me.voice
+            and ctx.guild.me.voice.channel
             and ctx.author.voice
             and ctx.guild.me.voice.channel != ctx.author.voice.channel
         ):
             raise commands.CommandError("Already connected to different voice channel")
 
         player = self.bot.node.get_player(ctx.guild.id)
-        
+
         if not player and connect and ctx.author.voice:
             try:
-                player = await ctx.author.voice.channel.connect(cls=Player, self_deaf=True)
+                player = await ctx.author.voice.channel.connect(
+                    cls=Player, self_deaf=True
+                )
                 if isinstance(player, Player):
                     player.bound_channel = ctx.channel
                     player.bot = self.bot
@@ -874,8 +880,6 @@ class Music(commands.Cog):
             pass
         await ctx.success("**Disconnected** from the voice channel")
 
-
-
     @commands.group(
         name="presets",
         aliases=["eq", "equalizer", "preset"],
@@ -884,7 +888,12 @@ class Music(commands.Cog):
     async def presets(self, ctx):
         await ctx.send_help(ctx.command.qualified_name)
 
-    @presets.command(name="list", aliases=["ls"], brief="List available presets", example=",presets list")
+    @presets.command(
+        name="list",
+        aliases=["ls"],
+        brief="List available presets",
+        example=",presets list",
+    )
     async def presets_list(self, ctx: Context):
         player: Player = await self.get_player(ctx)
         presets = [
@@ -899,7 +908,11 @@ class Music(commands.Cog):
         embed.description = "\n".join(presets)
         await ctx.send(embed=embed)
 
-    @presets.command(name="vaporwave", brief="Apply the vaporwave preset", example=",presets vaporwave")
+    @presets.command(
+        name="vaporwave",
+        brief="Apply the vaporwave preset",
+        example=",presets vaporwave",
+    )
     async def vaporwave(self, ctx: Context):
         player: Player = await self.get_player(ctx)
         try:
@@ -909,7 +922,11 @@ class Music(commands.Cog):
         except pomice.FilterTagAlreadyInUse as e:
             await ctx.warning(f"That filter is already in use")
 
-    @presets.command(name = "nightcore", brief = "Apply the vaporwave preset", example = ",presets vaporwave")
+    @presets.command(
+        name="nightcore",
+        brief="Apply the vaporwave preset",
+        example=",presets vaporwave",
+    )
     async def nightcore(self, ctx: Context):
         player: Player = await self.get_player(ctx)
         try:
@@ -919,7 +936,9 @@ class Music(commands.Cog):
         except pomice.FilterTagAlreadyInUse as e:
             await ctx.warning(f"That filter is already in use")
 
-    @presets.command(name="boost", brief="Apply the boost preset", example=",presets boost")
+    @presets.command(
+        name="boost", brief="Apply the boost preset", example=",presets boost"
+    )
     async def boost(self, ctx: Context):
         player: Player = await self.get_player(ctx)
         try:
@@ -929,7 +948,9 @@ class Music(commands.Cog):
         except pomice.FilterTagAlreadyInUse as e:
             await ctx.warning(f"That filter is already in use")
 
-    @presets.command(name="metal", brief="Apply the metal preset", example=",presets metal")
+    @presets.command(
+        name="metal", brief="Apply the metal preset", example=",presets metal"
+    )
     async def metal(self, ctx: Context):
         player: Player = await self.get_player(ctx)
         try:
@@ -939,7 +960,9 @@ class Music(commands.Cog):
         except pomice.FilterTagAlreadyInUse as e:
             await ctx.warning(f"That filter is already in use")
 
-    @presets.command(name="flat", brief="Apply the flat preset", example=",presets flat")
+    @presets.command(
+        name="flat", brief="Apply the flat preset", example=",presets flat"
+    )
     async def flat(self, ctx: Context):
         player: Player = await self.get_player(ctx)
         try:
@@ -949,7 +972,9 @@ class Music(commands.Cog):
         except pomice.FilterTagAlreadyInUse as e:
             await ctx.warning(f"That filter is already in use")
 
-    @presets.command(name="piano", brief="Apply the piano preset", example=",presets piano")
+    @presets.command(
+        name="piano", brief="Apply the piano preset", example=",presets piano"
+    )
     async def piano(self, ctx: Context):
         player: Player = await self.get_player(ctx)
         try:
@@ -959,7 +984,9 @@ class Music(commands.Cog):
         except pomice.FilterTagAlreadyInUse as e:
             await ctx.warning(f"That filter is already in use")
 
-    @presets.command(name="indian", brief="Apply the indian preset", example=",presets indian")
+    @presets.command(
+        name="indian", brief="Apply the indian preset", example=",presets indian"
+    )
     async def indian(self, ctx: Context):
         player: Optional[Player] = await self.get_player(ctx)
         if not player:
@@ -977,12 +1004,17 @@ class Music(commands.Cog):
 
             await ctx.invoke(self.play_command, query="light up sketchers")
             player.loop = "track"
- 
+
             await ctx.success("Applied the **indian** preset successfully.")
         except Exception as e:
             await ctx.fail(f"Failed to apply the **indian** preset: {str(e)}")
 
-    @presets.command(name="remove", aliases=["off"], brief="Remove a preset from the current player", example=",presets remove vaporwave")
+    @presets.command(
+        name="remove",
+        aliases=["off"],
+        brief="Remove a preset from the current player",
+        example=",presets remove vaporwave",
+    )
     async def remove_preset(self, ctx: Context, preset: str):
         player: Player = await self.get_player(ctx)
         presets = [
@@ -1000,6 +1032,7 @@ class Music(commands.Cog):
             await ctx.success(f"Removed the **{preset}** preset")
         except pomice.FilterTagNotInUse as e:
             await ctx.warning(f"That filter is not in use")
+
 
 async def setup(bot):
     await bot.add_cog(Music(bot))

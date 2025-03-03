@@ -48,9 +48,11 @@ class Snipe(object):
             entry: dict = {
                 "timestamp": datetime.datetime.now().timestamp(),
                 "message": message[0].message.jump_url,
-                "reaction": str(message[0].emoji)
-                if message[0].is_custom_emoji()
-                else str(message[0].emoji),
+                "reaction": (
+                    str(message[0].emoji)
+                    if message[0].is_custom_emoji()
+                    else str(message[0].emoji)
+                ),
                 "author": {
                     "id": message[1].id,
                     "name": message[1].name,

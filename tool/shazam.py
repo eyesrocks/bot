@@ -7,6 +7,7 @@ from asyncio.subprocess import PIPE
 from io import BytesIO
 from tool.worker import offloaded
 
+
 @dataclass
 class Track:
     song: str
@@ -18,25 +19,29 @@ class Track:
     def to_dict(self):
         return asdict(self)
 
+
 @offloaded
 def process_audio(audio_bytes: bytes, is_mp3: bool) -> bytes:
     if not is_mp3:
         import ffmpeg
+
         input_buffer = BytesIO(audio_bytes)
         output_buffer = BytesIO()
-        
-        stream = ffmpeg.input('pipe:', format='mp4')
-        stream = ffmpeg.output(stream, 'pipe:', format='mp3', acodec='libmp3lame', q=0)
+
+        stream = ffmpeg.input("pipe:", format="mp4")
+        stream = ffmpeg.output(stream, "pipe:", format="mp3", acodec="libmp3lame", q=0)
         stdout, _ = ffmpeg.run(stream, input=input_buffer.read(), capture_stdout=True)
         return stdout
     return audio_bytes
+
 
 @offloaded
 async def get_bytes(self, url: str) -> bytes:
     async with Recognizer().session.get(url) as response:
         return await response.read()
-    
-@offloaded 
+
+
+@offloaded
 async def recognize_track(data_bytes: bytes) -> dict:
     shazam = Shazam()
     try:
@@ -53,10 +58,10 @@ async def recognize_track(data_bytes: bytes) -> dict:
     except (IndexError, KeyError):
         return None
 
+
 class Recognizer:
     def __init__(self):
         self.session = ClientSession()
-
 
     async def recognize(self, url: str):
         is_mp3 = url.endswith(".mp3")

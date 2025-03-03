@@ -18,6 +18,7 @@ class Typing:
     """
     A context manager for handling typing indicators in a Discord channel.
     """
+
     def __init__(self, ctx: commands.Context) -> None:
         self.loop: asyncio.AbstractEventLoop = ctx.bot.loop
         self.channel: discord.TextChannel = ctx.channel

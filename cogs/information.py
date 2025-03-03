@@ -29,13 +29,14 @@ from tool.greed import Greed  # type: ignore
 from tool.emotes import EMOJIS  # type: ignore
 
 # from tool.shazam import Recognizer  # type: ignore
-#from weather import WeatherClient  # type: ignore
-#from weather.weathertypes import Kind  # type: ignore
+# from weather import WeatherClient  # type: ignore
+# from weather.weathertypes import Kind  # type: ignore
 # ` 1from geopy import geocoders
 from typing_extensions import Type
 import re
 from discord import Embed
 from cogs.lastfm import LastFMHTTPRequester
+
 if typing.TYPE_CHECKING:
     pass
 from munch import DefaultMunch
@@ -51,6 +52,7 @@ from geopy.geocoders import Nominatim
 from timezonefinder import TimezoneFinder
 
 GUILD_ID = 1301617147964821524
+
 
 @offloaded
 def get_timezone(location: str) -> str:
@@ -70,7 +72,7 @@ def get_timezone(location: str) -> str:
 class plural:
     def __init__(
         self: "plural",
-        value: typing.Union[int,  str, typing.List[typing.Any]],
+        value: typing.Union[int, str, typing.List[typing.Any]],
         number: bool = True,
         md: str = "",
     ):
@@ -78,12 +80,14 @@ class plural:
             len(value)
             if isinstance(value, list)
             else (
-                int(value.split(" ", 1)[-1])
-                if value.startswith(("CREATE", "DELETE"))
-                else int(value)
+                (
+                    int(value.split(" ", 1)[-1])
+                    if value.startswith(("CREATE", "DELETE"))
+                    else int(value)
+                )
+                if isinstance(value, str)
+                else value
             )
-            if isinstance(value, str)
-            else value
         )
         self.number: bool = number
         self.md: str = md
@@ -358,9 +362,6 @@ class WeatherResponse(BaseModel):
     sunset: Union[int, float]
 
 
-
-
-
 class CategoryTransformer(app_commands.Transformer):
     async def autocomplete(
         self, interaction: Interaction, value: str
@@ -402,7 +403,7 @@ class CommandTransformer(app_commands.Transformer):
 class Information(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.requester = LastFMHTTPRequester(api_key="260c08af4a7f26f90743f66637572031")    
+        self.requester = LastFMHTTPRequester(api_key="260c08af4a7f26f90743f66637572031")
         self.bot.loop.create_task(self.setup_db())
         #       self.recognizer = Recognizer()
         self.command_count = len(
@@ -413,16 +414,17 @@ class Information(commands.Cog):
             ]
         )
 
-
     async def setup_db(self):
         """Sets up the database tables if they don't exist."""
-        await self.bot.db.execute(''' 
+        await self.bot.db.execute(
+            """ 
             CREATE TABLE IF NOT EXISTS guilds_stats ( 
                 guild_id BIGINT PRIMARY KEY, 
                 joins INT DEFAULT 0, 
                 leaves INT DEFAULT 0 
             )
-        ''')
+        """
+        )
 
     async def update_server_stats(self, guild_id: int, column: str):
         """Update join/leave count for a guild."""
@@ -457,22 +459,28 @@ class Information(commands.Cog):
 
         try:
             # Fetch recent tracks and user info
-            data = await self.requester.get(method="user.getrecenttracks", user=conf['username'])
-            if 'error' in data:
+            data = await self.requester.get(
+                method="user.getrecenttracks", user=conf["username"]
+            )
+            if "error" in data:
                 return None
 
             track_data = data.get("recenttracks", {}).get("track", [])
             if track_data:
-                track_name = track_data[0]['name']
-                track_url = track_data[0]['url']
-                artist_name = track_data[0]['artist']['#text']
+                track_name = track_data[0]["name"]
+                track_url = track_data[0]["url"]
+                artist_name = track_data[0]["artist"]["#text"]
                 return f"<a:lfm:1333750101067305002> Listening to **{track_name}**"
         except Exception as e:
             print(f"Error fetching LastFM data: {e}")
-        
+
         return None  # If no track is found, return None
 
-    @commands.command(aliases=["guildstats", "mc", "membercount"], brief="View the member count of the server", example=",membercount")
+    @commands.command(
+        aliases=["guildstats", "mc", "membercount"],
+        brief="View the member count of the server",
+        example=",membercount",
+    )
     async def guilds_stats(self, ctx):
         """Displays the number of joins, leaves, and total members for the server."""
         guild = ctx.guild
@@ -491,19 +499,45 @@ class Information(commands.Cog):
             title=f"**{ctx.guild.name}**",
             color=self.bot.color,
         )
-        embed.add_field(name="> Total", value=f"<:line:1336409552786161724> **`{total_users}`** <:iconsPerson:1342771680879317095>", inline=False)
-        embed.add_field(name="> Joins", value=f"<:line:1336409552786161724> **`{joins}`** <:190:1337552566002647171>", inline=False)
-        embed.add_field(name="> Leaves", value=f"<:line:1336409552786161724> **`{leaves}`** <:190:1337552564404748308>", inline=False)
-        embed.add_field(name="> Bots", value=f"<:line:1336409552786161724> **`{total_bots}`** <:spyiconsbots:1342773947560886316>", inline=True)
+        embed.add_field(
+            name="> Total",
+            value=f"<:line:1336409552786161724> **`{total_users}`** <:iconsPerson:1342771680879317095>",
+            inline=False,
+        )
+        embed.add_field(
+            name="> Joins",
+            value=f"<:line:1336409552786161724> **`{joins}`** <:190:1337552566002647171>",
+            inline=False,
+        )
+        embed.add_field(
+            name="> Leaves",
+            value=f"<:line:1336409552786161724> **`{leaves}`** <:190:1337552564404748308>",
+            inline=False,
+        )
+        embed.add_field(
+            name="> Bots",
+            value=f"<:line:1336409552786161724> **`{total_bots}`** <:spyiconsbots:1342773947560886316>",
+            inline=True,
+        )
         embed.set_thumbnail(url=ctx.guild.icon.url if ctx.guild.icon else None)
-        embed.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.display_avatar)
+        embed.set_footer(
+            text=f"Requested by {ctx.author}", icon_url=ctx.author.display_avatar
+        )
 
         await ctx.send(embed=embed)
 
-    @commands.command(name = "level", brief = "see your level in the server", aliases = ["lvl", "rank", "rnk", "activity"], usage = ",level <member>", example = ",level @aiohttp")
+    @commands.command(
+        name="level",
+        brief="see your level in the server",
+        aliases=["lvl", "rank", "rnk", "activity"],
+        usage=",level <member>",
+        example=",level @aiohttp",
+    )
     async def level(self, ctx: Context, *, member: Optional[Member] = commands.Author):
         if not await self.bot.levels.check_guild(ctx.guild):
-            return await ctx.fail(f"levelling has not been enabled thru `{ctx.prefix}levels enable`")
+            return await ctx.fail(
+                f"levelling has not been enabled thru `{ctx.prefix}levels enable`"
+            )
         return await self.bot.levels.get_member_xp(ctx, "text", member)
 
     @app_commands.command()
@@ -526,13 +560,14 @@ class Information(commands.Cog):
     #    self.client = Client()  # type: ignore
 
     async def find_timezone(self, city: str, country: Optional[str] = None): ...  # type: ignore
-        # if data := await self.client.lookup(city=city):
-        #     return data.timezone
-        # else:
-        #     if pytz.timezone(city):  # type: ignore
-        #         return city
-        #     else:
-        #         return None
+
+    # if data := await self.client.lookup(city=city):
+    #     return data.timezone
+    # else:
+    #     if pytz.timezone(city):  # type: ignore
+    #         return city
+    #     else:
+    #         return None
 
     def try_escape(self, ban: discord.BanEntry):
         try:
@@ -548,15 +583,15 @@ class Information(commands.Cog):
         try:
             tz = pytz.timezone(timezone)
             logger.info(tz)
-            return datetime.now(tz=tz).strftime('%-I:%M%p').lower()
+            return datetime.now(tz=tz).strftime("%-I:%M%p").lower()
         except pytz.UnknownTimeZoneError:
             raise ValueError(f"Unknown timezone: {timezone}")
 
-    @commands.command(name = "status", brief = "check on discord's status")
+    @commands.command(name="status", brief="check on discord's status")
     async def status(self, ctx: Context):
         data = await DiscordStatus.from_response()
         embed = data.to_embed(self.bot, False)
-        return await ctx.send(embed = embed)
+        return await ctx.send(embed=embed)
 
     @commands.command(
         name="reverse",
@@ -626,7 +661,9 @@ class Information(commands.Cog):
         example=",timezone @lim",
     )
     async def timezone(
-        self, ctx: Context, member: Optional[Union[discord.Member, discord.User]] = commands.Author
+        self,
+        ctx: Context,
+        member: Optional[Union[discord.Member, discord.User]] = commands.Author,
     ):
         if data := await self.bot.db.fetchval(
             """SELECT tz FROM timezone WHERE user_id = $1""", member.id
@@ -638,7 +675,6 @@ class Information(commands.Cog):
             return await ctx.fail(
                 f"{member.mention} **does not have their time set** with `timezone set`"
             )
-
 
     @timezone.command(
         name="set",
@@ -653,7 +689,6 @@ class Information(commands.Cog):
             return await ctx.fail(e)
             raise e
 
-
         if data:
             await self.bot.db.execute(
                 """INSERT INTO timezone (user_id, tz) VALUES($1, $2) ON CONFLICT(user_id) DO UPDATE SET tz = excluded.tz""",
@@ -661,9 +696,7 @@ class Information(commands.Cog):
                 data,
             )
             current_time = await self.get_time(data)
-            return await ctx.success(
-                f"Set your current time to ``{current_time}``"
-            )
+            return await ctx.success(f"Set your current time to ``{current_time}``")
         else:
             return await ctx.fail(f"Could not find a timezone for `{timezone}`")
 
@@ -676,26 +709,26 @@ class Information(commands.Cog):
         latency = round(self.bot.latency * 1000)
         await ctx.send(f"*...**{latency}**ms*")
 
-#    @commands.command(
-#        name="weather",
-#        brief="Show the current weather of a certain city",
-#        example=",weather columbia",
-#    )
-#    async def weather(self, ctx: Context, *, city: str):
-#        try:
-#            weather_dat = await self.weather_client.get(city)
-#            weather_data = weather_dat.current_condition[0]
-#            embed = discord.Embed(
-#                title=f"{Kind(int(weather_data.weatherCode)).emoji} weather in {city}",
-#                description=f"**Temp:** {weather_data.temp_F}\n**Feels Like:** {weather_data.FeelsLikeF}\n**Humidity:** {weather_data.humidity}%",
-#                color=self.bot.color,
-#            )
-#
-#            return await ctx.send(embed=embed)
-#        except Exception as e:
-#            if ctx.author.name == "aiohttp":
-#                raise e
-#            return await ctx.fail(f"**Could not find** the weather for `{city}`")
+    #    @commands.command(
+    #        name="weather",
+    #        brief="Show the current weather of a certain city",
+    #        example=",weather columbia",
+    #    )
+    #    async def weather(self, ctx: Context, *, city: str):
+    #        try:
+    #            weather_dat = await self.weather_client.get(city)
+    #            weather_data = weather_dat.current_condition[0]
+    #            embed = discord.Embed(
+    #                title=f"{Kind(int(weather_data.weatherCode)).emoji} weather in {city}",
+    #                description=f"**Temp:** {weather_data.temp_F}\n**Feels Like:** {weather_data.FeelsLikeF}\n**Humidity:** {weather_data.humidity}%",
+    #                color=self.bot.color,
+    #            )
+    #
+    #            return await ctx.send(embed=embed)
+    #        except Exception as e:
+    #            if ctx.author.name == "aiohttp":
+    #                raise e
+    #            return await ctx.fail(f"**Could not find** the weather for `{city}`")
 
     @commands.command(
         name="bans", brief="Show banned users in the guild", example=",bans"
@@ -791,11 +824,11 @@ class Information(commands.Cog):
             inline=False,
         )
 
-
         embed.add_field(name="⏱ Uptime", value=uptime, inline=False)
 
-
-        embed.set_author(name=f"{self.bot.user.name}", icon_url=self.bot.user.avatar.url)
+        embed.set_author(
+            name=f"{self.bot.user.name}", icon_url=self.bot.user.avatar.url
+        )
         embed.set_thumbnail(url=self.bot.user.avatar.url)
 
         view = discord.ui.View()
@@ -811,7 +844,6 @@ class Information(commands.Cog):
         )
 
         await ctx.send(embed=embed, view=view)
-
 
     @commands.command(
         name="serverinfo",
@@ -912,7 +944,7 @@ class Information(commands.Cog):
                 inline=True,
             )
             embed.set_thumbnail(url=user.display_avatar)
-            
+
             return await ctx.send(embed=embed)
 
         # Handle Member with full server info
@@ -1017,13 +1049,18 @@ class Information(commands.Cog):
         if is_boosting(user):
             badges.extend((emojis.get("nitro"), emojis.get("server_boost")))
 
-        devices = ", ".join(
-            k for k, v in {
-                "desktop": user.desktop_status,
-                "web": user.web_status,
-                "mobile": user.mobile_status,
-            }.items() if v != discord.Status.offline
-        ) or "none"
+        devices = (
+            ", ".join(
+                k
+                for k, v in {
+                    "desktop": user.desktop_status,
+                    "web": user.web_status,
+                    "mobile": user.mobile_status,
+                }.items()
+                if v != discord.Status.offline
+            )
+            or "none"
+        )
 
         badges = " ".join(badges)
         staff = " ".join(staff)
@@ -1085,20 +1122,13 @@ class Information(commands.Cog):
             )
 
         if user.roles:
-            roles = (
-                ", ".join(
-                    [role.mention for role in list(reversed(user.roles[1:]))[:5]]
-                )
-                + (f" + {len(user.roles) - 5} more" if len(user.roles) > 5 else "")
-            )
+            roles = ", ".join(
+                [role.mention for role in list(reversed(user.roles[1:]))[:5]]
+            ) + (f" + {len(user.roles) - 5} more" if len(user.roles) > 5 else "")
 
             embed.add_field(name="**__Roles__**", value=f"{roles}", inline=False)
 
-
-
         embed.set_thumbnail(url=user.display_avatar)
-
-
 
         embed.set_footer(
             text=f"{len(mutual_guilds)} mutuals, Join position: {position}"
@@ -1106,9 +1136,6 @@ class Information(commands.Cog):
 
         await ctx.send(embed=embed)
 
-
-
-        
     @commands.command(
         name="serveravatar",
         description="View the avatar of a user for a server",
@@ -1127,30 +1154,28 @@ class Information(commands.Cog):
         e.set_author(name=f"{ctx.author.display_name}", icon_url=ctx.author.avatar)
         await ctx.send(embed=e)
 
-
-
     @commands.command(
-      name="banner",
-      brief="View the banner of a user",
-      example=",banner @lim",
-      aliases=["userbanner", "ub"],
+        name="banner",
+        brief="View the banner of a user",
+        example=",banner @lim",
+        aliases=["userbanner", "ub"],
     )
     async def banner(self, ctx, *, user: Member = None):
-      member = user or ctx.author
-      user = await self.bot.fetch_user(member.id)
+        member = user or ctx.author
+        user = await self.bot.fetch_user(member.id)
 
-      if user.banner:
+        if user.banner:
             e = discord.Embed(
-                  title=f"{user.name}'s banner", url=user.banner, color=self.bot.color
+                title=f"{user.name}'s banner", url=user.banner, color=self.bot.color
             )
             e.set_author(
-                  name=f"{ctx.author.display_name}", icon_url=ctx.author.display_avatar
+                name=f"{ctx.author.display_name}", icon_url=ctx.author.display_avatar
             )
             e.set_image(url=user.banner)
             await ctx.send(embed=e)
-      elif user.accent_color:
+        elif user.accent_color:
             await ctx.warning("User has **no banner set**")
-      else:
+        else:
             await ctx.warning("User has **no banner set**")
 
     @commands.command(
@@ -1170,9 +1195,8 @@ class Information(commands.Cog):
         e.set_author(
             name=f"{ctx.author.display_name}", icon_url=ctx.author.display_avatar
         )
-        
-    
-
+        e.set_image(url=banner_url)
+        await ctx.send(embed=e)
 
     @commands.command(
         name="guildicon",
@@ -1215,9 +1239,13 @@ class Information(commands.Cog):
                 except discord.NotFound:
                     return await ctx.fail("Invalid server ID or vanity URL.")
                 except discord.Forbidden:
-                    return await ctx.fail("I do not have permission to fetch this invite.")
+                    return await ctx.fail(
+                        "I do not have permission to fetch this invite."
+                    )
                 except discord.HTTPException:
-                    return await ctx.fail("An error occurred while fetching the invite.")
+                    return await ctx.fail(
+                        "An error occurred while fetching the invite."
+                    )
 
         if guild is None:
             return await ctx.fail("Unable to find the server.")
@@ -1228,19 +1256,14 @@ class Information(commands.Cog):
         total_guilds = len(self.bot.guilds)  # Get bot's total guild count
 
         embed = discord.Embed(
-            title=f"{guild.name}'s Banner",
-            url=guild.banner.url,
-            color=self.bot.color
+            title=f"{guild.name}'s Banner", url=guild.banner.url, color=self.bot.color
         )
         embed.set_author(
-            name=ctx.author.display_name,
-            icon_url=ctx.author.display_avatar
+            name=ctx.author.display_name, icon_url=ctx.author.display_avatar
         )
         embed.set_image(url=guild.banner.url)
 
-
         await ctx.send(embed=embed)
-
 
     @commands.command(
         name="guildsplash",
@@ -1309,13 +1332,10 @@ class Information(commands.Cog):
     async def clearnames(self, ctx, *, user: discord.User = None):
         if user is None:
             user = ctx.author
-        
+
         # Clear name history for the user
-        await self.bot.db.execute(
-            "DELETE FROM names WHERE user_id = $1", 
-            user.id
-        )
-        
+        await self.bot.db.execute("DELETE FROM names WHERE user_id = $1", user.id)
+
         await ctx.success(f"Successfully cleared the name history for **{str(user)}**.")
 
     @commands.command(
@@ -1439,7 +1459,7 @@ class Information(commands.Cog):
             await ctx.fail("No messages found in this channel.")
         except Exception:
             await ctx.fail("No messages have been found in this channel.")
-    
+
     @commands.command(
         name="inviteinfo",
         aliases=["ii"],
@@ -1468,7 +1488,7 @@ class Information(commands.Cog):
             f"**Invite Expiration:** {discord.utils.format_dt(invite.expires_at, style='F') if invite.expires_at else 'Never'}",
             f"**Inviter:** {invite.inviter.mention if invite.inviter else 'N/A'}",
             f"**Temporary:** {'Yes' if invite.temporary else 'No'}",
-            f"**In Use:** {'Yes' if invite.uses else 'No'}"
+            f"**In Use:** {'Yes' if invite.uses else 'No'}",
         ]
 
         guild_info = [
@@ -1476,7 +1496,7 @@ class Information(commands.Cog):
             f"**ID:** {invite.guild.id}",
             f"**Created:** {discord.utils.format_dt(invite.guild.created_at, style='F')}",
             f"**Members:** {invite.approximate_member_count if hasattr(invite, 'approximate_member_count') else 'N/A'}",
-            f"**Verification Level:** {invite.guild.verification_level}"
+            f"**Verification Level:** {invite.guild.verification_level}",
         ]
 
         embed.add_field(
@@ -1494,7 +1514,9 @@ class Information(commands.Cog):
         if invite.guild.icon:
             embed.set_thumbnail(url=invite.guild.icon.url)
 
-        embed.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.display_avatar.url)
+        embed.set_footer(
+            text=f"Requested by {ctx.author}", icon_url=ctx.author.display_avatar.url
+        )
 
         await ctx.send(embed=embed)
 
@@ -1512,7 +1534,7 @@ class Information(commands.Cog):
         rows = []
         for i, invite in enumerate(invites, start=1):
             inviter = invite.inviter.mention if invite.inviter else "Unknown"
-            created_at = discord.utils.format_dt(invite.created_at, style='R')
+            created_at = discord.utils.format_dt(invite.created_at, style="R")
             rows.append(f"`{i}.` **{invite.code}** - {inviter} - {created_at}")
 
         embeds = []
@@ -1524,7 +1546,9 @@ class Information(commands.Cog):
                         color=self.bot.color,
                         description="\n".join(page),
                     )
-                    .set_author(name=ctx.author.name, icon_url=ctx.author.display_avatar)
+                    .set_author(
+                        name=ctx.author.name, icon_url=ctx.author.display_avatar
+                    )
                     .set_footer(text=f"Page {len(embeds) + 1}/{(len(rows) + 9) // 10}")
                 )
                 page = []
@@ -1544,12 +1568,12 @@ class Information(commands.Cog):
         if not embeds:
             embeds.append(
                 discord.Embed(
-                    color=self.bot.color, description="**No invites found in this server**"
+                    color=self.bot.color,
+                    description="**No invites found in this server**",
                 ).set_author(name=ctx.author.name, icon_url=ctx.author.display_avatar)
             )
 
         await ctx.paginate(embeds)
-        
 
     @commands.group(
         invoke_without_command=True,
@@ -1865,7 +1889,6 @@ class Information(commands.Cog):
 
         return await ctx.paginate(embeds)
 
-
     @commands.command(
         name="boomer",
         help="Show the oldest member in the guild by account creation date.",
@@ -1886,33 +1909,47 @@ class Information(commands.Cog):
         await ctx.send(embed=embed)
 
     @commands.command(
-        name='avatar',
-        aliases=['av', 'useravatar'],
+        name="avatar",
+        aliases=["av", "useravatar"],
         description="get the mentioned user's avatar",
         brief="avatar [user]",
         help="avatar @lim",
     )
-    async def avatar(self, ctx: Context, user: Optional[Union[discord.Member, discord.User]] = commands.Author):
+    async def avatar(
+        self,
+        ctx: Context,
+        user: Optional[Union[discord.Member, discord.User]] = commands.Author,
+    ):
 
-            embed = discord.Embed(color=self.bot.color, title=f"{user.name}'s avatar")
-            embed.set_author(name=ctx.author.name, icon_url=ctx.author.display_avatar)
-            embed.url = user.display_avatar.url
-            embed.set_image(url=user.display_avatar)
+        embed = discord.Embed(color=self.bot.color, title=f"{user.name}'s avatar")
+        embed.set_author(name=ctx.author.name, icon_url=ctx.author.display_avatar)
+        embed.url = user.display_avatar.url
+        embed.set_image(url=user.display_avatar)
 
-            view = discord.ui.View()
-            view.add_item(
-                discord.ui.Button(style=discord.ButtonStyle.link, label='WEBP', url=str(user.display_avatar.replace(size=4096, format='webp')))
+        view = discord.ui.View()
+        view.add_item(
+            discord.ui.Button(
+                style=discord.ButtonStyle.link,
+                label="WEBP",
+                url=str(user.display_avatar.replace(size=4096, format="webp")),
             )
-            view.add_item(
-                discord.ui.Button(style=discord.ButtonStyle.link, label='PNG', url=str(user.display_avatar.replace(size=4096, format='png')))
+        )
+        view.add_item(
+            discord.ui.Button(
+                style=discord.ButtonStyle.link,
+                label="PNG",
+                url=str(user.display_avatar.replace(size=4096, format="png")),
             )
-            view.add_item(
-                discord.ui.Button(style=discord.ButtonStyle.link, label='JPG', url=str(user.display_avatar.replace(size=4096, format='jpg')))
+        )
+        view.add_item(
+            discord.ui.Button(
+                style=discord.ButtonStyle.link,
+                label="JPG",
+                url=str(user.display_avatar.replace(size=4096, format="jpg")),
             )
+        )
 
-            return await ctx.reply(embed=embed, view=view)
-
-
+        return await ctx.reply(embed=embed, view=view)
 
     @commands.command(name="vote")
     async def vote(self, ctx):
@@ -1921,12 +1958,16 @@ class Information(commands.Cog):
         embed = Embed(
             title="Vote for Greed Bot!",
             color=self.bot.color,
-            description=f"Vote for **{self.bot.user.name}** and get voter perks and econonmy rewards!"
+            description=f"Vote for **{self.bot.user.name}** and get voter perks and econonmy rewards!",
         )
         embed.set_footer(text="You can vote once every 12 hours!")
 
         # Create a button that opens the vote link on top.gg
-        button = discord.ui.Button(label="Vote Here", style=discord.ButtonStyle.link, url=f"https://top.gg/bot/{bot_id}/vote")
+        button = discord.ui.Button(
+            label="Vote Here",
+            style=discord.ButtonStyle.link,
+            url=f"https://top.gg/bot/{bot_id}/vote",
+        )
 
         # Create a view to add the button
         view = discord.ui.View()
@@ -1934,13 +1975,10 @@ class Information(commands.Cog):
 
         await ctx.send(embed=embed, view=view)
 
-
-
-
     @commands.command()
     async def buy(self, ctx):
         """Send an embed with purchase options and buttons."""
-        
+
         # Create the embed
         embed = discord.Embed(
             title="Purchase Wrath",
@@ -1955,70 +1993,82 @@ class Information(commands.Cog):
             color=self.bot.color,
         )
 
-
-        monthly_button = Button(label="Monthly - $3.50", style=discord.ButtonStyle.green, url="https://buy.stripe.com/aEUdUJc8w3uf6qsfZ7")
-        lifetime_button = Button(label="Lifetime - $10", style=discord.ButtonStyle.blurple, url="https://buy.stripe.com/3cseYN7Sg4yj3eg3cL")
-        transfer_button = Button(label="Transfers - $3", style=discord.ButtonStyle.blurple, url="https://buy.stripe.com/cN29Et0pOd4P3eg4gu")
-
+        monthly_button = Button(
+            label="Monthly - $3.50",
+            style=discord.ButtonStyle.green,
+            url="https://buy.stripe.com/aEUdUJc8w3uf6qsfZ7",
+        )
+        lifetime_button = Button(
+            label="Lifetime - $10",
+            style=discord.ButtonStyle.blurple,
+            url="https://buy.stripe.com/3cseYN7Sg4yj3eg3cL",
+        )
+        transfer_button = Button(
+            label="Transfers - $3",
+            style=discord.ButtonStyle.blurple,
+            url="https://buy.stripe.com/cN29Et0pOd4P3eg4gu",
+        )
 
         view = View()
         view.add_item(monthly_button)
         view.add_item(lifetime_button)
         view.add_item(transfer_button)
 
-
         await ctx.send(embed=embed, view=view)
 
-
-
-    @commands.command(
-        name="bible",
-        brief="Get a random bible verse",
-        example=",bible"
-    )
+    @commands.command(name="bible", brief="Get a random bible verse", example=",bible")
     async def bible(self, ctx):
         """Get a random Bible verse with reference."""
         try:
-            async with self.bot.session.get("https://beta.ourmanna.com/api/v1/get/?format=json") as response:
+            async with self.bot.session.get(
+                "https://beta.ourmanna.com/api/v1/get/?format=json"
+            ) as response:
                 if response.status != 200:
-                    return await ctx.fail("Failed to fetch verse. Please try again later.")
-                    
+                    return await ctx.fail(
+                        "Failed to fetch verse. Please try again later."
+                    )
+
                 data = await response.json()
                 if not data.get("verse") or not data["verse"].get("details"):
                     return await ctx.fail("Invalid API response received.")
 
                 verse = data["verse"]["details"]["text"]
                 verse_reference = data["verse"]["details"]["reference"]
-                
+
                 # Create embed
                 embed = discord.Embed(
-                    title="Bible Verse",
-                    color=self.bot.color,
-                    description=f"*{verse}*"
+                    title="Bible Verse", color=self.bot.color, description=f"*{verse}*"
                 )
                 embed.set_footer(text=verse_reference)
-                embed.set_author(name=ctx.author.name, icon_url=ctx.author.display_avatar)
-                
+                embed.set_author(
+                    name=ctx.author.name, icon_url=ctx.author.display_avatar
+                )
+
                 await ctx.send(embed=embed)
-                
+
         except Exception as e:
             logger.error(f"Error in bible command: {str(e)}")
-            await ctx.fail("An error occurred while fetching the verse. Please try again later.")
-
+            await ctx.fail(
+                "An error occurred while fetching the verse. Please try again later."
+            )
 
     @commands.command(
         name="quran",
-        brief="Get a random quran verse with translation", 
-        example=",quran"
+        brief="Get a random quran verse with translation",
+        example=",quran",
     )
     async def quran(self, ctx):
         """Get a random Quran verse with English translation."""
         try:
             # Get random verse with translation
-            async with self.bot.session.get("https://api.alquran.cloud/v1/ayah/random/editions/quran-simple-enhanced,en.asad") as response:
+            async with self.bot.session.get(
+                "https://api.alquran.cloud/v1/ayah/random/editions/quran-simple-enhanced,en.asad"
+            ) as response:
                 if response.status != 200:
-                    return await ctx.fail("Failed to fetch verse. Please try again later.")
-                    
+                    return await ctx.fail(
+                        "Failed to fetch verse. Please try again later."
+                    )
+
                 data = await response.json()
                 if not data.get("data") or len(data["data"]) < 2:
                     return await ctx.fail("Invalid API response received.")
@@ -2030,18 +2080,24 @@ class Information(commands.Cog):
                 # Create embed
                 embed = discord.Embed(
                     title=f"Surah {arabic['surah']['englishName']} ({arabic['surah']['name']})",
-                    color=self.bot.color
+                    color=self.bot.color,
                 )
-                
+
                 embed.description = f"{arabic['text']}\n\n*{english['text']}*"
-                embed.set_footer(text=f"Verse {arabic['numberInSurah']} • Juz {arabic['juz']}")
-                embed.set_author(name=ctx.author.name, icon_url=ctx.author.display_avatar)
-                
+                embed.set_footer(
+                    text=f"Verse {arabic['numberInSurah']} • Juz {arabic['juz']}"
+                )
+                embed.set_author(
+                    name=ctx.author.name, icon_url=ctx.author.display_avatar
+                )
+
                 await ctx.send(embed=embed)
-                
+
         except Exception as e:
             logger.error(f"Error in quran command: {str(e)}")
-            await ctx.fail("An error occurred while fetching the verse. Please try again later.")
+            await ctx.fail(
+                "An error occurred while fetching the verse. Please try again later."
+            )
 
 
 async def setup(bot):

@@ -7,7 +7,16 @@ from typing import Optional, Coroutine, Callable, Any, Dict, TypeVar, List
 from asyncio.futures import Future
 from typing_extensions import Self
 
-from discord import Message, Client, Guild, VoiceChannel, Member, VoiceState, Embed, File
+from discord import (
+    Message,
+    Client,
+    Guild,
+    VoiceChannel,
+    Member,
+    VoiceState,
+    Embed,
+    File,
+)
 from discord.ext.commands import Context
 from io import BytesIO
 from loguru import logger
@@ -19,6 +28,7 @@ from tool.collage import _make_bar
 T = TypeVar("T")
 Coro = Coroutine[Any, Any, T]
 CoroT = TypeVar("CoroT", bound=Callable[..., Coro[Any]])
+
 
 def get_timestamp() -> float:
     return datetime.now().timestamp()
@@ -83,7 +93,9 @@ class Level:
                         added_xp,
                         amount,
                     )
-                    self.logger.debug(f"Flushed text cache for key {key} (XP +{added_xp}, msgs {amount})")
+                    self.logger.debug(
+                        f"Flushed text cache for key {key} (XP +{added_xp}, msgs {amount})"
+                    )
                 except Exception as e:
                     self.logger.error(f"Failed to flush text cache for key {key}: {e}")
 
@@ -94,7 +106,9 @@ class Level:
     def get_level(self, xp: int) -> int:
         return math.floor(0.05 * (1 + math.sqrt(5)) * math.sqrt(xp)) + 1
 
-    def xp_to_next_level(self, current_level: Optional[int] = None, current_xp: Optional[int] = None) -> int:
+    def xp_to_next_level(
+        self, current_level: Optional[int] = None, current_xp: Optional[int] = None
+    ) -> int:
         if current_xp is not None:
             current_level = self.get_level(current_xp)
         return self.get_xp(current_level + 1) - self.get_xp(current_level)
@@ -109,22 +123,29 @@ class Level:
     def difference(self, ts: float) -> int:
         return int(get_timestamp()) - int(ts)
 
-    def get_key(self, guild: Guild, member: Member, channel: Optional[VoiceChannel] = None) -> str:
+    def get_key(
+        self, guild: Guild, member: Member, channel: Optional[VoiceChannel] = None
+    ) -> str:
         return hash_(f"{guild.id}-{channel.id if channel else ''}-{member.id}")
 
-    async def validate(self, guild: Guild, channel: VoiceChannel, member: Member) -> bool:
+    async def validate(
+        self, guild: Guild, channel: VoiceChannel, member: Member
+    ) -> bool:
         """
         Validate and update a voice-level entry. If a cached entry exists,
         update the DB with new XP and dispatch level-up if necessary.
         """
         key = self.get_key(guild, member, channel)
         if key in self.cache:
-            before_xp = await self.bot.db.fetchval(
-                """SELECT xp FROM voice_levels WHERE guild_id = $1 AND user_id = $2""",
-                guild.id,
-                member.id,
-                cached=False,
-            ) or 0
+            before_xp = (
+                await self.bot.db.fetchval(
+                    """SELECT xp FROM voice_levels WHERE guild_id = $1 AND user_id = $2""",
+                    guild.id,
+                    member.id,
+                    cached=False,
+                )
+                or 0
+            )
             added_xp = self.add_xp()
             after_xp = await self.bot.db.execute(
                 """INSERT INTO voice_levels (guild_id, user_id, xp, time_spent) 
@@ -139,32 +160,43 @@ class Level:
                 self.difference(self.cache[key]["ts"]),
             )
             if self.get_level(int(before_xp)) != self.get_level(int(after_xp)):
-                self.bot.dispatch("voice_level_up", guild, channel, member, self.get_level(int(after_xp)))
+                self.bot.dispatch(
+                    "voice_level_up",
+                    guild,
+                    channel,
+                    member,
+                    self.get_level(int(after_xp)),
+                )
             self.cache.pop(key, None)
             return True
         self.cache[key] = {
             "guild": guild,
             "channel": channel,
             "member": member,
-            "ts": int(get_timestamp())
+            "ts": int(get_timestamp()),
         }
         return False
 
     async def check_level_up(self, message: Message) -> bool:
         try:
-            before_xp = await self.bot.db.fetchval(
-                """SELECT xp FROM text_levels WHERE guild_id = $1 AND user_id = $2""",
-                message.guild.id,
-                message.author.id,
-                cached=False,
-            ) or 0
+            before_xp = (
+                await self.bot.db.fetchval(
+                    """SELECT xp FROM text_levels WHERE guild_id = $1 AND user_id = $2""",
+                    message.guild.id,
+                    message.author.id,
+                    cached=False,
+                )
+                or 0
+            )
             key = f"{message.guild.id}-{message.author.id}"
             added_xp = sum(self.add_xp(m) for m in self.text_cache[key]["messages"])
             after_xp = before_xp + added_xp
             new_level = self.get_level(int(after_xp))
             if self.text_cache[key].get("messaged", 0) != new_level:
                 if self.get_level(int(before_xp)) != self.get_level(int(after_xp)):
-                    self.bot.dispatch("text_level_up", message.guild, message.author, new_level)
+                    self.bot.dispatch(
+                        "text_level_up", message.guild, message.author, new_level
+                    )
                     await self.bot.db.execute(
                         """INSERT INTO text_levels (guild_id, user_id, xp, msgs) 
                            VALUES($1, $2, $3, $4)
@@ -228,10 +260,11 @@ class Level:
             return True
 
     async def check_guild(self, guild: Guild) -> bool:
-        return bool(await self.bot.db.fetchrow(
-            """SELECT 1 FROM text_level_settings WHERE guild_id = $1""",
-            guild.id
-        ))
+        return bool(
+            await self.bot.db.fetchrow(
+                """SELECT 1 FROM text_level_settings WHERE guild_id = $1""", guild.id
+            )
+        )
 
     async def get_statistics(self, member: Member, type: str) -> Optional[List[Any]]:
         xp, amount = 0, 0
@@ -268,13 +301,16 @@ class Level:
             tasks = [
                 self.validate(guild, vc, member)
                 for guild in self.bot.guilds
-                for vc in guild.voice_channels if vc.members
+                for vc in guild.voice_channels
+                if vc.members
                 for member in vc.members
             ]
             if tasks:
                 await gather(*tasks)
 
-    async def member_left(self, guild: Guild, channel: VoiceChannel, member: Member) -> bool:
+    async def member_left(
+        self, guild: Guild, channel: VoiceChannel, member: Member
+    ) -> bool:
         key = self.get_key(guild, member, channel)
         if key in self.cache:
             await self.validate(guild, channel, member)
@@ -288,7 +324,12 @@ class Level:
             await self.validate(after.guild, after.channel, member)
 
     async def do_message_event(self, message: Message):
-        if not self.bot or message.author.bot or not message.guild or not await self.check_guild(message.guild):
+        if (
+            not self.bot
+            or message.author.bot
+            or not message.guild
+            or not await self.check_guild(message.guild)
+        ):
             return
         ctx = await self.bot.get_context(message)
         if not ctx.valid:
@@ -307,13 +348,17 @@ class Level:
             amount = f"`{self.get_voice_time(amount)}`"
         needed_xp = self.get_xp(self.get_level(xp) + 1)
         percentage = int((xp / needed_xp) * 100)
-        bar_img = BytesIO(await _make_bar(percentage, "#2f4672", 100 - percentage, "black"))
+        bar_img = BytesIO(
+            await _make_bar(percentage, "#2f4672", 100 - percentage, "black")
+        )
         bar = File(fp=bar_img, filename="bar.png")
 
-
-        
         embed = (
-            Embed(title=f"{member}'s {type.lower()} Level", url="https://greed.rocks/", color=0x2f4672)
+            Embed(
+                title=f"{member}'s {type.lower()} Level",
+                url="https://greed.rocks/",
+                color=0x2F4672,
+            )
             .add_field(name=amount_type, value=amount, inline=False)
             .add_field(name="Level", value=self.get_level(xp), inline=False)
             .add_field(name="XP", value=f"{xp} / {needed_xp}", inline=False)
@@ -327,6 +372,7 @@ class Level:
         (This method is unchanged from earlier.)
         """
         from inspect import getmembers, iscoroutinefunction, signature
+
         members = getmembers(self, predicate=iscoroutinefunction)
         coroutine_names = []
         for name, func in members:

@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import datetime
+import hashlib
+import aiohttp
+import discord
 from typing import TypedDict, Union, Optional, List
 from aiohttp.web import Application, Request, Response, _run_app, json_response
 from discord.ext.commands import Cog, Group, Command
 from prometheus_async import aio
 import socket
 from tool.greed import Greed
+import urllib.parse
+from config import Authorization
 
 
 class CommandData(TypedDict):
@@ -17,6 +22,7 @@ class CommandData(TypedDict):
     usage: Optional[str]
     example: Optional[str]
 
+
 class WebServer(Cog):
     def __init__(self, bot: Greed) -> None:
         self.bot = bot
@@ -25,11 +31,12 @@ class WebServer(Cog):
 
     def _setup_routes(self) -> None:
         routes = [
-            ('GET', '/', self.index),
-            ('GET', '/commands', self.commands),
-            ('GET', '/raw', self.command_dump),
-            ('GET', '/status', self.status),
-            ('GET', '/metrics', aio.web.server_stats)
+            ("GET", "/", self.index),
+            ("GET", "/commands", self.commands),
+            ("GET", "/raw", self.command_dump),
+            ("GET", "/status", self.status),
+            ("GET", "/metrics", aio.web.server_stats),
+            ("GET", "/callback", self.lastfm_callback),
         ]
         for method, path, handler in routes:
             self.app.router.add_route(method, path, handler)
@@ -43,7 +50,7 @@ class WebServer(Cog):
         await self.app.shutdown()
 
     async def _run(self) -> None:
-        await _run_app(self.app, host='0.0.0.0', port=2027, handle_signals=False)
+        await _run_app(self.app, host="0.0.0.0", port=2027, handle_signals=False)
 
     @staticmethod
     async def index(_: Request) -> Response:
@@ -53,7 +60,9 @@ class WebServer(Cog):
         shards = await self.bot.ipc.roundtrip("get_shards")
         return json_response({"shards": shards})
 
-    def _get_permissions(self, command: Union[Command, Group], bot: bool = False) -> Optional[List[str]]:
+    def _get_permissions(
+        self, command: Union[Command, Group], bot: bool = False
+    ) -> Optional[List[str]]:
         perms = command.bot_permissions if bot else command.permissions
         if not perms:
             return None
@@ -64,20 +73,28 @@ class WebServer(Cog):
         else:
             permissions.append(perms.replace("_", " ").title())
         return permissions
+
     async def command_dump(self, _: Request) -> Response:
         commands: List[CommandData] = []
         for cmd in self.bot.walk_commands():
-            if cmd.hidden or (isinstance(cmd, Group) and not cmd.description) or cmd.qualified_name == "help":
+            if (
+                cmd.hidden
+                or (isinstance(cmd, Group) and not cmd.description)
+                or cmd.qualified_name == "help"
+            ):
                 continue
-            commands.append({
-                "name": cmd.qualified_name,
-                "description": cmd.brief,
-                "permissions": self._get_permissions(cmd),
-                "bot_permissions": self._get_permissions(cmd, True),
-                "usage": cmd.usage,
-                "example": cmd.example
-            })
+            commands.append(
+                {
+                    "name": cmd.qualified_name,
+                    "description": cmd.brief,
+                    "permissions": self._get_permissions(cmd),
+                    "bot_permissions": self._get_permissions(cmd, True),
+                    "usage": cmd.usage,
+                    "example": cmd.example,
+                }
+            )
         return json_response(commands)
+
     async def commands(self, _: Request) -> Response:
         def format_command(cmd: Command, level: int = 0) -> str:
             prefix = "|    " * level
@@ -90,11 +107,139 @@ class WebServer(Cog):
             if name.lower() in ("jishaku", "developer"):
                 continue
 
-            commands = [format_command(cmd, level=1) for cmd in cog.walk_commands() if not cmd.hidden]
+            commands = [
+                format_command(cmd, level=1)
+                for cmd in cog.walk_commands()
+                if not cmd.hidden
+            ]
             if commands:
                 output.extend([f"┌── {name}"] + commands)
 
         return json_response("\n".join(output))
+
+    async def lastfm_callback(self, request: Request) -> Response:
+        """Handle the callback from LastFM OAuth authentication"""
+        # This is the token returned by LastFM after authorization
+        lastfm_token = request.query.get("token")
+        if not lastfm_token:
+            return Response(text="No token provided", status=400)
+
+        tracking_id = request.query.get("tracking_id")
+        if not tracking_id:
+            return Response(text="No tracking ID provided", status=400)
+
+        if not hasattr(Authorization.LastFM, "pending_auth"):
+            return Response(text="No pending authorizations", status=400)
+
+        user_id = Authorization.LastFM.pending_auth.get(tracking_id)
+        if not user_id:
+            return Response(text="Invalid or expired tracking ID", status=400)
+
+        try:
+            # Generate signature for LastFM API
+            api_sig = hashlib.md5(
+                f"api_key{Authorization.LastFM.api_key}methodauth.getSessiontoken{lastfm_token}{Authorization.LastFM.api_secret}".encode()
+            ).hexdigest()
+
+            # Get session key from LastFM
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    "http://ws.audioscrobbler.com/2.0/",
+                    params={
+                        "method": "auth.getSession",
+                        "api_key": Authorization.LastFM.api_key,
+                        "token": lastfm_token,
+                        "api_sig": api_sig,
+                        "format": "json",
+                    },
+                ) as resp:
+                    data = await resp.json()
+
+                    if "error" in data:
+                        return Response(text="Failed to get session key", status=400)
+
+                    session_key = data["session"]["key"]
+                    username = data["session"]["name"]
+
+                    # Ensure the schema exists
+                    try:
+                        await self.bot.db.execute("CREATE SCHEMA IF NOT EXISTS lastfm")
+                    except Exception:
+                        pass
+
+                    # Check if the table exists, create it if not
+                    try:
+                        await self.bot.db.execute(
+                            """
+                            CREATE TABLE IF NOT EXISTS lastfm.conf (
+                                user_id BIGINT PRIMARY KEY,
+                                username TEXT NOT NULL,
+                                session_key TEXT
+                            )
+                        """
+                        )
+                    except Exception:
+                        pass
+
+                    # Store in database with error handling
+                    try:
+                        # Try to insert/update the record
+                        await self.bot.db.execute(
+                            """INSERT INTO lastfm.conf (user_id, username, session_key) 
+                               VALUES ($1, $2, $3) 
+                               ON CONFLICT (user_id) 
+                               DO UPDATE SET username = $2, session_key = $3""",
+                            user_id,
+                            username,
+                            session_key,
+                        )
+                    except Exception as e:
+                        # If that fails, try to close and reset the connection pool
+                        try:
+                            # Close all connections in the pool
+                            await self.bot.db.execute(
+                                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = current_database()"
+                            )
+
+                            # Try the insert/update again
+                            await self.bot.db.execute(
+                                """INSERT INTO lastfm.conf (user_id, username, session_key) 
+                                   VALUES ($1, $2, $3) 
+                                   ON CONFLICT (user_id) 
+                                   DO UPDATE SET username = $2, session_key = $3""",
+                                user_id,
+                                username,
+                                session_key,
+                            )
+                        except Exception as e2:
+                            return Response(
+                                text=f"Database error: {str(e2)}", status=500
+                            )
+
+                    # Send DM to user
+                    user = self.bot.get_user(user_id)
+                    if user:
+                        embed = discord.Embed(
+                            title="LastFM Authentication Successful",
+                            description=f"You have been successfully logged in as **{username}**",
+                            color=0x2B2D31,
+                        )
+                        try:
+                            await user.send(embed=embed)
+                        except discord.Forbidden:
+                            pass
+
+                    # Remove from pending auth
+                    if tracking_id in Authorization.LastFM.pending_auth:
+                        del Authorization.LastFM.pending_auth[tracking_id]
+
+                    return Response(
+                        text="LastFM Authorized - You can close this window", status=200
+                    )
+
+        except Exception as e:
+            return Response(text=f"An error occurred: {str(e)}", status=500)
+
 
 async def setup(bot) -> None:
     await bot.add_cog(WebServer(bot))

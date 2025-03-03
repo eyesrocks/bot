@@ -1,10 +1,12 @@
 """
-  Author: cop-discord
-  Email: cop@catgir.ls
-  Discord: aiohttp
+Author: cop-discord
+Email: cop@catgir.ls
+Discord: aiohttp
 """
+
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
+
 
 class FAQ(BaseModel):
     query: Optional[str] = None
@@ -44,4 +46,4 @@ class BingResponse(BaseModel):
     cached: Optional[bool] = False
 
     def sort(self: "BingResponse") -> None:
-        self.results = sorted(self.results, key = lambda result: result.page)
+        self.results = sorted(self.results, key=lambda result: result.page)

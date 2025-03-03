@@ -8,11 +8,13 @@ from cashews import cache
 
 cache.setup("mem://")
 
-@cache(ttl = "60m", key = "webhook:{url}")
+
+@cache(ttl="60m", key="webhook:{url}")
 async def get_webhook(url: str, token: str):
     session = ClientSession()
-    webhook = Webhook.from_url(url, session = session, bot_token = token)
+    webhook = Webhook.from_url(url, session=session, bot_token=token)
     return webhook
+
 
 class Webhook:
     def __init__(self, bot):
@@ -24,7 +26,7 @@ class Webhook:
             data = [channel.id, []]
             channel_webhooks = await channel.webhooks()
             for webhook in channel_webhooks:
-                await webhook.delete(reason = "freeing up space for reskin")
+                await webhook.delete(reason="freeing up space for reskin")
             for i in range(14):
                 data[1].append((await channel.create_webhook(**kwargs)).url)
         return webhooks
@@ -44,7 +46,9 @@ class Webhook:
                 if entry[0] == channel.id or entry[1] == channel.name:
                     webhooks = entry[2]
                     break
-            webhooks = await gather(*[get_webhook(w, self.bot.config['token']) for w in webhooks])
+            webhooks = await gather(
+                *[get_webhook(w, self.bot.config["token"]) for w in webhooks]
+            )
             return webhooks
         return None
 
@@ -52,18 +56,19 @@ class Webhook:
         for channel in guild.text_channels:
             if webhooks := await self.get_webhooks(channel):
                 for webhook in webhooks:
-                    await webhook.delete(reason = "webhooks cleared")
+                    await webhook.delete(reason="webhooks cleared")
         return True
 
-
-    async def send(self, channel: GuildChannel, *args: Any, **kwargs: Any) -> Optional[WebhookMessage]:
+    async def send(
+        self, channel: GuildChannel, *args: Any, **kwargs: Any
+    ) -> Optional[WebhookMessage]:
         webhooks = await self.get_webhooks(channel)
         if not webhooks:
             return None
         exception = None
         for webhook in webhooks:
             if webhook.channel.id != channel.id:
-                await webhook.edit(channel = channel)
+                await webhook.edit(channel=channel)
             try:
                 async with timeout(3):
                     _ = await webhook.send(*args, **kwargs)

@@ -16,7 +16,7 @@ import datetime
 from datetime import datetime, timedelta
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageSequence
 from googleapiclient.discovery import build
-from loguru import logger 
+from loguru import logger
 from io import BytesIO
 from typing import List
 import base64
@@ -31,10 +31,12 @@ from random import choice
 from tool.managers.bing import BingService
 from dataclasses import dataclass, field
 from tool.worker import offloaded
+
 # from greed.tool import aliases
 
 IMAGE_FOLDER = "/root/greed/data/nba"
 FONT_PATH = "/root/greed/arial.ttf"  # Ensure this points to a valid .ttf font file
+
 
 @offloaded
 def get_dominant_color(image_bytes: bytes) -> dict:
@@ -51,6 +53,7 @@ def rotate_image(image_bytes: bytes, angle: int) -> bytes:
     output = BytesIO()
     image.save(output, format="PNG")
     return output.getvalue()
+
 
 @offloaded
 def compress_image(image_bytes: bytes, quality: int = None) -> bytes:
@@ -91,7 +94,7 @@ def do_caption(para: list, image_bytes: bytes, message_data: dict):
     current_h, pad = 120 - i, 0
 
     for line in para:
-        if message_data['content'].replace("\n", "").isascii():
+        if message_data["content"].replace("\n", "").isascii():
             _, _, w3, h3 = draw.textbbox(
                 (0, 0), line.ljust(int(len(line) / 2 + 11), " "), font=fnt
             )
@@ -129,14 +132,20 @@ def do_caption(para: list, image_bytes: bytes, message_data: dict):
 
     return output_bytes
 
+
 GOOGLE_API_KEY = "AIzaSyCgPL4hAT14sdyylXxY_R-hXJN4XMo7zZo"
 SEARCH_ENGINE_ID = "8691350b6083348ae"
+
+
 class TicTacToeButton(discord.ui.Button):
     """
     Represents a button on the Tic Tac Toe board.
     """
-    def __init__(self, x: int, y: int, player1: discord.Member, player2: discord.Member):
-        super().__init__(style=discord.ButtonStyle.secondary, label='\u200b', row=y)
+
+    def __init__(
+        self, x: int, y: int, player1: discord.Member, player2: discord.Member
+    ):
+        super().__init__(style=discord.ButtonStyle.secondary, label="\u200b", row=y)
         self.x = x
         self.y = y
         self.player1 = player1
@@ -147,16 +156,24 @@ class TicTacToeButton(discord.ui.Button):
         Handles the button click event.
         """
         assert self.view is not None
-        view: 'TicTacToe' = self.view
+        view: "TicTacToe" = self.view
         if view.board[self.y][self.x] in (view.X, view.O):
             return
 
         # Check if it's the correct player's turn
-        if (view.current_player == view.X and interaction.user.id != self.player1.id) or (view.current_player == view.O and interaction.user.id != self.player2.id):
-            return await interaction.response.send_message("It's not your turn!", ephemeral=True)
+        if (
+            view.current_player == view.X and interaction.user.id != self.player1.id
+        ) or (view.current_player == view.O and interaction.user.id != self.player2.id):
+            return await interaction.response.send_message(
+                "It's not your turn!", ephemeral=True
+            )
 
-        self.style = discord.ButtonStyle.danger if view.current_player == view.X else discord.ButtonStyle.success
-        self.label = 'X' if view.current_player == view.X else 'O'
+        self.style = (
+            discord.ButtonStyle.danger
+            if view.current_player == view.X
+            else discord.ButtonStyle.success
+        )
+        self.label = "X" if view.current_player == view.X else "O"
         self.disabled = True
         view.board[self.y][self.x] = view.current_player
 
@@ -167,8 +184,9 @@ class TicTacToeButton(discord.ui.Button):
         winner = view.check_board_winner()
         if winner is not None:
             content = (
-                "It's a tie!" if winner == view.Tie else
-                f"**{self.player1.mention if winner == view.X else self.player2.mention}** won!"
+                "It's a tie!"
+                if winner == view.Tie
+                else f"**{self.player1.mention if winner == view.X else self.player2.mention}** won!"
             )
             # Disable all buttons and stop the view
             for child in view.children:
@@ -186,6 +204,7 @@ class TicTacToe(discord.ui.View):
     """
     Represents the Tic Tac Toe game board and logic.
     """
+
     children: List[TicTacToeButton]
     X = -1
     O = 1
@@ -214,9 +233,12 @@ class TicTacToe(discord.ui.View):
         board = self.board
 
         lines = (
-            board +  # Rows
-            [list(col) for col in zip(*board)] +  # Columns
-            [[board[i][i] for i in range(3)], [board[i][2 - i] for i in range(3)]]  # Diagonals
+            board  # Rows
+            + [list(col) for col in zip(*board)]  # Columns
+            + [
+                [board[i][i] for i in range(3)],
+                [board[i][2 - i] for i in range(3)],
+            ]  # Diagonals
         )
 
         for line in lines:
@@ -244,7 +266,7 @@ class TicTacToe(discord.ui.View):
             item.disabled = True
         if hasattr(self, "message"):
             await self.message.edit(view=self)
-    
+
 
 class DiaryModal(discord.ui.Modal, title="Create a Diary Entry"):
     def __init__(self):
@@ -254,14 +276,14 @@ class DiaryModal(discord.ui.Modal, title="Create a Diary Entry"):
             label="Diary Title",
             placeholder="Enter the title of your diary",
             required=True,
-            max_length=100
+            max_length=100,
         )
         self.text_input = discord.ui.TextInput(
             label="Diary Content",
             style=discord.TextStyle.paragraph,
             placeholder="Write your thoughts here...",
             required=True,
-            max_length=2000
+            max_length=2000,
         )
 
         self.add_item(self.title_input)
@@ -270,23 +292,29 @@ class DiaryModal(discord.ui.Modal, title="Create a Diary Entry"):
     async def on_submit(self, interaction: discord.Interaction):
         now = datetime.now()
         date = f"{now.month}/{now.day}/{str(now.year)[2:]}"
-        
+
         # Insert into the database
         user_id = interaction.user.id
         title = self.title_input.value
         content = self.text_input.value
         await interaction.client.db.execute(
             "INSERT INTO diary (user_id, date, title, text) VALUES ($1, $2, $3, $4)",
-            user_id, date, title, content
+            user_id,
+            date,
+            title,
+            content,
         )
-        
-        await interaction.response.send_message(f"Diary entry created for {date}!", ephemeral=True)
+
+        await interaction.response.send_message(
+            f"Diary entry created for {date}!", ephemeral=True
+        )
 
 
 class GuildData:
     """
     Holds per-guild data for the BlackTea game.
     """
+
     def __init__(self):
         self.players: List[int] = []
         self.lives: Dict[str, int] = {}
@@ -297,9 +325,10 @@ class BlackTea:
     """
     Manages the core mechanics of the BlackTea game.
     """
+
     LIFE_LIMIT = 3
     WORDS_URL = "https://raw.githubusercontent.com/ScriptSmith/topwords/refs/heads/master/words.txt"
- 
+
     def __init__(self, bot):
         self.bot = bot
         self.color = 0xA5D287
@@ -322,12 +351,15 @@ class BlackTea:
                     try:
                         text = await response.text(encoding="utf-8")
                     except UnicodeDecodeError as e:
-                        logger.warning(f"UTF-8 decoding failed: {e}. Falling back to ISO-8859-1.")
+                        logger.warning(
+                            f"UTF-8 decoding failed: {e}. Falling back to ISO-8859-1."
+                        )
 
                         text = await response.text(encoding="ISO-8859-1")
-                
+
                     self.words = [
-                        line.strip() for line in text.splitlines() 
+                        line.strip()
+                        for line in text.splitlines()
                         if line.strip() and line.strip().isalpha()
                     ]
             except Exception as e:
@@ -388,8 +420,8 @@ class BlackTea:
             content=member.mention,
             embed=Embed(
                 description=f"🎯 {member.mention}, your word must contain: **{prefix}**. "
-                            f"You have 10 seconds to respond!"
-            )
+                f"You have 10 seconds to respond!"
+            ),
         )
 
         try:
@@ -406,7 +438,9 @@ class BlackTea:
             )
 
             session.guessed_words.add(message.content.lower())
-            await channel.send(embed=Embed(description=f"✅ Correct answer, {member.mention}!"))
+            await channel.send(
+                embed=Embed(description=f"✅ Correct answer, {member.mention}!")
+            )
             return True
 
         except asyncio.TimeoutError:
@@ -424,7 +458,7 @@ class BlackTea:
         async with self.lock:
             if guild_id in self.match_started:
                 raise ValueError("A BlackTea match is already in progress.")
-            
+
             guild_data = GuildData()
             guild_data.lives = {}
             self.guild_data[guild_id] = guild_data
@@ -468,10 +502,7 @@ class BlackTea:
             except discord.NotFound:
                 raise ValueError("The game message was deleted.")
 
-            users = [
-                u.id async for u in message.reactions[0].users()
-                if not u.bot
-            ]
+            users = [u.id async for u in message.reactions[0].users() if not u.bot]
 
             if len(users) < 2:
                 raise ValueError("Not enough players to start.")
@@ -505,6 +536,7 @@ class BlackTea:
         finally:
             self.reset_guild_data(guild_id)
 
+
 @offloaded
 async def fetch_avatar(url):
     async with aiohttp.ClientSession() as session:
@@ -516,7 +548,7 @@ async def fetch_avatar(url):
 def ship_img(avatar1_bytes, avatar2_bytes, compatibility):
     width = 1200
     height = 650
-    image = Image.new('RGBA', (width, height), (255, 255, 255, 0))
+    image = Image.new("RGBA", (width, height), (255, 255, 255, 0))
     draw = ImageDraw.Draw(image)
 
     avatar1 = Image.open(io.BytesIO(avatar1_bytes)).convert("RGBA")
@@ -526,7 +558,7 @@ def ship_img(avatar1_bytes, avatar2_bytes, compatibility):
     avatar2 = avatar2.resize((250, 250))
 
     def create_circle_mask(size):
-        circle_mask = Image.new('L', size, 0)
+        circle_mask = Image.new("L", size, 0)
         draw = ImageDraw.Draw(circle_mask)
         draw.ellipse((0, 0, size[0], size[1]), fill=255)
         return circle_mask
@@ -546,7 +578,9 @@ def ship_img(avatar1_bytes, avatar2_bytes, compatibility):
     progress_bar_x = (width - progress_bar_width) // 2
     progress_bar_y = 40
 
-    gradient = Image.new('RGBA', (progress_bar_width, progress_bar_height), (255, 255, 255, 255))
+    gradient = Image.new(
+        "RGBA", (progress_bar_width, progress_bar_height), (255, 255, 255, 255)
+    )
     gradient_draw = ImageDraw.Draw(gradient)
 
     for x in range(progress_bar_width):
@@ -555,9 +589,11 @@ def ship_img(avatar1_bytes, avatar2_bytes, compatibility):
         b = int((x / progress_bar_width) * 180)
         gradient_draw.line((x, 0, x, progress_bar_height), fill=(r, g, b))
 
-    mask = Image.new('L', (progress_bar_width, progress_bar_height), 0)
+    mask = Image.new("L", (progress_bar_width, progress_bar_height), 0)
     mask_draw = ImageDraw.Draw(mask)
-    mask_draw.rounded_rectangle([0, 0, progress_bar_width, progress_bar_height], radius=corner_radius, fill=255)
+    mask_draw.rounded_rectangle(
+        [0, 0, progress_bar_width, progress_bar_height], radius=corner_radius, fill=255
+    )
 
     gradient.putalpha(mask)
 
@@ -566,7 +602,7 @@ def ship_img(avatar1_bytes, avatar2_bytes, compatibility):
 
     image.paste(visible_gradient, (progress_bar_x, progress_bar_y), visible_gradient)
 
-    heart_path = 'heart.png'
+    heart_path = "heart.png"
     heart = Image.open(heart_path).convert("RGBA")
     heart = heart.resize((120, 120))
 
@@ -575,7 +611,7 @@ def ship_img(avatar1_bytes, avatar2_bytes, compatibility):
     image = image.filter(ImageFilter.SMOOTH)
 
     with io.BytesIO() as image_binary:
-        image.save(image_binary, 'PNG')
+        image.save(image_binary, "PNG")
         image_binary.seek(0)
         return image_binary.read()
 
@@ -608,8 +644,6 @@ class Fun(commands.Cog):
             "Raspberry",
         ]
 
-
-
     @commands.Cog.listener()
     async def on_message(self, message):
         """
@@ -622,16 +656,16 @@ class Fun(commands.Cog):
         content = message.content.lower()
 
         # Regex patterns for both words
-        general_word = r'\bnigga\b'  # Match "nigga"
-        hard_r_word = r'\bnigger\b'  # Match "nigger"
+        general_word = r"\bnigga\b"  # Match "nigga"
+        hard_r_word = r"\bnigger\b"  # Match "nigger"
 
         try:
             # Check and update counts
             if re.search(general_word, content, re.IGNORECASE):
-                await self.increment_offensive_count(user_id, 'general_count')
+                await self.increment_offensive_count(user_id, "general_count")
 
             if re.search(hard_r_word, content, re.IGNORECASE):
-                await self.increment_offensive_count(user_id, 'hard_r_count')
+                await self.increment_offensive_count(user_id, "hard_r_count")
 
         except Exception as e:
             logger.error(f"Error processing message from {message.author}: {e}")
@@ -651,12 +685,10 @@ class Fun(commands.Cog):
         except Exception as e:
             logger.error(f"Error incrementing count for user {user_id}: {e}")
 
-
-
     async def get_caption(
         self, ctx: Context, message: Optional[discord.Message] = None
     ):
-        
+
         if message is None:
             msg = ctx.message.reference
             if msg is None:
@@ -671,7 +703,11 @@ class Fun(commands.Cog):
         else:
             para = textwrap.wrap(message.clean_content, width=13)
 
-        output = await do_caption(para, image, message_data={"author": message.author.name, "content": message.content})
+        output = await do_caption(
+            para,
+            image,
+            message_data={"author": message.author.name, "content": message.content},
+        )
         buffer = BytesIO(output)
         buffer.seek(0)
         file = discord.File(fp=buffer, filename="quote.png")
@@ -873,7 +909,9 @@ class Fun(commands.Cog):
             mention_author=False,
         )
 
-    @commands.group(name="vape", brief="Hit the vape", invoke_without_command=True, aliases=["hit"])
+    @commands.group(
+        name="vape", brief="Hit the vape", invoke_without_command=True, aliases=["hit"]
+    )
     @commands.cooldown(1, 3, commands.BucketType.user)
     async def vape(self, ctx):
         has_vape = await self.bot.db.fetchrow(
@@ -1005,8 +1043,10 @@ class Fun(commands.Cog):
                 color=self.bot.color,
             )
         )
-    
-    @vape.command(name="hits", brief="Show the total number of hits taken by the server")
+
+    @vape.command(
+        name="hits", brief="Show the total number of hits taken by the server"
+    )
     async def vape_hits(self, ctx):
         hits = await self.bot.db.fetchval(
             "SELECT guild_hits FROM vape WHERE guild_id = $1", ctx.guild.id
@@ -1018,19 +1058,18 @@ class Fun(commands.Cog):
             )
         )
 
-
     @commands.command(name="caption", aliases=["quote"])
     async def caption(
         self, ctx: Context, message: Optional[discord.Message] = None
     ) -> Message:
         return await self.get_caption(ctx, message)
 
-
-
-
-
-
-    @commands.command(name="pp", description="See pp size for specified user", aliases=['ppsize'], usage="pp [user]")
+    @commands.command(
+        name="pp",
+        description="See pp size for specified user",
+        aliases=["ppsize"],
+        usage="pp [user]",
+    )
     @commands.cooldown(1, 4, commands.BucketType.guild)
     async def pp(self, ctx, *, user: discord.Member = None):
         if user is None:
@@ -1142,39 +1181,48 @@ class Fun(commands.Cog):
             "Your mother may have told you that you could be anything you wanted, but a douchebag wasn't what she meant.",
             "Your mother was a hamster, and your father reeks of elderberries!",
             "Your penis is smaller than the payment a homeless orphan in Mongolia received for stitching my shoes.",
-            "What are serbians? Never heard of then before."
-    ]
-        
-        embed=discord.Embed(color=0x2B2D31, description= f"{random.choice(roast_list)}")
+            "What are serbians? Never heard of then before.",
+        ]
+
+        embed = discord.Embed(
+            color=0x2B2D31, description=f"{random.choice(roast_list)}"
+        )
         await ctx.reply(embed=embed, mention_author=False)
 
-
-
-    @commands.hybrid_command(help="ask the :8ball: anything", aliases=["8ball"], description="fun", usage="<member>")
+    @commands.hybrid_command(
+        help="ask the :8ball: anything",
+        aliases=["8ball"],
+        description="fun",
+        usage="<member>",
+    )
     @commands.cooldown(1, 3, commands.BucketType.user)
     async def eightball(self, ctx, *, question):
-        responses  = ["It is certain.",
-                    "It is decidedly so.",
-                    "Without a doubt.",
-                    "Yes - definitely.",
-                    "You may rely on it.",
-                    "As I see it, yes.",
-                    "Most likely.",
-                    "Outlook good.",
-                    "Yes.",
-                    "Signs point to yes.",
-                    "Reply hazy, try again.",
-                    "Ask again later.",
-                    "Better not tell you now.",
-                    "Cannot predict now.",
-                    "Concentrate and ask again.",
-                    "Don't count on it.",
-                    "My reply is no.",
-                    "My sources say no.",
-                    "Outlook not so good.",
-                    "Very doubtful.",
-                    "Maybe."]
-        embed=discord.Embed(color=0x2B2D31, description= f" :8ball: {random.choice(responses)}")
+        responses = [
+            "It is certain.",
+            "It is decidedly so.",
+            "Without a doubt.",
+            "Yes - definitely.",
+            "You may rely on it.",
+            "As I see it, yes.",
+            "Most likely.",
+            "Outlook good.",
+            "Yes.",
+            "Signs point to yes.",
+            "Reply hazy, try again.",
+            "Ask again later.",
+            "Better not tell you now.",
+            "Cannot predict now.",
+            "Concentrate and ask again.",
+            "Don't count on it.",
+            "My reply is no.",
+            "My sources say no.",
+            "Outlook not so good.",
+            "Very doubtful.",
+            "Maybe.",
+        ]
+        embed = discord.Embed(
+            color=0x2B2D31, description=f" :8ball: {random.choice(responses)}"
+        )
         await ctx.reply(embed=embed, mention_author=False)
 
     @commands.command(
@@ -1222,12 +1270,13 @@ class Fun(commands.Cog):
         await ctx.send(file=file)
         buffer.close()
 
-
     @commands.command(
         name="compress",
         brief="Compress an image to reduce its size",
     )
-    async def compress(self, ctx, message: Optional[discord.Message] = None, quality: int = 10):
+    async def compress(
+        self, ctx, message: Optional[discord.Message] = None, quality: int = 10
+    ):
         if message is None:
             msg = ctx.message.reference
             if msg is None:
@@ -1273,7 +1322,7 @@ class Fun(commands.Cog):
         color = random.randint(0, 0xFFFFFF)
         hex_color = f"#{color:06x}"
         return await ColorInfo().convert(ctx, hex_color)
-    
+
     @commands.command(
         name="rps",
         brief="Play rock, paper, scissors",
@@ -1286,7 +1335,7 @@ class Fun(commands.Cog):
                 color=self.bot.color,
             )
             return await ctx.send(embed=embed)
-        
+
         bot_choice = random.choice(choices)
         if choice == bot_choice:
             embed = discord.Embed(
@@ -1294,22 +1343,24 @@ class Fun(commands.Cog):
                 color=self.bot.color,
             )
             return await ctx.send(embed=embed)
-        
-        if (choice == "rock" and bot_choice == "scissors") or (
-            choice == "paper" and bot_choice == "rock"
-        ) or (choice == "scissors" and bot_choice == "paper"):
+
+        if (
+            (choice == "rock" and bot_choice == "scissors")
+            or (choice == "paper" and bot_choice == "rock")
+            or (choice == "scissors" and bot_choice == "paper")
+        ):
             embed = discord.Embed(
                 description=f"You chose ``{choice}`` and I chose ``{bot_choice}``. **You win!**",
                 color=self.bot.color,
             )
             return await ctx.send(embed=embed)
-        
+
         embed = discord.Embed(
             description=f"You chose ``{choice}`` and I chose ``{bot_choice}``. **I win!**",
             color=self.bot.color,
         )
         return await ctx.send(embed=embed)
-    
+
     @commands.command(
         name="choose",
         brief="Choose between multiple options",
@@ -1323,7 +1374,7 @@ class Fun(commands.Cog):
             color=self.bot.color,
         )
         await ctx.send(embed=embed)
-    
+
     @commands.command(
         name="wyr",
         brief="Play a game of Would You Rather",
@@ -1333,7 +1384,7 @@ class Fun(commands.Cog):
         url = "https://would-you-rather.p.rapidapi.com/wyr/random"
         headers = {
             "x-rapidapi-key": "dd42e94a21msh04bda572c6da553p127a95jsnf367d0e280bb",
-            "x-rapidapi-host": "would-you-rather.p.rapidapi.com"
+            "x-rapidapi-host": "would-you-rather.p.rapidapi.com",
         }
 
         async with aiohttp.ClientSession() as session:
@@ -1350,8 +1401,11 @@ class Fun(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-
-    @commands.command(name="nword", aliases=['nw'], help="Shows how many times you've said the n-word and hard r")
+    @commands.command(
+        name="nword",
+        aliases=["nw"],
+        help="Shows how many times you've said the n-word and hard r",
+    )
     async def nword_count(self, ctx):
         """
         Show how many times the user has said 'nigga' and 'nigger'.
@@ -1359,29 +1413,31 @@ class Fun(commands.Cog):
         try:
             user_id = ctx.author.id
             result = await self.bot.db.fetchrow(
-                "SELECT general_count, hard_r_count FROM offensive WHERE user_id = $1", user_id
+                "SELECT general_count, hard_r_count FROM offensive WHERE user_id = $1",
+                user_id,
             )
 
-            general_count = result['general_count'] if result else 0
-            hard_r_count = result['hard_r_count'] if result else 0
+            general_count = result["general_count"] if result else 0
+            hard_r_count = result["hard_r_count"] if result else 0
             # Fetch the leaderboard data to get the user's position
             leaderboard = await self.bot.db.fetch(
                 "SELECT user_id, general_count FROM offensive ORDER BY general_count DESC"
             )
 
             # Get a sorted list of general counts (so we can track user positions)
-            sorted_leaderboard = sorted(leaderboard, key=lambda x: x['general_count'], reverse=True)
+            sorted_leaderboard = sorted(
+                leaderboard, key=lambda x: x["general_count"], reverse=True
+            )
 
             # Calculate user's position in the leaderboard
             user_position = None
             for index, entry in enumerate(sorted_leaderboard):
-                if entry['user_id'] == user_id:
+                if entry["user_id"] == user_id:
                     user_position = index + 1  # positions are 1-based
                     break
 
             if user_position is None:
-                user_position = 'N/A'  # If user is not in the leaderboard
-
+                user_position = "N/A"  # If user is not in the leaderboard
 
             # Select a random message
             messages = [
@@ -1403,10 +1459,13 @@ class Fun(commands.Cog):
                     f"{ctx.author.mention} has also said the forbidden word **{hard_r_count}** times\n"
                     f"{random_message}"
                 ),
-                color=self.bot.color
+                color=self.bot.color,
             )
 
-            embed.set_author(name=f"{ctx.author.name} - is not black", icon_url=ctx.author.display_avatar.url)
+            embed.set_author(
+                name=f"{ctx.author.name} - is not black",
+                icon_url=ctx.author.display_avatar.url,
+            )
             embed.set_footer(text=f"You are #{user_position} on the leaderboard")
 
             await ctx.send(embed=embed)
@@ -1415,8 +1474,11 @@ class Fun(commands.Cog):
             logger.error(f"Error fetching count for {ctx.author}: {e}")
             await ctx.send(f"Error fetching your count: {e}")
 
-
-    @commands.command(name="nwordlb", aliases=['nwlb'], help="Shows the leaderboard of how many times users have said the n-word")
+    @commands.command(
+        name="nwordlb",
+        aliases=["nwlb"],
+        help="Shows the leaderboard of how many times users have said the n-word",
+    )
     async def nword_leaderboard(self, ctx):
         """
         Display a paginated leaderboard for users' n-word counts.
@@ -1429,7 +1491,9 @@ class Fun(commands.Cog):
 
             # Create the embed
             page_size = 10
-            total_pages = (len(leaderboard) // page_size) + (1 if len(leaderboard) % page_size != 0 else 0)
+            total_pages = (len(leaderboard) // page_size) + (
+                1 if len(leaderboard) % page_size != 0 else 0
+            )
 
             # Initialize the leaderboard view
             page = 1
@@ -1442,18 +1506,19 @@ class Fun(commands.Cog):
                 description = ""
 
                 for index, entry in enumerate(page_leaderboard):
-                    user = self.bot.get_user(entry['user_id']) or await self.bot.fetch_user(entry['user_id'])
+                    user = self.bot.get_user(
+                        entry["user_id"]
+                    ) or await self.bot.fetch_user(entry["user_id"])
                     user_name = user.name if user else "Unknown User"
                     description += f"**`{entry['general_count']}`** {user_name}\n"
 
                 embed = discord.Embed(
                     title="N-word Leaderboard",
                     description=description,
-                    color=self.bot.color
+                    color=self.bot.color,
                 )
                 embed.set_footer(text=f"Page {page}/{total_pages}")
                 return embed
-
 
             # Create buttons for navigation
             async def on_previous_button_click(interaction: discord.Interaction):
@@ -1464,7 +1529,9 @@ class Fun(commands.Cog):
                         embed = await generate_embed(page)
                         await interaction.response.edit_message(embed=embed)
                 else:
-                    await interaction.response.send_message("You see this button yea? dont touch it.", ephemeral=True)
+                    await interaction.response.send_message(
+                        "You see this button yea? dont touch it.", ephemeral=True
+                    )
 
             async def on_next_button_click(interaction: discord.Interaction):
                 if interaction.user.id == ctx.author.id:  # Only the author can interact
@@ -1474,13 +1541,19 @@ class Fun(commands.Cog):
                         embed = await generate_embed(page)
                         await interaction.response.edit_message(embed=embed)
                 else:
-                    await interaction.response.send_message("Touch me harder and i just might work", ephemeral=True)
+                    await interaction.response.send_message(
+                        "Touch me harder and i just might work", ephemeral=True
+                    )
+
             # Corrected Close Button Action
             async def on_close_button_click(interaction: discord.Interaction):
                 if interaction.user.id == ctx.author.id:  # Only the author can close
                     await interaction.message.delete()  # Correct method to delete the message
                 else:
-                    await interaction.response.send_message("Close your legs you stink.", ephemeral=True)
+                    await interaction.response.send_message(
+                        "Close your legs you stink.", ephemeral=True
+                    )
+
             # Custom buttons with labels and colors
             # Define custom emojis as instances using their emoji IDs
             previous_emoji = discord.PartialEmoji(name="left", id=1336820200850460743)
@@ -1488,7 +1561,9 @@ class Fun(commands.Cog):
             close_emoji = discord.PartialEmoji(name="stop", id=1336820362276765758)
 
             # Define the buttons with the custom emoji in the `emoji` parameter
-            previous_button = Button(emoji=previous_emoji, style=discord.ButtonStyle.primary)
+            previous_button = Button(
+                emoji=previous_emoji, style=discord.ButtonStyle.primary
+            )
             previous_button.callback = on_previous_button_click
 
             next_button = Button(emoji=next_emoji, style=discord.ButtonStyle.primary)
@@ -1518,14 +1593,13 @@ class Fun(commands.Cog):
     async def tictactoe(self, ctx, opponent: discord.Member):
         if opponent.bot:
             return await ctx.fail("You can't play against a bot!")
-        
+
         if opponent == ctx.author:
             return await ctx.fail("You can't play against yourself!")
-        
+
         view = TicTacToe(ctx.author, opponent)
         await ctx.send(
-            f"Tic Tac Toe: {ctx.author.mention} vs {opponent.mention}",
-            view=view
+            f"Tic Tac Toe: {ctx.author.mention} vs {opponent.mention}", view=view
         )
 
     @commands.command(name="image", aliases=["img"])
@@ -1538,134 +1612,145 @@ class Fun(commands.Cog):
             """SELECT * FROM boosters WHERE user_id = $1""", ctx.author.id
         )
         if not result:
-            await ctx.fail(f"You are not boosting [/greedbot](https://discord.gg/greedbot), boost the server to use this command")
+            await ctx.fail(
+                f"You are not boosting [/greedbot](https://discord.gg/greedbot), boost the server to use this command"
+            )
             return
 
         try:
-            results = await self.bing.image_search(query=query, safe=not ctx.channel.is_nsfw(), pages=2)
+            results = await self.bing.image_search(
+                query=query, safe=not ctx.channel.is_nsfw(), pages=2
+            )
             embeds = []
             for i, result in enumerate(results.results, start=1):
                 embed = discord.Embed(
-                    title=f"Image Results for {query}",
-                    color=self.bot.color
+                    title=f"Image Results for {query}", color=self.bot.color
                 )
                 embed.set_image(url=result.image or result.thumbnail)
                 embed.set_footer(text=f"Page {i}/{len(results.results)}")
                 embeds.append(embed)
 
             return await ctx.alternative_paginate(embeds)
-        
+
         except Exception as e:
             if ctx.author.name == "aiohttp":
                 raise e
             return await ctx.fail(f"No results found for query `{query[:50]}`")
 
-
-
-          
     # @commands.command(name="image")
     # @commands.cooldown(1, 5, commands.BucketType.user)
     async def old_image(self, ctx, *, query: str):
-          """Search for images using Google's Custom Search JSON API with button-based navigation."""
+        """Search for images using Google's Custom Search JSON API with button-based navigation."""
 
-          # Check if the user is a donator
-          try:
-               is_donator = await self.bot.db.fetchrow(
-                    """SELECT * FROM boosters WHERE user_id = $1""", ctx.author.id
-               )
-          except Exception as e:
-               return await ctx.fail(f"An error occurred while checking donator status: {e}")
+        # Check if the user is a donator
+        try:
+            is_donator = await self.bot.db.fetchrow(
+                """SELECT * FROM boosters WHERE user_id = $1""", ctx.author.id
+            )
+        except Exception as e:
+            return await ctx.fail(
+                f"An error occurred while checking donator status: {e}"
+            )
 
-          # If not a donator, limit access to the image search
-          if not is_donator:
-               return await ctx.fail(
-                    "You are not boosting [/greedbot](https://discord.gg/greedbot). Boost this server to use this command."
-               )
+        # If not a donator, limit access to the image search
+        if not is_donator:
+            return await ctx.fail(
+                "You are not boosting [/greedbot](https://discord.gg/greedbot). Boost this server to use this command."
+            )
 
-          try:
-               # Build the Google Custom Search service
-               service = build("customsearch", "v1", developerKey=GOOGLE_API_KEY)
+        try:
+            # Build the Google Custom Search service
+            service = build("customsearch", "v1", developerKey=GOOGLE_API_KEY)
 
-               # Initialize variables
-               embeds = []
-               items_collected = 0
-               start_index = 1
+            # Initialize variables
+            embeds = []
+            items_collected = 0
+            start_index = 1
 
-               # Fetch results in batches (max 10 results per API call)
-               while items_collected < 100:
-                    result = service.cse().list(
-                         q=query,              # Query string
-                         cx=SEARCH_ENGINE_ID,  # Custom Search Engine ID
-                         searchType="image",   # Search type: Image
-                         safe="active",        # SafeSearch filter
-                         num=10,               # Number of results to fetch (max 10 per API call)
-                         start=start_index     # Start index for results
-                    ).execute()
+            # Fetch results in batches (max 10 results per API call)
+            while items_collected < 100:
+                result = (
+                    service.cse()
+                    .list(
+                        q=query,  # Query string
+                        cx=SEARCH_ENGINE_ID,  # Custom Search Engine ID
+                        searchType="image",  # Search type: Image
+                        safe="active",  # SafeSearch filter
+                        num=10,  # Number of results to fetch (max 10 per API call)
+                        start=start_index,  # Start index for results
+                    )
+                    .execute()
+                )
 
-                    # Extract the results
-                    items = result.get("items", [])
-                    if not items:
-                         break  # Stop if no more results
+                # Extract the results
+                items = result.get("items", [])
+                if not items:
+                    break  # Stop if no more results
 
-                    # Add the results to the embeds list
-                    for index, item in enumerate(items, start=items_collected + 1):
-                         image_url = item.get("link")
-                         embed = discord.Embed(
-                              color=self.bot.color
-                         )
-                         embed.set_image(url=image_url)
-                         embed.set_footer(text="Images provided by Greed")
-                         embeds.append(embed)
+                # Add the results to the embeds list
+                for index, item in enumerate(items, start=items_collected + 1):
+                    image_url = item.get("link")
+                    embed = discord.Embed(color=self.bot.color)
+                    embed.set_image(url=image_url)
+                    embed.set_footer(text="Images provided by Greed")
+                    embeds.append(embed)
 
-                    # Update variables for the next batch
-                    items_collected += len(items)
-                    start_index += 10
+                # Update variables for the next batch
+                items_collected += len(items)
+                start_index += 10
 
-                    # Stop if fewer than 10 results are returned (indicating no more results available)
-                    if len(items) < 10:
-                         break
+                # Stop if fewer than 10 results are returned (indicating no more results available)
+                if len(items) < 10:
+                    break
 
-               # If no embeds were created, notify the user
-               if not embeds:
-                    return await ctx.fail("No images found for your query.")
+            # If no embeds were created, notify the user
+            if not embeds:
+                return await ctx.fail("No images found for your query.")
 
-               # Adjust page count to match total results
-               for idx, embed in enumerate(embeds):
-                    embed.description = f"<:Google:1315861928538800189> **Search results for: {query}**\nPage {idx + 1}/{len(embeds)}"
+            # Adjust page count to match total results
+            for idx, embed in enumerate(embeds):
+                embed.description = f"<:Google:1315861928538800189> **Search results for: {query}**\nPage {idx + 1}/{len(embeds)}"
 
-               # Send the first embed with buttons
-               view = ImagePaginationView(ctx.author, embeds)
-               await ctx.send(embed=embeds[0], view=view)
+            # Send the first embed with buttons
+            view = ImagePaginationView(ctx.author, embeds)
+            await ctx.send(embed=embeds[0], view=view)
 
-          except Exception as e:
-               await ctx.send(f"An error occurred: {e}")
+        except Exception as e:
+            await ctx.send(f"An error occurred: {e}")
 
     @commands.group(invoke_without_command=True)
     async def diary(self, ctx: commands.Context):
         """Show diary commands."""
         return await ctx.send_help(ctx.command)
 
-    @diary.command(name="create", aliases=["add"], description="Create a diary entry for today.")
+    @diary.command(
+        name="create", aliases=["add"], description="Create a diary entry for today."
+    )
     async def diary_create(self, ctx: commands.Context):
         now = datetime.now()
         date = f"{now.month}/{now.day}/{str(now.year)[2:]}"
-        
+
         check = await self.bot.db.fetchrow(
-            "SELECT * FROM diary WHERE user_id = $1 AND date = $2",
-            ctx.author.id, date
+            "SELECT * FROM diary WHERE user_id = $1 AND date = $2", ctx.author.id, date
         )
         if check:
-            return await ctx.send("You already have a diary page for today! Please come back tomorrow or delete the existing entry.")
-        
+            return await ctx.send(
+                "You already have a diary page for today! Please come back tomorrow or delete the existing entry."
+            )
+
         embed = discord.Embed(
             color=self.bot.color,
-            description=f"{self.book} Press the button below to create your diary entry."
+            description=f"{self.book} Press the button below to create your diary entry.",
         )
-        button = Button(emoji=self.pen, label="Create Entry", style=discord.ButtonStyle.grey)
+        button = Button(
+            emoji=self.pen, label="Create Entry", style=discord.ButtonStyle.grey
+        )
 
         async def button_callback(interaction: discord.Interaction):
             if interaction.user.id != ctx.author.id:
-                return await interaction.response.send_message("You are not the author of this command!", ephemeral=True)
+                return await interaction.response.send_message(
+                    "You are not the author of this command!", ephemeral=True
+                )
             modal = DiaryModal()
             await interaction.response.send_modal(modal)
 
@@ -1676,15 +1761,15 @@ class Fun(commands.Cog):
 
     @diary.command(name="view", description="View your diary entries.")
     async def diary_view(self, ctx: commands.Context):
-        results = await self.bot.db.fetch("SELECT * FROM diary WHERE user_id = $1", ctx.author.id)
+        results = await self.bot.db.fetch(
+            "SELECT * FROM diary WHERE user_id = $1", ctx.author.id
+        )
         if not results:
             return await ctx.send("You don't have any diary entries!")
 
         embeds = [
             discord.Embed(
-                color=self.bot.color,
-                title=entry["title"],
-                description=entry["text"]
+                color=self.bot.color, title=entry["title"], description=entry["text"]
             )
             .set_author(name=f"Diary for {entry['date']}")
             .set_footer(text=f"{i + 1}/{len(results)}")
@@ -1694,30 +1779,39 @@ class Fun(commands.Cog):
 
     @diary.command(name="delete", description="Delete a diary entry.")
     async def diary_delete(self, ctx: commands.Context):
-        results = await self.bot.db.fetch("SELECT * FROM diary WHERE user_id = $1", ctx.author.id)
+        results = await self.bot.db.fetch(
+            "SELECT * FROM diary WHERE user_id = $1", ctx.author.id
+        )
         if not results:
             return await ctx.send("You don't have any diary entries to delete!")
 
         options = [
-            discord.SelectOption(label=f"Diary {i + 1} - {entry['date']}", value=entry["date"])
+            discord.SelectOption(
+                label=f"Diary {i + 1} - {entry['date']}", value=entry["date"]
+            )
             for i, entry in enumerate(results)
         ]
         embed = discord.Embed(
             color=self.bot.color,
-            description="Select a diary entry to delete from the dropdown menu below."
+            description="Select a diary entry to delete from the dropdown menu below.",
         )
         select = Select(placeholder="Select a diary entry to delete", options=options)
 
         async def select_callback(interaction: discord.Interaction):
             if interaction.user.id != ctx.author.id:
-                return await interaction.response.send_message("You are not the author of this command!", ephemeral=True)
-            
+                return await interaction.response.send_message(
+                    "You are not the author of this command!", ephemeral=True
+                )
+
             selected_date = select.values[0]
             await self.bot.db.execute(
                 "DELETE FROM diary WHERE user_id = $1 AND date = $2",
-                ctx.author.id, selected_date
+                ctx.author.id,
+                selected_date,
             )
-            await interaction.response.send_message("Diary entry deleted!", ephemeral=True)
+            await interaction.response.send_message(
+                "Diary entry deleted!", ephemeral=True
+            )
 
         select.callback = select_callback
         view = View()
@@ -1745,7 +1839,9 @@ class Fun(commands.Cog):
         avatar1_url = user1.avatar.url if user1.avatar else user1.default_avatar.url
         avatar2_url = user2.avatar.url if user2.avatar else user2.default_avatar.url
 
-        avatar1, avatar2 = await asyncio.gather(fetch_avatar(avatar1_url), fetch_avatar(avatar2_url))
+        avatar1, avatar2 = await asyncio.gather(
+            fetch_avatar(avatar1_url), fetch_avatar(avatar2_url)
+        )
 
         # Determine compatibility and message
         compatibility = random.randint(1, 100)
@@ -1763,8 +1859,10 @@ class Fun(commands.Cog):
 
         # Send the results
         file = discord.File(io.BytesIO(image_bytes), filename="ship.png")
-        await ctx.send(content=f"{compatibility_message} **(Compatibility: {compatibility}%)**", file=file)
-
+        await ctx.send(
+            content=f"{compatibility_message} **(Compatibility: {compatibility}%)**",
+            file=file,
+        )
 
     @commands.command(name="nbacaption")
     @commands.cooldown(1, 10, commands.BucketType.user)
@@ -1787,11 +1885,11 @@ class Fun(commands.Cog):
             # Create a mask for rounded corners
             mask = Image.new("L", img.size, 0)
             mask_draw = ImageDraw.Draw(mask)
-            border_radius = int(image_width * 0.1)  # 10% of image width as radius for rounded corners
+            border_radius = int(
+                image_width * 0.1
+            )  # 10% of image width as radius for rounded corners
             mask_draw.rounded_rectangle(
-                (0, 0, image_width, image_height),
-                radius=border_radius,
-                fill=255
+                (0, 0, image_width, image_height), radius=border_radius, fill=255
             )
             img.putalpha(mask)  # Apply rounded corners as transparency mask
 
@@ -1805,7 +1903,9 @@ class Fun(commands.Cog):
             # Create black bar for text
             draw = ImageDraw.Draw(img)
             max_text_width = image_width * 0.9  # Limit text width to 90%
-            words = emoji.replace_emoji(caption, "")  # Remove emojis to handle them separately
+            words = emoji.replace_emoji(
+                caption, ""
+            )  # Remove emojis to handle them separately
             lines = []
             current_line = ""
 
@@ -1825,13 +1925,21 @@ class Fun(commands.Cog):
                 lines.append(current_line)
 
             # Calculate required height for black bar
-            text_heights = [draw.textbbox((0, 0), line, font=font)[3] - draw.textbbox((0, 0), line, font=font)[1] for line in lines]
-            total_text_height = sum(text_heights) + (len(lines) - 1) * 10  # 10px spacing
+            text_heights = [
+                draw.textbbox((0, 0), line, font=font)[3]
+                - draw.textbbox((0, 0), line, font=font)[1]
+                for line in lines
+            ]
+            total_text_height = (
+                sum(text_heights) + (len(lines) - 1) * 10
+            )  # 10px spacing
             padding = 20
             box_height = total_text_height + padding * 2
 
             # Create new image with black bar
-            new_img = Image.new("RGBA", (image_width, image_height + box_height), (0, 0, 0, 255))
+            new_img = Image.new(
+                "RGBA", (image_width, image_height + box_height), (0, 0, 0, 255)
+            )
             new_img.paste(img, (0, box_height), mask=img)
 
             # Draw text onto black bar
@@ -1846,7 +1954,11 @@ class Fun(commands.Cog):
 
             # Add a white border
             border_size = int(new_img.width * 0.05)  # 5% of width
-            bordered_img = Image.new("RGBA", (new_img.width + 2 * border_size, new_img.height + 2 * border_size), (0, 0, 0, 255))
+            bordered_img = Image.new(
+                "RGBA",
+                (new_img.width + 2 * border_size, new_img.height + 2 * border_size),
+                (0, 0, 0, 255),
+            )
             bordered_img.paste(new_img, (border_size, border_size), mask=new_img)
 
             # Apply vignette effect with blur
@@ -1854,7 +1966,9 @@ class Fun(commands.Cog):
             draw = ImageDraw.Draw(vignette)
             for i in range(bordered_img.width // 2):
                 alpha = int(255 * (1 - (i / (bordered_img.width // 2)) ** 2))
-                draw.ellipse((i, i, bordered_img.width - i, bordered_img.height - i), fill=alpha)
+                draw.ellipse(
+                    (i, i, bordered_img.width - i, bordered_img.height - i), fill=alpha
+                )
 
             # Blur vignette
             vignette = vignette.filter(ImageFilter.GaussianBlur(radius=border_size / 2))
@@ -1866,7 +1980,7 @@ class Fun(commands.Cog):
             mask_draw.rounded_rectangle(
                 (0, 0, bordered_img.width, bordered_img.height),
                 radius=border_size,  # Use border size for the corner roundness
-                fill=255
+                fill=255,
             )
             bordered_img.putalpha(rounded_mask)
 
@@ -1883,10 +1997,6 @@ class Fun(commands.Cog):
         except Exception as e:
             await ctx.send(f"Error processing image: {e}")
 
-
-
-
-
     @commands.command(name="poll", brief="Create a poll with multiple options")
     async def poll(self, ctx, time: str, *, question: str):
         """Create a poll with multiple options."""
@@ -1898,30 +2008,37 @@ class Fun(commands.Cog):
 
         embed = discord.Embed(
             title=f"{ctx.author} asked",
-            description=question, 
+            description=question,
             color=self.bot.color,
         )
         embed.set_footer(text=f"Poll created by {ctx.author}")
         message = await ctx.send(embed=embed)
-        
+
         # Add reactions
         emojis = ["👍", "👎"]
         await asyncio.gather(*[message.add_reaction(emoji) for emoji in emojis])
 
         # Track votes
         votes = {}
+
         def check(reaction, user):
-            return user != self.bot.user and reaction.message.id == message.id and user != user.bot
+            return (
+                user != self.bot.user
+                and reaction.message.id == message.id
+                and user != user.bot
+            )
 
         try:
             while True:
-                reaction, user = await self.bot.wait_for('reaction_add', timeout=t, check=check)
+                reaction, user = await self.bot.wait_for(
+                    "reaction_add", timeout=t, check=check
+                )
                 if user.id not in votes:
                     votes[user.id] = reaction.emoji
                 else:
                     # Remove subsequent reactions if user already voted
                     await reaction.remove(user)
-                
+
         except asyncio.TimeoutError:
             # Time's up, tally the results
             message = await ctx.channel.fetch_message(message.id)
@@ -1940,6 +2057,7 @@ class Fun(commands.Cog):
                 embed.add_field(name=emoji, value=count)
             await message.reply(embed=embed)
 
+
 class ImagePaginationView(discord.ui.View):
     def __init__(self, user: discord.Member, embeds: list[discord.Embed]):
         super().__init__(timeout=60)
@@ -1947,11 +2065,17 @@ class ImagePaginationView(discord.ui.View):
         self.embeds = embeds
         self.current_page = 0
 
-    @discord.ui.button(label="Previous", style=discord.ButtonStyle.secondary, disabled=True)
-    async def previous_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(
+        label="Previous", style=discord.ButtonStyle.secondary, disabled=True
+    )
+    async def previous_button(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
         """Handles the Previous button click."""
         if interaction.user != self.user:
-            await interaction.response.send_message("You cannot control this interaction.", ephemeral=True)
+            await interaction.response.send_message(
+                "You cannot control this interaction.", ephemeral=True
+            )
             return
 
         self.current_page -= 1
@@ -1960,10 +2084,14 @@ class ImagePaginationView(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=self)
 
     @discord.ui.button(label="Next", style=discord.ButtonStyle.success)
-    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def next_button(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
         """Handles the Next button click."""
         if interaction.user != self.user:
-            await interaction.response.send_message("You cannot control this interaction.", ephemeral=True)
+            await interaction.response.send_message(
+                "You cannot control this interaction.", ephemeral=True
+            )
             return
 
         self.current_page += 1
@@ -1975,7 +2103,6 @@ class ImagePaginationView(discord.ui.View):
         """Enable or disable buttons based on the current page."""
         self.previous_button.disabled = self.current_page == 0
         self.next_button.disabled = self.current_page == len(self.embeds) - 1
-
 
 
 async def setup(bot):

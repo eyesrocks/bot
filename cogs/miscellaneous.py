@@ -18,11 +18,12 @@ from collections import defaultdict
 from asyncio import Lock, sleep
 from datetime import timedelta
 from typing import Optional, Literal
-#from tool.important.services import TTS
+
+# from tool.important.services import TTS
 from tool.processing import FileProcessing
 from tool.important import Context  # type: ignore
 from typing import Union
-from discord import PartialEmoji 
+from discord import PartialEmoji
 import cairosvg
 from datetime import datetime, timedelta
 from gtts import gTTS
@@ -44,6 +45,7 @@ from cashews import cache
 def generate(img: bytes) -> bytes:
     return cairosvg.svg2png(bytestring=img)
 
+
 if typing.TYPE_CHECKING:
     from tool.greed import Greed  # type: ignore
 from pydantic import BaseModel
@@ -52,14 +54,15 @@ DEBUG = True
 cache.setup("mem://")
 eros_key = "c9832179-59f7-477e-97ba-dca4a46d7f3f"
 
+
 @cache(ttl=300, key="donator:{user_id}")
 async def get_donator(ctx: Context, user_id: int) -> bool:
     """Check if a user is a donator through top.gg votes or server boosters.
-    
+
     Args:
         ctx: Command context
         user_id: Discord user ID to check
-        
+
     Returns:
         bool: True if user is a donator, False otherwise
     """
@@ -75,7 +78,7 @@ async def get_donator(ctx: Context, user_id: int) -> bool:
             headers={
                 "Authorization": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjExNDk1MzU4MzQ3NTY4NzQyNTAiLCJib3QiOnRydWUsImlhdCI6MTczODEzODM1MH0.HQRfKRPwsZ6RlPuXWyt7pK2tEwYGgZI22_YwulNdt8I"
             },
-            timeout=3.0
+            timeout=3.0,
         ) as response:
             if response.status == 200:
                 data = await response.json()
@@ -133,8 +136,6 @@ class ValorantProfile(BaseModel):
         )
         return embed
 
-
-
     @classmethod
     async def from_snowflake(cls, user: str, tag: str):
         async with aiohttp.ClientSession() as session:
@@ -163,7 +164,9 @@ snipe_message_author_avatar = {}
 snipe_message_time = {}
 snipe_message_sticker = {}
 snipe_message_embed = {}
-#from tool import valorant  # noqa: E402
+
+
+# from tool import valorant  # noqa: E402
 class ReviveMessageView(ui.View):
     def __init__(self, message_content, guild_id, is_embed, cog):
         super().__init__()
@@ -184,14 +187,16 @@ class ReviveMessageView(ui.View):
         )
 
         # Update the interaction message
-        await interaction.response.edit_message(content="✅ Revive message has been updated.", view=None)
+        await interaction.response.edit_message(
+            content="✅ Revive message has been updated.", view=None
+        )
 
     @ui.button(label="Decline", style=discord.ButtonStyle.red)
     async def decline(self, interaction: discord.Interaction, button: ui.Button):
         # Update the interaction message to indicate decline
-        await interaction.response.edit_message(content="❌ You have declined this message.", view=None)
-
-
+        await interaction.response.edit_message(
+            content="❌ You have declined this message.", view=None
+        )
 
 
 class Miscellaneous(Cog):
@@ -203,8 +208,16 @@ class Miscellaneous(Cog):
         self.revive_loops = {}  # Store tasks for each guild
         self.revive_tasks = {}  # Store task objects to manage looping tasks
         self.nsfw_domains = [
-            "pornhub.com", "xvideos.com", "xhamster.com", "redtube.com", "tube8.com", 
-            "youporn.com", "spankwire.com", "tnaflix.com", "sex.com", "bangbros.com"
+            "pornhub.com",
+            "xvideos.com",
+            "xhamster.com",
+            "redtube.com",
+            "tube8.com",
+            "youporn.com",
+            "spankwire.com",
+            "tnaflix.com",
+            "sex.com",
+            "bangbros.com",
             # Add any other domains you'd like to block
         ]
 
@@ -213,7 +226,6 @@ class Miscellaneous(Cog):
         self.uwu_queue = defaultdict(list)  # New: Queue for uwu messages
         self.check_reminds.start()
         self.process_uwu_queue.start()  # New: Start the uwu queue processor
-        
 
     async def cog_load(self):
         await self.bot.db.execute(
@@ -234,9 +246,9 @@ class Miscellaneous(Cog):
     # async def auto_destroy(self):
     #     for client in self.bot.voice_clients:
     #         if client.channel and len(client.channel.members) < 2:
-    #             try: 
+    #             try:
     #                 await client.destroy()
-    #             except: 
+    #             except:
     #                 await client.disconnect()
 
     @tasks.loop(seconds=7200)
@@ -259,15 +271,23 @@ class Miscellaneous(Cog):
                     description=f"An admin only command (`{command_name}`) was used.",
                     color=self.bot.color,
                 )
-                embed.add_field(name="User", value=f"{user.mention} ({user.name}#{user.discriminator})")
+                embed.add_field(
+                    name="User",
+                    value=f"{user.mention} ({user.name}#{user.discriminator})",
+                )
                 embed.add_field(name="User ID", value=user.id)
                 embed.set_thumbnail(url=user.avatar.url)
                 embed.add_field(name="Command", value=command_name)
-                embed.set_footer(text=f"Server: {ctx.guild.name} | Server ID: {ctx.guild.id}")
+                embed.set_footer(
+                    text=f"Server: {ctx.guild.name} | Server ID: {ctx.guild.id}"
+                )
 
                 await server_owner.send(embed=embed)
             except Exception as e:
-                await ctx.fail("Could not notify the server owner. Ensure their DMs are open.")
+                await ctx.fail(
+                    "Could not notify the server owner. Ensure their DMs are open."
+                )
+
     @tasks.loop(seconds=10)
     async def check_reminds(self):
         try:
@@ -278,58 +298,59 @@ class Miscellaneous(Cog):
                 reminds = await self.bot.db.fetch(
                     "SELECT * FROM reminders WHERE time < $1 LIMIT $2",
                     datetime.utcnow(),
-                    BATCH_SIZE
+                    BATCH_SIZE,
                 )
-                
+
                 if not reminds:
                     break
 
                 for i in range(0, len(reminds), 5):
-                    chunk = reminds[i:i+5]
-                    
+                    chunk = reminds[i : i + 5]
+
                     for remind in chunk:
                         try:
                             user = await self.bot.fetch_user(remind["user_id"])
                             channel = self.bot.get_channel(remind["channel_id"])
-                            
+
                             if channel:
                                 view = discord.ui.View()
-                                view.add_item(discord.ui.Button(
-                                    style=discord.ButtonStyle.gray, 
-                                    label="reminder set by user", 
-                                    disabled=True
-                                ))
-                                
-                                await channel.send(
-                                    f"{user.mention} {remind['reminder']}", 
-                                    view=view
+                                view.add_item(
+                                    discord.ui.Button(
+                                        style=discord.ButtonStyle.gray,
+                                        label="reminder set by user",
+                                        disabled=True,
+                                    )
                                 )
-                                
+
+                                await channel.send(
+                                    f"{user.mention} {remind['reminder']}", view=view
+                                )
+
                                 await self.bot.db.execute(
                                     "DELETE FROM reminders WHERE time = $1 AND user_id = $2",
                                     remind["time"],
-                                    remind["user_id"]
+                                    remind["user_id"],
                                 )
-                                
+
                                 total_processed += 1
-                                
+
                         except discord.NotFound:
                             await self.bot.db.execute(
                                 "DELETE FROM reminders WHERE time = $1 AND user_id = $2",
                                 remind["time"],
-                                remind["user_id"]
+                                remind["user_id"],
                             )
-                            
+
                     await asyncio.sleep(1)
-                
+
                 if len(reminds) < BATCH_SIZE:
                     break
-                    
+
                 await asyncio.sleep(2)
-                
+
             if total_processed > 0:
                 logger.info(f"Processed {total_processed} reminders")
-                
+
         except Exception as e:
             logger.error(f"Error in check_reminds: {e}")
 
@@ -352,7 +373,9 @@ class Miscellaneous(Cog):
             elif part.startswith("{author:"):
                 author = re.search(r"{author: ([^&]+) && ([^}]+)}", part)
                 if author:
-                    embed.set_author(name=author.group(1).strip(), icon_url=author.group(2).strip())
+                    embed.set_author(
+                        name=author.group(1).strip(), icon_url=author.group(2).strip()
+                    )
 
             elif part.startswith("{thumbnail:"):
                 thumbnail = re.search(r"{thumbnail: ([^}]+)}", part)
@@ -362,7 +385,11 @@ class Miscellaneous(Cog):
             elif "field:" in part:
                 fields = re.findall(field_pattern, part)
                 for name, value, inline in fields:
-                    embed.add_field(name=name.strip(), value=value.strip(), inline=inline.strip().lower() == "true")
+                    embed.add_field(
+                        name=name.strip(),
+                        value=value.strip(),
+                        inline=inline.strip().lower() == "true",
+                    )
 
         return embed
 
@@ -399,39 +426,39 @@ class Miscellaneous(Cog):
             for guild_id, messages in self.uwu_queue.items():
                 if not messages:
                     continue
-                
+
                 # Get the first message in queue
                 message_data = messages[0]
-                
+
                 try:
                     async with aiohttp.ClientSession() as session:
                         webhook = discord.Webhook.from_url(
-                            message_data["webhook_url"], 
-                            session=session
+                            message_data["webhook_url"], session=session
                         )
                         await webhook.send(
                             content=message_data["content"],
                             username=message_data["username"],
-                            avatar_url=message_data["avatar_url"]
+                            avatar_url=message_data["avatar_url"],
                         )
-                    
+
                     # Remove processed message from queue
                     self.uwu_queue[guild_id].pop(0)
-                    
+
                 except Exception as e:
                     logger.error(f"Error processing uwu message: {e}")
                     # Remove failed message to prevent queue blocking
                     self.uwu_queue[guild_id].pop(0)
-                
+
                 # Small delay between messages
                 await asyncio.sleep(0.5)
-                
+
         except Exception as e:
             logger.error(f"Error in uwu queue processor: {e}")
 
     @process_uwu_queue.before_loop
     async def before_uwu_processor(self):
         await self.bot.wait_until_ready()
+
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         """Listener to transform messages from uwulocked users into uwu-speak."""
@@ -449,26 +476,34 @@ class Miscellaneous(Cog):
         )
 
         if data:
-            if await self.bot.glory_cache.ratelimited(f"uwulock:{message.guild.id}", 5, 3):
+            if await self.bot.glory_cache.ratelimited(
+                f"uwulock:{message.guild.id}", 5, 3
+            ):
                 return
-                
-            if await self.bot.glory_cache.ratelimited(f"uwulock_user:{message.author.id}", 2, 3):
+
+            if await self.bot.glory_cache.ratelimited(
+                f"uwulock_user:{message.author.id}", 2, 3
+            ):
                 return
-                
-            if await self.bot.glory_cache.ratelimited(f"uwulock_channel:{message.channel.id}", 3, 3):
+
+            if await self.bot.glory_cache.ratelimited(
+                f"uwulock_channel:{message.channel.id}", 3, 3
+            ):
                 return
 
             await message.delete()
-            
+
             if message.guild.id not in self.uwu_queue:
                 self.uwu_queue[message.guild.id] = []
-                
-            self.uwu_queue[message.guild.id].append({
-                "webhook_url": data["webhook_url"],
-                "content": self.uwuify(message.content),
-                "username": message.author.display_name,
-                "avatar_url": message.author.display_avatar.url
-            })
+
+            self.uwu_queue[message.guild.id].append(
+                {
+                    "webhook_url": data["webhook_url"],
+                    "content": self.uwuify(message.content),
+                    "username": message.author.display_name,
+                    "avatar_url": message.author.display_avatar.url,
+                }
+            )
 
     # @commands.command(
     #     name="valorant",
@@ -479,11 +514,10 @@ class Miscellaneous(Cog):
     # async def valorant(self, ctx: Context, user: ValorantUser):
     #     #      try:
     #     return await valorant.valorant(ctx, f"{user[0]}#{user[1]}")
-        #        except Exception:
-        #           return await ctx.fail(f"that valorant user couldn't be fetched")
-        # embed = await data.to_embed(ctx)  # type: ignore  # noqa: F821
-        # return await ctx.send(embed=embed)
-
+    #        except Exception:
+    #           return await ctx.fail(f"that valorant user couldn't be fetched")
+    # embed = await data.to_embed(ctx)  # type: ignore  # noqa: F821
+    # return await ctx.send(embed=embed)
 
     @commands.command(
         name="variables",
@@ -499,8 +533,6 @@ class Miscellaneous(Cog):
         return await self.bot.dummy_paginator(
             ctx, discord.Embed(title="variables", color=self.bot.color), rows
         )
-    
-
 
     @commands.command(
         name="afk",
@@ -519,7 +551,7 @@ class Miscellaneous(Cog):
     async def randomuser(self, ctx):
         # Log the total number of members in the guild
         logger.info(f"Total members in guild: {len(ctx.guild.members)}")
-        
+
         # Get the list of all members in the server
         members = ctx.guild.members
 
@@ -715,8 +747,6 @@ class Miscellaneous(Cog):
         await self.bot.snipes.clear_entries(ctx.channel)
         return await ctx.success(f"**Cleared** snipes for {ctx.channel.mention}")
 
-
-
     @commands.group(
         name="birthday",
         aliases=["bday"],
@@ -800,7 +830,12 @@ class Miscellaneous(Cog):
             else:
                 year = datee.year
             string = f"{month} {day} {year}"
-            date = arrow.get(string, f"{mn} {dday} YYYY").replace(tzinfo="America/New_York").to("UTC").datetime
+            date = (
+                arrow.get(string, f"{mn} {dday} YYYY")
+                .replace(tzinfo="America/New_York")
+                .to("UTC")
+                .datetime
+            )
             await self.bot.db.execute(
                 """INSERT INTO birthday (user_id, ts) VALUES($1, $2) ON CONFLICT(user_id) DO UPDATE SET ts = excluded.ts""",
                 ctx.author.id,
@@ -831,57 +866,57 @@ class Miscellaneous(Cog):
         return await ctx.success("**reset** your **birthday settings**")
 
     @commands.command(
-          name="selfpurge",
-          example=",selfpurge 100",
-          brief="Clear your messages from a chat",
-     )
+        name="selfpurge",
+        example=",selfpurge 100",
+        brief="Clear your messages from a chat",
+    )
     @commands.cooldown(1, 7, commands.BucketType.user)
     @commands.bot_has_permissions(manage_messages=True)
     async def selfpurge(self, ctx, amount: int):
-          amount = amount + 1  # Adjust for the command message itself
+        amount = amount + 1  # Adjust for the command message itself
 
-          # Check if the user is a donator
-          try:
-               is_donator = await self.bot.db.fetchrow(
-                    """SELECT * FROM boosters WHERE user_id = $1""", ctx.author.id
-               )
-          except Exception as e:
-               return await ctx.send(f"An error occurred while checking donator status: {e}")
+        # Check if the user is a donator
+        try:
+            is_donator = await self.bot.db.fetchrow(
+                """SELECT * FROM boosters WHERE user_id = $1""", ctx.author.id
+            )
+        except Exception as e:
+            return await ctx.send(
+                f"An error occurred while checking donator status: {e}"
+            )
 
-          # If not a donator, limit the maximum messages that can be purged
-          if not is_donator and amount > 0:
-               return await ctx.fail(
-                    "only boosters in [/greedbot](https://discord.gg/greedbot) can use selfpurge boost the server and dm an owner to claim your permissions."
-               )
+        # If not a donator, limit the maximum messages that can be purged
+        if not is_donator and amount > 0:
+            return await ctx.fail(
+                "only boosters in [/greedbot](https://discord.gg/greedbot) can use selfpurge boost the server and dm an owner to claim your permissions."
+            )
 
-          def check(message):
-               return message.author == ctx.message.author
+        def check(message):
+            return message.author == ctx.message.author
 
-          # Attempt to delete the invoking command message
-          await ctx.message.delete()
+        # Attempt to delete the invoking command message
+        await ctx.message.delete()
 
-          # Purge messages
-          deleted_messages = await ctx.channel.purge(limit=amount, check=check)
+        # Purge messages
+        deleted_messages = await ctx.channel.purge(limit=amount, check=check)
 
-          # Truncate deleted messages if necessary
-          if len(deleted_messages) > amount:
-               deleted_messages = deleted_messages[:amount]
+        # Truncate deleted messages if necessary
+        if len(deleted_messages) > amount:
+            deleted_messages = deleted_messages[:amount]
 
-          await ctx.success(
-               f"Purged {len(deleted_messages)} of your messages.", delete_after=5
-          )
+        await ctx.success(
+            f"Purged {len(deleted_messages)} of your messages.", delete_after=5
+        )
 
     async def check_role(self, ctx, role: discord.Role):
-          if (
-               ctx.author.top_role.position <= role.position
-               and not ctx.author.id == ctx.guild.owner_id
-          ):
-               await ctx.fail("Your role isn't higher than that role.")
-               return False
-          return True
+        if (
+            ctx.author.top_role.position <= role.position
+            and not ctx.author.id == ctx.guild.owner_id
+        ):
+            await ctx.fail("Your role isn't higher than that role.")
+            return False
+        return True
 
-
-        
     @commands.command(name="imageonly", brief="Toggle image only mode in a channel")
     @commands.has_permissions(manage_messages=True)
     async def imageonly(self, ctx: Context):
@@ -896,8 +931,7 @@ class Miscellaneous(Cog):
             "INSERT INTO imageonly (channel_id) VALUES($1)", ctx.channel.id
         )
         return await ctx.success("Enabled image only mode")
-    
-    
+
     @commands.command(name="enlarge", aliases=["downloademoji", "e", "jumbo"])
     async def enlarge(self, ctx, emoji: Union[discord.PartialEmoji, str] = None):
         """
@@ -914,14 +948,14 @@ class Miscellaneous(Cog):
             )
 
         elif isinstance(emoji, str):
-            if not emoji.startswith('<'):
+            if not emoji.startswith("<"):
                 return await ctx.fail("You can only enlarge custom server emojis")
-                
+
             try:
                 name = emoji.split(":")[1]
                 emoji_id = emoji.split(":")[2][:-1]
-                
-                if emoji.startswith('<a:'):
+
+                if emoji.startswith("<a:"):
                     # Animated emoji
                     url = f"https://cdn.discordapp.com/emojis/{emoji_id}.gif"
                     name += ".gif"
@@ -929,18 +963,17 @@ class Miscellaneous(Cog):
                     # Static emoji
                     url = f"https://cdn.discordapp.com/emojis/{emoji_id}.png"
                     name += ".png"
-                    
+
                 async with aiohttp.ClientSession() as session:
                     async with session.get(url) as resp:
                         if resp.status != 200:
                             return await ctx.fail("Could not download that emoji")
                         img = io.BytesIO(await resp.read())
-                        
+
                 return await ctx.send(file=discord.File(img, filename=name))
-                
+
             except (IndexError, KeyError):
                 return await ctx.fail("That doesn't appear to be a valid custom emoji")
-
 
     @commands.group(
         name="reminder",
@@ -950,7 +983,7 @@ class Miscellaneous(Cog):
     async def reminder(self, ctx: Context):
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
-    
+
     @reminder.command(
         name="add",
         brief="Add a reminder",
@@ -961,6 +994,7 @@ class Miscellaneous(Cog):
         Add a reminder for a specific time
         """
         import humanfriendly as hf
+
         try:
             delta = hf.parse_timespan(time)
             reminder_time = datetime.utcnow() + timedelta(seconds=delta)
@@ -968,7 +1002,7 @@ class Miscellaneous(Cog):
                 return await ctx.fail("Please provide a valid time in the future")
         except Exception:
             return await ctx.fail("Please provide a valid time")
-        
+
         await self.bot.db.execute(
             "INSERT INTO reminders (user_id, guild_id, channel_id, reminder, time) VALUES ($1, $2, $3, $4, $5)",
             ctx.author.id,
@@ -977,14 +1011,11 @@ class Miscellaneous(Cog):
             reminder,
             reminder_time,
         )
-        
+
         await ctx.success(f"Reminder set for {arrow.get(reminder_time).humanize()}")
 
-    
     @reminder.command(
-        name="list",
-        brief="List all your reminders",
-        example=",reminder list"
+        name="list", brief="List all your reminders", example=",reminder list"
     )
     async def reminder_list(self, ctx: Context):
         """
@@ -993,26 +1024,26 @@ class Miscellaneous(Cog):
         reminders = await self.bot.db.fetch(
             "SELECT * FROM reminders WHERE user_id = $1", ctx.author.id
         )
-        
+
         if not reminders:
             return await ctx.fail("You don't have any reminders set")
-        
+
         embed = discord.Embed(
             title="Reminders",
             color=self.color,
             description="\n".join(
                 f"**{i + 1}.** {reminder['reminder']} - {arrow.get(reminder['time']).humanize()}"
                 for i, reminder in enumerate(reminders)
-            )
+            ),
         )
-        
+
         await ctx.send(embed=embed)
-    
+
     @reminder.command(
         name="remove",
         aliases=["delete"],
         brief="Remove a reminder",
-        example=",reminder remove 1"
+        example=",reminder remove 1",
     )
     async def reminder_remove(self, ctx: Context, index: int):
         """
@@ -1021,21 +1052,21 @@ class Miscellaneous(Cog):
         reminders = await self.bot.db.fetch(
             "SELECT * FROM reminders WHERE user_id = $1", ctx.author.id
         )
-        
+
         if not reminders:
             return await ctx.fail("You don't have any reminders set")
-        
+
         try:
             reminder = reminders[index - 1]
         except IndexError:
             return await ctx.fail("Invalid reminder index")
-        
+
         await self.bot.db.execute(
             "DELETE FROM reminders WHERE user_id = $1 AND time = $2",
             ctx.author.id,
             reminder["time"],
         )
-        
+
         await ctx.success("Reminder removed")
 
     # async def analyze_image_content(self, url: str) -> bool:
@@ -1045,29 +1076,34 @@ class Miscellaneous(Cog):
     #             "htt"
     #     return True
 
-
-
     @commands.group(name="revive", invoke_without_command=True)
     async def revive_group(self, ctx):
         """Command group for revive-related commands.
-        
+
         Use this command to manage the revive feature with its subcommands.
         """
         if not ctx.author.guild_permissions.manage_messages:
-            return await ctx.fail("You need `Manage Messages` permission to use this command.")
+            return await ctx.fail(
+                "You need `Manage Messages` permission to use this command."
+            )
 
-
-    @revive_group.command(name="enable", brief="Enable revive for the server.", example=",revive enable")
+    @revive_group.command(
+        name="enable", brief="Enable revive for the server.", example=",revive enable"
+    )
     async def enable(self, ctx):
         """Enable the revive feature for this server.
-        
+
         Activates the revive functionality, allowing periodic sending of the configured revive message.
         """
         if not ctx.author.guild_permissions.manage_messages:
-            return await ctx.fail("You need `Manage Messages` permission to use this command.")
-        
+            return await ctx.fail(
+                "You need `Manage Messages` permission to use this command."
+            )
+
         guild_id = ctx.guild.id
-        await self.bot.db.execute("UPDATE revive SET enabled = TRUE WHERE guild_id = $1", guild_id)
+        await self.bot.db.execute(
+            "UPDATE revive SET enabled = TRUE WHERE guild_id = $1", guild_id
+        )
 
         if guild_id not in self.revive_loops:
             self.revive_loops[guild_id] = True
@@ -1076,84 +1112,127 @@ class Miscellaneous(Cog):
 
         await ctx.success("Revive feature enabled for this server.")
 
-    @revive_group.command(name="disable", brief="Disable revive for the server.", example=",revive disable")
+    @revive_group.command(
+        name="disable",
+        brief="Disable revive for the server.",
+        example=",revive disable",
+    )
     async def disable(self, ctx):
         """Disable the revive feature for this server."""
         if not ctx.author.guild_permissions.manage_messages:
-            return await ctx.fail("You need `Manage Messages` permission to use this command.")
-        
+            return await ctx.fail(
+                "You need `Manage Messages` permission to use this command."
+            )
+
         guild_id = ctx.guild.id
-        await self.bot.db.execute("UPDATE revive SET enabled = FALSE WHERE guild_id = $1", guild_id)
+        await self.bot.db.execute(
+            "UPDATE revive SET enabled = FALSE WHERE guild_id = $1", guild_id
+        )
 
         if guild_id in self.revive_loops:
             self.revive_loops[guild_id] = False
-        
+
         await ctx.success("Revive feature disabled for this server.")
 
-    @revive_group.command(name="channel", brief="Set the revive message channel.", example=",revive channel #general")
+    @revive_group.command(
+        name="channel",
+        brief="Set the revive message channel.",
+        example=",revive channel #general",
+    )
     async def set_channel(self, ctx, channel: discord.TextChannel):
         """Set the channel where revive messages will be sent."""
         if not ctx.author.guild_permissions.manage_messages:
-            return await ctx.fail("You need `Manage Messages` permission to use this command.")
-        
+            return await ctx.fail(
+                "You need `Manage Messages` permission to use this command."
+            )
+
         guild_id = ctx.guild.id
         await self.bot.db.execute(
             "INSERT INTO revive (guild_id, channel_id, enabled) VALUES ($1, $2, FALSE) "
             "ON CONFLICT (guild_id) DO UPDATE SET channel_id = $2",
-            guild_id, channel.id
+            guild_id,
+            channel.id,
         )
         await ctx.success(f"Revive messages will now be sent in {channel.mention}.")
 
-    @revive_group.command(name="message", brief="Set the revive message content.", example=",revive message Hello, revive!")
+    @revive_group.command(
+        name="message",
+        brief="Set the revive message content.",
+        example=",revive message Hello, revive!",
+    )
     async def set_message(self, ctx, *, message: str):
         """Set the revive message for this server."""
         if not ctx.author.guild_permissions.manage_messages:
-            return await ctx.fail("You need `Manage Messages` permission to use this command.")
-        
+            return await ctx.fail(
+                "You need `Manage Messages` permission to use this command."
+            )
+
         guild_id = ctx.guild.id
         is_embed = "{embed}" in message
 
         await self.bot.db.execute(
             "INSERT INTO revive (guild_id, message, is_embed) VALUES ($1, $2, $3) "
             "ON CONFLICT (guild_id) DO UPDATE SET message = $2, is_embed = $3",
-            guild_id, message, is_embed
+            guild_id,
+            message,
+            is_embed,
         )
-        await ctx.success(f"Revive message updated. {'Embed mode enabled.' if is_embed else 'Regular message mode set.'}")
+        await ctx.success(
+            f"Revive message updated. {'Embed mode enabled.' if is_embed else 'Regular message mode set.'}"
+        )
 
-    @revive_group.command(name="view", brief="View revive message settings.", example=",revive view")
+    @revive_group.command(
+        name="view", brief="View revive message settings.", example=",revive view"
+    )
     async def view_message(self, ctx):
         """Show the current revive message configuration, channel, and embed mode."""
         if not ctx.author.guild_permissions.manage_messages:
-            return await ctx.fail("You need `Manage Messages` permission to use this command.")
-        
+            return await ctx.fail(
+                "You need `Manage Messages` permission to use this command."
+            )
+
         guild_id = ctx.guild.id
         result = await self.bot.db.fetchrow(
-            "SELECT channel_id, message, is_embed FROM revive WHERE guild_id = $1", guild_id
+            "SELECT channel_id, message, is_embed FROM revive WHERE guild_id = $1",
+            guild_id,
         )
 
         if not result:
             return await ctx.fail("No revive message configured.")
-        
+
         channel_id, message, is_embed = result
         channel = ctx.guild.get_channel(channel_id)
-        
+
         embed = discord.Embed(title="Revive Message Settings")
-        embed.add_field(name="Channel", value=channel.mention if channel else "Not set", inline=False)
-        embed.add_field(name="Message", value=message if message else "No message set", inline=False)
-        embed.add_field(name="Embed Mode", value="Enabled" if is_embed else "Disabled", inline=False)
+        embed.add_field(
+            name="Channel",
+            value=channel.mention if channel else "Not set",
+            inline=False,
+        )
+        embed.add_field(
+            name="Message", value=message if message else "No message set", inline=False
+        )
+        embed.add_field(
+            name="Embed Mode", value="Enabled" if is_embed else "Disabled", inline=False
+        )
 
         await ctx.send(embed=embed)
 
-    @revive_group.command(name="send", brief="Send the revive message now.", example=",revive send")
+    @revive_group.command(
+        name="send", brief="Send the revive message now.", example=",revive send"
+    )
     async def send_revive_message(self, ctx):
         """Manually send the revive message configured for this server."""
         if not ctx.author.guild_permissions.manage_messages:
-            return await ctx.fail("You need `Manage Messages` permission to use this command.")
-        
+            return await ctx.fail(
+                "You need `Manage Messages` permission to use this command."
+            )
+
         await ctx.message.delete()
         guild_id = ctx.guild.id
         result = await self.bot.db.fetchrow(
-            "SELECT channel_id, message, is_embed FROM revive WHERE guild_id = $1", guild_id
+            "SELECT channel_id, message, is_embed FROM revive WHERE guild_id = $1",
+            guild_id,
         )
 
         if not result:
@@ -1174,8 +1253,11 @@ class Miscellaneous(Cog):
         else:
             await channel.send(message)
 
-    
-    @commands.command(name="delete_roles", brief="Delete all roles in the server.", aliases=["delroles"])
+    @commands.command(
+        name="delete_roles",
+        brief="Delete all roles in the server.",
+        aliases=["delroles"],
+    )
     @commands.has_permissions(administrator=True)
     async def delete_roles(self, ctx):
         """
@@ -1184,7 +1266,9 @@ class Miscellaneous(Cog):
         # Notify server owner
         await self.notify_owner(ctx, "delete_roles")
 
-        await ctx.warning("Are you sure you want to **delete all roles?** Type `yes` to confirm.")
+        await ctx.warning(
+            "Are you sure you want to **delete all roles?** Type `yes` to confirm."
+        )
 
         def check(m):
             return m.author == ctx.author and m.content.lower() == "yes"
@@ -1202,15 +1286,25 @@ class Miscellaneous(Cog):
                     roles_deleted += 1
                     await sleep(2)  # Rate-limit precaution
                 except discord.Forbidden:
-                    await ctx.fail(f"Unable to delete role `{role.name}`. Insufficient permissions.")
+                    await ctx.fail(
+                        f"Unable to delete role `{role.name}`. Insufficient permissions."
+                    )
                 except discord.HTTPException as e:
-                    await ctx.fail(f"An error occurred while deleting `{role.name}`: {e}")
+                    await ctx.fail(
+                        f"An error occurred while deleting `{role.name}`: {e}"
+                    )
 
-            await ctx.success(f"Roles deletion complete. Total roles deleted: {roles_deleted}")
+            await ctx.success(
+                f"Roles deletion complete. Total roles deleted: {roles_deleted}"
+            )
         except Exception as e:
             await ctx.fail(f"Operation cancelled or unexpected error: {e}")
 
-    @commands.command(name="delete_channels", brief="Delete all channels in the server.", aliases=["delchannels"])
+    @commands.command(
+        name="delete_channels",
+        brief="Delete all channels in the server.",
+        aliases=["delchannels"],
+    )
     @commands.has_permissions(administrator=True)
     async def delete_channels(self, ctx):
         """
@@ -1219,7 +1313,9 @@ class Miscellaneous(Cog):
         # Notify server owner
         await self.notify_owner(ctx, "delete_channels")
 
-        await ctx.warn("Are you sure you want to delete all channels? Type `yes` to confirm.")
+        await ctx.warn(
+            "Are you sure you want to delete all channels? Type `yes` to confirm."
+        )
 
         def check(m):
             return m.author == ctx.author and m.content.lower() == "yes"
@@ -1236,20 +1332,25 @@ class Miscellaneous(Cog):
                         channels_deleted += 1
                         await sleep(2)  # Rate-limit precaution
                     except discord.Forbidden:
-                        await ctx.fail(f"Unable to delete channel `{channel.name}`. Insufficient permissions.")
+                        await ctx.fail(
+                            f"Unable to delete channel `{channel.name}`. Insufficient permissions."
+                        )
                     except discord.HTTPException as e:
-                        await ctx.fail(f"An error occurred while deleting `{channel.name}`: {e}")
+                        await ctx.fail(
+                            f"An error occurred while deleting `{channel.name}`: {e}"
+                        )
 
-            await ctx.success(f"Channels deletion complete. Total channels deleted: {channels_deleted}")
+            await ctx.success(
+                f"Channels deletion complete. Total channels deleted: {channels_deleted}"
+            )
         except Exception as e:
             await ctx.fail(f"Operation cancelled or unexpected error: {e}")
-
 
     @commands.command(
         name="copyembed",
         aliases=["cembed"],
         brief="Convert an embed to parser format",
-        example=",copyembed https://discord.com/channels/..."
+        example=",copyembed https://discord.com/channels/...",
     )
     async def copyembed(self, ctx: Context, message_link: Optional[str] = None):
         if message_link:
@@ -1264,7 +1365,9 @@ class Miscellaneous(Cog):
         else:
             ref = ctx.message.reference
             if not ref or not ref.message_id:
-                return await ctx.fail("Please reply to a message or provide a message link")
+                return await ctx.fail(
+                    "Please reply to a message or provide a message link"
+                )
             message = await ctx.channel.fetch_message(ref.message_id)
 
         if not message.embeds:
@@ -1307,15 +1410,20 @@ class Miscellaneous(Cog):
             parts.append(f"{{image: {embed.image.url}}}")
 
         for field in embed.fields:
-            parts.append(f"{{field: {field.name} && {field.value} && {str(field.inline)}}}")
+            parts.append(
+                f"{{field: {field.name} && {field.value} && {str(field.inline)}}}"
+            )
 
         result = "$v".join(parts)
-        
+
         if len(result) > 2000:
             file = discord.File(io.BytesIO(result.encode()), filename="embed.txt")
-            await ctx.send("The embed code is too long to send as a message.", file=file)
+            await ctx.send(
+                "The embed code is too long to send as a message.", file=file
+            )
         else:
             await ctx.send(f"```{result}```")
 
-async def setup(bot: "Greed") -> None: 
+
+async def setup(bot: "Greed") -> None:
     await bot.add_cog(Miscellaneous(bot))

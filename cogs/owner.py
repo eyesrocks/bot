@@ -11,7 +11,7 @@ from discord import (
     Thread,
     User,
     Message,
-    MessageType
+    MessageType,
 )
 import datetime
 import os
@@ -30,6 +30,7 @@ from discord import Webhook
 import aiohttp
 from cogs.economy import format_int
 
+
 class Owner(commands.Cog):
     def __init__(self, bot: Greed):
         self.bot = bot
@@ -41,14 +42,16 @@ class Owner(commands.Cog):
         self.check_subs.start()
         self.check_boosts.start()
 
-
     async def cog_load(self):
-#        setattr(self.bot.connection.__events, "on_rival_information", self.bot.on_rival_information)
+        #        setattr(self.bot.connection.__events, "on_rival_information", self.bot.on_rival_information)
         if hasattr(self.bot, "connection"):
             bot = self.bot
+
             @bot.connection.event
-            async def on_rival_information(data, id): return await bot.on_rival_information(data, id)
-#        bot.connection.__events.on_rival_information = self.bot.on_rival_information
+            async def on_rival_information(data, id):
+                return await bot.on_rival_information(data, id)
+
+        #        bot.connection.__events.on_rival_information = self.bot.on_rival_information
         await self.bot.db.execute(
             """
             CREATE TABLE IF NOT EXISTS donators (
@@ -66,33 +69,38 @@ class Owner(commands.Cog):
             """
         )
 
-        await self.bot.db.execute("""
+        await self.bot.db.execute(
+            """
         CREATE TABLE IF NOT EXISTS antisr_guilds (
             guild_id BIGINT PRIMARY KEY
         );
-        """)
+        """
+        )
 
-        await self.bot.db.execute("""
+        await self.bot.db.execute(
+            """
         CREATE TABLE IF NOT EXISTS antisr_users (
             guild_id BIGINT,
             user_id BIGINT,
             PRIMARY KEY (guild_id, user_id)
         );
-        """)
+        """
+        )
 
-        await self.bot.db.execute("""
+        await self.bot.db.execute(
+            """
         CREATE TABLE IF NOT EXISTS antisr_ignores (
             guild_id BIGINT,
             target_id BIGINT,
             is_role BOOLEAN,
             PRIMARY KEY (guild_id, target_id)
         );
-        """)
+        """
+        )
 
     def cog_unload(self):
         self.check_subs.cancel()
         self.check_boosts.cancel()
-
 
     @tasks.loop(seconds=60)
     async def check_boosts(self):
@@ -118,7 +126,7 @@ class Owner(commands.Cog):
                 VALUES ($1, CURRENT_TIMESTAMP)
                 ON CONFLICT (user_id) DO NOTHING
                 """,
-                [(member_id,) for member_id in all_boosters]
+                [(member_id,) for member_id in all_boosters],
             )
 
             await self.bot.db.execute(
@@ -126,7 +134,7 @@ class Owner(commands.Cog):
                 DELETE FROM boosters
                 WHERE user_id NOT IN (SELECT user_id FROM boosters WHERE user_id = ANY($1::bigint[]))
                 """,
-                list(all_boosters)
+                list(all_boosters),
             )
 
             logger.info(f"Synced {len(all_boosters)} boosters to database")
@@ -137,8 +145,6 @@ class Owner(commands.Cog):
         except Exception as e:
             logger.error(f"Error in subscription check: {e}", exc_info=True)
 
-
-
     @tasks.loop(seconds=60)
     async def check_subs(self):
         """Check and sync subscription roles with donator database."""
@@ -147,7 +153,7 @@ class Owner(commands.Cog):
                 return
             premium = guild.get_role(1305842894111768587)
             donator = guild.get_role(1338595841962934372)
-            if not (donator and premium): 
+            if not (donator and premium):
                 logger.warning("Could not find subscription roles")
                 return
 
@@ -157,7 +163,7 @@ class Owner(commands.Cog):
                 VALUES ($1, CURRENT_TIMESTAMP) 
                 ON CONFLICT (user_id) DO NOTHING
                 """,
-                [(owner,) for owner in self.bot.owner_ids]
+                [(owner,) for owner in self.bot.owner_ids],
             )
 
             role_members = set(m.id for m in premium.members + donator.members)
@@ -167,14 +173,13 @@ class Owner(commands.Cog):
                 VALUES ($1, CURRENT_TIMESTAMP)
                 ON CONFLICT (user_id) DO NOTHING
                 """,
-                [(member_id,) for member_id in role_members]
+                [(member_id,) for member_id in role_members],
             )
 
             logger.info(f"Synced {len(role_members)} subscribers to donator database")
 
         except Exception as e:
             logger.error(f"Error in subscription check: {e}", exc_info=True)
-
 
     @commands.Cog.listener("on_member_join")
     async def global_ban_event(self, member: Member):
@@ -196,7 +201,6 @@ class Owner(commands.Cog):
         else:
             return 0
 
-
     async def do_global_ban(self, member: Union[Member, User], reason: str):
         if len(member.mutual_guilds) > 0:
             bans = await asyncio.gather(
@@ -206,15 +210,13 @@ class Owner(commands.Cog):
         else:
             return 0
 
-
-
-
-    @commands.command(name = "saveemoji")
+    @commands.command(name="saveemoji")
     @commands.is_owner()
     async def saveemoji(self, ctx: Context, *emojis: discord.PartialEmoji):
         for emoji in emojis:
-            await emoji.save(f"assets/{emoji.name}.{'gif' if emoji.animated else 'png'}")
-
+            await emoji.save(
+                f"assets/{emoji.name}.{'gif' if emoji.animated else 'png'}"
+            )
 
     @commands.command(name="resetampoules")
     @commands.is_owner()
@@ -231,7 +233,9 @@ class Owner(commands.Cog):
         role = guild.get_role(role_id)
 
         if not role:
-            return await ctx.fail("**Donator role not found!** Please check the role ID.")
+            return await ctx.fail(
+                "**Donator role not found!** Please check the role ID."
+            )
 
         # Add or remove the role from the member
         if isinstance(member, Member):
@@ -243,7 +247,6 @@ class Owner(commands.Cog):
                 m = f"Applied **donator role** to {member.mention}"
 
         await ctx.success(m)
-
 
     @commands.group(name="premium", invoke_without_command=True)
     @commands.is_owner()
@@ -262,21 +265,24 @@ class Owner(commands.Cog):
         )
 
         # Check if the user is already in the premium_users table
-        if await self.bot.db.fetchrow("SELECT * FROM premium_users WHERE user_id = $1", member.id):
+        if await self.bot.db.fetchrow(
+            "SELECT * FROM premium_users WHERE user_id = $1", member.id
+        ):
             # Remove premium permissions if they exist
-            await self.bot.db.execute("DELETE FROM premium_users WHERE user_id = $1", member.id)
+            await self.bot.db.execute(
+                "DELETE FROM premium_users WHERE user_id = $1", member.id
+            )
             message = f"Removed **premium permissions** from {member.mention}"
         else:
             # Add premium permissions if they don't exist
             await self.bot.db.execute(
                 "INSERT INTO premium_users (user_id, ts) VALUES ($1, $2)",
                 member.id,
-                datetime.datetime.now()
+                datetime.datetime.now(),
             )
             message = f"**Premium permissions** have been applied to {member.mention}"
 
         await ctx.send(message)
-
 
     @donator.command(name="check")
     @commands.is_owner()
@@ -499,12 +505,12 @@ class Owner(commands.Cog):
         self.bot.get_channel(data.channel_id)  # type: ignore
         self.bot.get_user(data.user_id)  # type: ignore
         embed = discord.Embed(
-            title =f"Error Code {code}", description=f"```{data.error_message}```",
-            color = 0xf7cd00,
+            title=f"Error Code {code}",
+            description=f"```{data.error_message}```",
+            color=0xF7CD00,
         )
         embed.add_field(name="Context", value=f"`{data.content}`", inline=False)
         return await ctx.send(embed=embed)
-
 
     @commands.command(name="restart", hidden=True)
     @commands.is_owner()
@@ -600,9 +606,7 @@ class Owner(commands.Cog):
 
         try:
             await guild.unban(discord.Object(owner_id))
-            await ctx.success(
-                f"Successfully unbanned the bot owner from {guild.name}"
-            )
+            await ctx.success(f"Successfully unbanned the bot owner from {guild.name}")
         except discord.HTTPException:
             await ctx.fail(
                 "Failed to unban the bot owner. Check the bot's permissions."
@@ -640,17 +644,15 @@ class Owner(commands.Cog):
 
         return await ctx.send_help()
 
-
     @blacklist.command(name="add", hidden=True)
     @commands.is_owner()
     async def blacklist_add(
         self,
-        ctx, 
+        ctx,
         user: Union[discord.User, discord.Guild, int],
         note: str = "No reason specified",
     ):
         """Blacklist someone from using the bot."""
-
 
         if isinstance(user, discord.Guild):
             name = user.name
@@ -664,7 +666,9 @@ class Owner(commands.Cog):
         elif isinstance(user, int):
             name = str(user)
             object_id = user
-            object_type = "guild_id" if await self.bot.fetch_guild(object_id) else "user_id"
+            object_type = (
+                "guild_id" if await self.bot.fetch_guild(object_id) else "user_id"
+            )
         else:
             return await ctx.fail("Invalid user or guild identifier.")
 
@@ -689,7 +693,6 @@ class Owner(commands.Cog):
         else:
             await ctx.success(f"{name} has been **blacklisted** - {note}")
 
-
     @blacklist.command(name="remove", hidden=True)
     @commands.is_owner()
     async def blacklist_remove(
@@ -697,8 +700,10 @@ class Owner(commands.Cog):
     ):
         """Unblacklist a user"""
         if isinstance(user, (discord.Guild, int)):
-            if isinstance(user, int): user = user
-            else: user = user.id
+            if isinstance(user, int):
+                user = user
+            else:
+                user = user.id
             object_id = user
             object_type = "guild_id"
             m = object_id
@@ -728,33 +733,65 @@ class Owner(commands.Cog):
 
         else:
             return await ctx.fail(
-                f"{'User' if object_type == 'user_id' else 'Guild'} {m} isn't ** blacklisted**, maybe you meant to do `, reset`?"
+                f"{'User' if object_type == 'user_id' else 'Guild'} {m} isn't ** blacklisted**"
             )
 
+    @blacklist.command(name="info", hidden=True)
+    @commands.is_owner()
+    async def blacklist_info(self, ctx, user: Union[discord.User, discord.Guild, int]):
+        """View information about a blacklisted user or guild"""
+
+        if isinstance(user, discord.Guild):
+            name = user.name
+            object_id = user.id
+            object_type = "guild_id"
+        elif isinstance(user, discord.User):
+            name = str(user)
+            object_id = user.id
+            object_type = "user_id"
+        else:
+            return await ctx.fail("Invalid user or guild identifier.")
+
+        data = await self.bot.db.fetch(
+            """SELECT * FROM blacklisted WHERE object_id = $1""", object_id
+        )
+        if not data:
+            return await ctx.fail(
+                f"{'User' if object_type == 'user_id' else 'Guild'} {name} is not blacklisted."
+            )
+
+        note = data[0]["reason"]
+        author = await self.bot.fetch_user(data[0]["blacklist_author"])
+        embed = discord.Embed(title=f"Blacklist Information for {name}", color=0x2B2D31)
+        embed.add_field(name="Note", value=note, inline=False)
+        embed.add_field(name="Blacklisted by", value=author.mention, inline=False)
+        await ctx.send(embed=embed)
 
     @commands.command(
-          name="testembed",
-          brief="Sends a test embed to check how it looks",
-          description="A simple command to test how the embed will look.",
-      )
+        name="testembed",
+        brief="Sends a test embed to check how it looks",
+        description="A simple command to test how the embed will look.",
+    )
     async def testembed(self, ctx):
-          # Create the embed
-          embed = discord.Embed(
-              title="**Help**",  # Title of the embed
-              description="<:luma_info:1302336751599222865> **support: [/pomice](https://discord.gg/pomice)**\n<a:loading:1302351366584270899> **site: [greed](http://greed.wtf)**\n\n Use **,help [command name]** or select a category from the dropdown.",
-              color=0x36393f,  # Embed color (you can change it)
-          )
+        # Create the embed
+        embed = discord.Embed(
+            title="**Help**",  # Title of the embed
+            description="<:luma_info:1302336751599222865> **support: [/pomice](https://discord.gg/pomice)**\n<a:loading:1302351366584270899> **site: [greed](http://greed.wtf)**\n\n Use **,help [command name]** or select a category from the dropdown.",
+            color=0x36393F,  # Embed color (you can change it)
+        )
 
-          # Set the author for the embed (bot's username and avatar)
-          avatar_url = self.bot.user.display_avatar.url  # Safe way to get the bot's avatar
+        # Set the author for the embed (bot's username and avatar)
+        avatar_url = (
+            self.bot.user.display_avatar.url
+        )  # Safe way to get the bot's avatar
 
-          embed.set_author(
-              name=self.bot.user.name,  # Bot's name
-              icon_url=avatar_url  # Bot's avatar URL
-          )
+        embed.set_author(
+            name=self.bot.user.name,  # Bot's name
+            icon_url=avatar_url,  # Bot's avatar URL
+        )
 
-          # Send the embed in the current channel
-          await ctx.send(embed=embed)
+        # Send the embed in the current channel
+        await ctx.send(embed=embed)
 
     @commands.command(
         name="mutuals",
@@ -766,7 +803,7 @@ class Owner(commands.Cog):
     async def mutuals(self, ctx, user: discord.User = None):
         # Default to the author if no user is mentioned
         user = user or ctx.author
-        
+
         # If the user is provided by ID or mention, fetch the user object
         if isinstance(user, discord.User):
             target_user = user
@@ -780,7 +817,7 @@ class Owner(commands.Cog):
             except discord.HTTPException as e:
                 await ctx.send(f"An error occurred while fetching the user: {str(e)}.")
                 return
-        
+
         # Get a list of guilds the bot is in where the user is a member
         mutual_guilds = []
         for guild in self.bot.guilds:
@@ -795,7 +832,7 @@ class Owner(commands.Cog):
         embed = discord.Embed(
             title=f"{target_user.name}'s Mutual Servers",
             description=f"Here are the servers {target_user.name} shares with me:",
-            color=0x3498db,  # You can customize this color
+            color=0x3498DB,  # You can customize this color
         )
 
         # Add a field for each mutual server
@@ -804,9 +841,6 @@ class Owner(commands.Cog):
 
         # Send the embed
         await ctx.send(embed=embed)
-
-
-
 
     @blacklist.command(name="list", aliases=["show", "view"], hidden=True)
     @commands.is_owner()
@@ -858,82 +892,118 @@ class Owner(commands.Cog):
         else:
             return await ctx.fail("Nobody is **blacklisted**")
 
-
-
-
     @commands.command(hidden=True)
     @commands.is_owner()
     async def doc(self, ctx):
-        bot_avatar_url = self.bot.user.avatar.url if self.bot.user.avatar.url else self.bot.user.default_avatar.url
-        x = discord.Embed(title="Documentation guide", color=0x2b2d31)
-        
+        bot_avatar_url = (
+            self.bot.user.avatar.url
+            if self.bot.user.avatar.url
+            else self.bot.user.default_avatar.url
+        )
+        x = discord.Embed(title="Documentation guide", color=0x2B2D31)
+
         x.set_thumbnail(url=bot_avatar_url)
 
-        x.add_field(name="**Important Information**", value=(
-            "> [Initial Setup](https://docs.greed.bot/settings/setup)\n"
-            "> [Reskin](https://docs.greed.bot/settings/Reskin)\n"
-            "> [Custom Context](https://docs.greed.bot/settings/Context)"
-        ), inline=False)
+        x.add_field(
+            name="**Important Information**",
+            value=(
+                "> [Initial Setup](https://docs.greed.bot/settings/setup)\n"
+                "> [Reskin](https://docs.greed.bot/settings/Reskin)\n"
+                "> [Custom Context](https://docs.greed.bot/settings/Context)"
+            ),
+            inline=False,
+        )
 
-        x.add_field(name="**Security Setup**", value=(
-            "> [Antinuke](https://docs.greed.bot/securitysetup/antinuke)\n"
-            "> [Automod Filter](https://docs.greed.bot/securitysetup/automod) \n"
-            "> [Fake Permissions](https://docs.greed.bot/securitysetup/Fake-Permissions)\n"
-            "> [Enabling/Disabling Commands](https://docs.greed.bot/securitysetup/Command-Toggle)"
-        ), inline=False)
+        x.add_field(
+            name="**Security Setup**",
+            value=(
+                "> [Antinuke](https://docs.greed.bot/securitysetup/antinuke)\n"
+                "> [Automod Filter](https://docs.greed.bot/securitysetup/automod) \n"
+                "> [Fake Permissions](https://docs.greed.bot/securitysetup/Fake-Permissions)\n"
+                "> [Enabling/Disabling Commands](https://docs.greed.bot/securitysetup/Command-Toggle)"
+            ),
+            inline=False,
+        )
 
-        x.add_field(name="**Server Setup**", value=(
-            "> [Autoresponders](https://docs.greed.bot/serversetup/Autoresponders)\n"
-            "> [Booster Roles](https://docs.greed.bot/serversetup/Booster-Messages)\n"
-            "> [Booster Messages](https://docs.greed.bot/serversetup/Booster-Roles)\n"
-            "> [Lock Setup](https://docs.greed.bot/serversetup/Lock-Setup)\n"
-            "> [Pagination](https://docs.greed.bot/serversetup/Pagination)\n"
-            "> [Reaction Roles](https://docs.greed.bot/serversetup/Reaction-Roles)\n"
-            "> [Starboard](https://docs.greed.bot/serversetup/Starboard)\n"
-            "> [Vanity Roles](https://docs.greed.bot/serversetup/Vanity-Roles)\n"
-            "> [VoiceMaster](https://docs.greed.bot/serversetup/VoiceMaster)\n"
-            "> [Webhook Creation](https://docs.greed.bot/serversetup/Webhooks-Creation)"
-        ), inline=False)
+        x.add_field(
+            name="**Server Setup**",
+            value=(
+                "> [Autoresponders](https://docs.greed.bot/serversetup/Autoresponders)\n"
+                "> [Booster Roles](https://docs.greed.bot/serversetup/Booster-Messages)\n"
+                "> [Booster Messages](https://docs.greed.bot/serversetup/Booster-Roles)\n"
+                "> [Lock Setup](https://docs.greed.bot/serversetup/Lock-Setup)\n"
+                "> [Pagination](https://docs.greed.bot/serversetup/Pagination)\n"
+                "> [Reaction Roles](https://docs.greed.bot/serversetup/Reaction-Roles)\n"
+                "> [Starboard](https://docs.greed.bot/serversetup/Starboard)\n"
+                "> [Vanity Roles](https://docs.greed.bot/serversetup/Vanity-Roles)\n"
+                "> [VoiceMaster](https://docs.greed.bot/serversetup/VoiceMaster)\n"
+                "> [Webhook Creation](https://docs.greed.bot/serversetup/Webhooks-Creation)"
+            ),
+            inline=False,
+        )
 
-        x.add_field(name="**Socials**", value=(
-            "> [Pinterest](https://docs.greed.bot/socials/Pinterest)\n"
-            "> [TikTok](https://docs.greed.bot/socials/TikTok)\n"
-            "> [Twitter](https://docs.greed.bot/socials/Twitter)\n"
-            "> [YouTube Shorts](https://docs.greed.bot/socials/Youtube-Shorts)"
-        ), inline=False)
+        x.add_field(
+            name="**Socials**",
+            value=(
+                "> [Pinterest](https://docs.greed.bot/socials/Pinterest)\n"
+                "> [TikTok](https://docs.greed.bot/socials/TikTok)\n"
+                "> [Twitter](https://docs.greed.bot/socials/Twitter)\n"
+                "> [YouTube Shorts](https://docs.greed.bot/socials/Youtube-Shorts)"
+            ),
+            inline=False,
+        )
 
-        x.add_field(name="**Utilitys**", value=(
-            "> [Embed Builder](https://docs.greed.bot/serversetup/Embeds)\n"
-            "> [Variables](https://docs.greed.bot/tools/Variables)"
-        ), inline=False)
+        x.add_field(
+            name="**Utilitys**",
+            value=(
+                "> [Embed Builder](https://docs.greed.bot/serversetup/Embeds)\n"
+                "> [Variables](https://docs.greed.bot/tools/Variables)"
+            ),
+            inline=False,
+        )
 
         await ctx.send(embed=x)
         y = discord.Embed(
-            description='<:greedinfo:1270587726080770049> When **greed** is added to a guild, **its self role** should be moved to the **top 5 roles**. Default prefix is set to `,`',
-            color = 0x44ccf4
-            )
-        await ctx.send(embed = y)
-
+            description="<:greedinfo:1270587726080770049> When **greed** is added to a guild, **its self role** should be moved to the **top 5 roles**. Default prefix is set to `,`",
+            color=0x44CCF4,
+        )
+        await ctx.send(embed=y)
 
     @commands.command(hidden=True)
     @commands.is_owner()
     async def tos(self, ctx):
-        bot_avatar_url = self.bot.user.avatar.url if self.bot.user.avatar.url else self.bot.user.default_avatar.url
-        x = discord.Embed(title="Terms of Service\n", color=0x2b2d31)
-        
+        bot_avatar_url = (
+            self.bot.user.avatar.url
+            if self.bot.user.avatar.url
+            else self.bot.user.default_avatar.url
+        )
+        x = discord.Embed(title="Terms of Service\n", color=0x2B2D31)
+
         x.set_thumbnail(url=bot_avatar_url)
 
-        x.add_field(name="Disclaimer", value=(
-            "> While this bot is provided free of charge, receiving a ban from a moderator for any of the reasons listed below will result in a **simultaneous blacklisting** from the use of Greed. "
-        ), inline=False)
-    
-        x.add_field(name="Support Guidelines", value=(
-            "> Our staff receives numerous inquiries regarding the bot's usage and support. Please be respectful, wait your turn, and you will receive the assistance you need."
-        ), inline=False)
+        x.add_field(
+            name="Disclaimer",
+            value=(
+                "> While this bot is provided free of charge, receiving a ban from a moderator for any of the reasons listed below will result in a **simultaneous blacklisting** from the use of Greed. "
+            ),
+            inline=False,
+        )
 
-        x.add_field(name="Abuse Policy", value=(
-            "> Any attempt to abuse our services will result in your server and account being blacklisted. This action will prevent you from adding the bot to any of your guilds or utilizing Greed's features."
-        ), inline=False)
+        x.add_field(
+            name="Support Guidelines",
+            value=(
+                "> Our staff receives numerous inquiries regarding the bot's usage and support. Please be respectful, wait your turn, and you will receive the assistance you need."
+            ),
+            inline=False,
+        )
+
+        x.add_field(
+            name="Abuse Policy",
+            value=(
+                "> Any attempt to abuse our services will result in your server and account being blacklisted. This action will prevent you from adding the bot to any of your guilds or utilizing Greed's features."
+            ),
+            inline=False,
+        )
 
         y = discord.Embed(
             title="<:luma_info:1302336751599222865> Notifications & Access",
@@ -941,15 +1011,11 @@ class Owner(commands.Cog):
                 "> - React with <:check2:1302206610701287526> to **agree with our policy**\n> -"
                 " React with <:topgg_ico_notifications:1302336130527793162> to receive **update notifications**"
             ),
-            color=0x44ccf4
-)
+            color=0x44CCF4,
+        )
 
-        
         await ctx.send(embed=x)
         await ctx.send(embed=y)
-
-
-
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild) -> discord.Guild:
@@ -960,7 +1026,7 @@ class Owner(commands.Cog):
         # Gather guild information
         owner = guild.owner
         member_count = guild.member_count
-        
+
         # Create invite link
         invite = "No permissions to fetch invites"
         try:
@@ -981,19 +1047,14 @@ class Owner(commands.Cog):
         embed.set_thumbnail(url=self.bot.user.display_avatar)
         embed.add_field(name="invite", value=invite, inline=True)
         embed.set_footer(
-                    text=f"greed joined a server | we are at {await self.bot.guild_count():,} servers"
-                )
+            text=f"greed joined a server | we are at {await self.bot.guild_count():,} servers"
+        )
 
         # Send the embed to the designated channel
         if channel:
             await channel.send(embed=embed)
 
-    
-
-    @commands.command(
-        name="updates",
-        brief="Create an embed showing bot updates."
-    )
+    @commands.command(name="updates", brief="Create an embed showing bot updates.")
     @commands.is_owner()  # Restrict to bot owner
     async def updates(self, ctx, channel: discord.TextChannel = None):
         """
@@ -1005,20 +1066,22 @@ class Owner(commands.Cog):
         target_channel = channel or ctx.channel
 
         # Prompt the user to enter the description of the update
-        await ctx.send(f"{self.static_message}\nPlease type the description of the update:")
+        await ctx.send(
+            f"{self.static_message}\nPlease type the description of the update:"
+        )
 
         try:
             # Wait for the user's response
             msg = await self.bot.wait_for(
                 "message",
                 timeout=120.0,  # Timeout after 2 minutes
-                check=lambda m: m.author == ctx.author and m.channel == ctx.channel
+                check=lambda m: m.author == ctx.author and m.channel == ctx.channel,
             )
 
             # Create the embed using the user's input
             embed = discord.Embed(
                 description=msg.content,
-                color=self.bot.color  # Default color, can be customized
+                color=self.bot.color,  # Default color, can be customized
             )
 
             # Optionally, add a footer or timestamp
@@ -1035,7 +1098,9 @@ class Owner(commands.Cog):
             await ctx.success(f"Update successfully sent to {target_channel.mention}.")
 
         except TimeoutError:
-            await ctx.warning("You took too long to respond. Please try the command again.")
+            await ctx.warning(
+                "You took too long to respond. Please try the command again."
+            )
 
     @commands.command(name="sync", hidden=True)
     @commands.is_owner()
@@ -1044,7 +1109,6 @@ class Owner(commands.Cog):
         await self.check_boosts()
         await self.bot.sync_all()
         await ctx.success("Synced boosters, donators, and all servers to their shards")
-
 
     @commands.command(name="setbalance", hidden=True)
     @commands.is_owner()
@@ -1057,7 +1121,6 @@ class Owner(commands.Cog):
         return await ctx.success(
             f"**{member.mention}'s balance is set to `{format_int(amount)}` bucks**"
         )
-
 
 
 async def setup(bot):

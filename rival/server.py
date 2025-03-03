@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 
@@ -21,13 +21,13 @@ class Server:
         host (str): The server's hostname. Defaults to "127.0.0.1".
         port (int): The server's port. Defaults to 13254.
     """
-    
+
     def __init__(self, host: str = "127.0.0.1", port: int = 13254):
         self.websocket = WebsocketServer(host=host, port=port)
         self.websocket.set_fn_new_client(self._on_client_connect)
         self.websocket.set_fn_message_received(self._on_message_received)
         self.websocket.set_fn_client_left(self._on_client_disconnect)
-        
+
         self.active_clients = {}
         self.pending_verification = {}
         self.on_hold_connections = {}
@@ -52,11 +52,14 @@ class Server:
             self._handle_message(client, ws_message)
         except Exception as e:
             logger.error(f"Error decoding message: {e}")
-            self._send_error(client, MessagePayload(
-                type=Payloads.error,
-                data="Invalid message format.",
-                traceback=str(e)
-            ))
+            self._send_error(
+                client,
+                MessagePayload(
+                    type=Payloads.error,
+                    data="Invalid message format.",
+                    traceback=str(e),
+                ),
+            )
 
     def _handle_message(self, client, msg: WsMessage):
         payload = MessagePayload().from_message(msg)
@@ -68,20 +71,25 @@ class Server:
             Payloads.request: self._handle_request,
             Payloads.response: self._handle_response,
             Payloads.error: self._handle_response,
-            Payloads.function_call: self._handle_response
+            Payloads.function_call: self._handle_response,
         }
         handler = handlers.get(msg.type, self._unhandled_message)
         handler(client, msg, payload)
 
     def _unhandled_message(self, client, msg: WsMessage, payload: MessagePayload):
-        logger.warning(f"Unhandled message type from client {client['address']}: {msg.type}")
+        logger.warning(
+            f"Unhandled message type from client {client['address']}: {msg.type}"
+        )
 
     def _handle_verification(self, client, msg: WsMessage, payload: MessagePayload):
         if msg.id in self.active_clients:
             logger.info(f"Duplicate client detected: {msg.id}")
             payload.type = Payloads.error
             payload.data = "Already authorized."
-            self.on_hold_connections[msg.id] = {"client": client, "id": client["address"][1]}
+            self.on_hold_connections[msg.id] = {
+                "client": client,
+                "id": client["address"][1],
+            }
             self._send_error(client, payload)
         else:
             logger.info(f"Client verified: {msg.id}")
@@ -97,7 +105,9 @@ class Server:
         if msg.route:
             for destination in msg.route:
                 if destination in self.active_clients:
-                    self._send_message(self.active_clients[destination]["client"], payload)
+                    self._send_message(
+                        self.active_clients[destination]["client"], payload
+                    )
         else:
             for client_id, client_obj in self.active_clients.items():
                 if client_id != payload.id:
@@ -106,7 +116,9 @@ class Server:
     def _handle_ping(self, client, msg: WsMessage, payload: MessagePayload):
         logger.debug(f"Ping message from {client['address']}")
         payload.type = Payloads.ping
-        payload.data = {"success": msg.destination in self.active_clients or msg.destination is None}
+        payload.data = {
+            "success": msg.destination in self.active_clients or msg.destination is None
+        }
         self._send_message(client, payload)
 
     def _handle_client_list(self, client, payload: MessagePayload):
@@ -155,5 +167,7 @@ class Server:
         self.pending_verification.pop(client["address"][1], None)
 
     def start(self):
-        logger.info(f"WebSocket Server starting on {self.websocket.host}:{self.websocket.port}")
+        logger.info(
+            f"WebSocket Server starting on {self.websocket.host}:{self.websocket.port}"
+        )
         self.websocket.run_forever()

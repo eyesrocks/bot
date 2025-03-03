@@ -3,8 +3,10 @@ from discord import Embed, User, Guild, Member
 from discord.ext.commands import AutoShardedBot
 from typing_extensions import Self
 
+
 def asDict(obj: Any) -> Dict[str, Any]:
     return obj.__dict__
+
 
 TransformedEmbed = Union[Dict[str, str], List[Any], str]
 
@@ -28,13 +30,15 @@ class Transformers:
             "footer": embed.footer.text if embed.footer else None,
             "image_url": embed.image.url if embed.image else None,
             "thumbnail_url": embed.thumbnail.url if embed.thumbnail else None,
-            "author": {
-                "name": embed.author.name,
-                "url": embed.author.url,
-                "icon_url": embed.author.icon_url,
-            }
-            if embed.author
-            else None,
+            "author": (
+                {
+                    "name": embed.author.name,
+                    "url": embed.author.url,
+                    "icon_url": embed.author.icon_url,
+                }
+                if embed.author
+                else None
+            ),
             "color": embed.color.value if embed.color else None,
         }
 

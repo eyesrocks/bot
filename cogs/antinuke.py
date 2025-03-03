@@ -1,4 +1,12 @@
-from discord.ext.commands import Cog, command, Context, check, hybrid_group, bot_has_permissions, has_permissions
+from discord.ext.commands import (
+    Cog,
+    command,
+    Context,
+    check,
+    hybrid_group,
+    bot_has_permissions,
+    has_permissions,
+)
 from discord import (
     AuditLogAction,
     AuditLogEntry,
@@ -20,6 +28,8 @@ from loguru import logger
 from tool.greed import Greed
 import random
 import discord
+
+
 def trusted():
     async def predicate(ctx: Context):
         if ctx.author.id in ctx.bot.owner_ids:
@@ -80,14 +90,13 @@ class Antinuke(Cog):
             "webhooks",
         ]
 
-
         self.rl_settings = {
-            'guild_action': (20, 10),
-            'user_action': (5, 10),
-            'global_action': (100, 10),
-            'cleanup': (3, 5),
-            'punishment': (2, 10),
-            'cache_ttl': 30
+            "guild_action": (20, 10),
+            "user_action": (5, 10),
+            "global_action": (100, 10),
+            "cleanup": (3, 5),
+            "punishment": (2, 10),
+            "cache_ttl": 30,
         }
 
     async def cog_load(self):
@@ -114,7 +123,7 @@ class Antinuke(Cog):
         return f"[ {self.bot.user.name} antinuke ] {reason}"
 
     async def get_thresholds(
-        self, guild: Guild, action: Union[AuditLogAction,str]
+        self, guild: Guild, action: Union[AuditLogAction, str]
     ) -> Optional[int]:
         if guild.id in self.guilds:
             if isinstance(action, AuditLogAction):
@@ -141,7 +150,12 @@ class Antinuke(Cog):
                     raise TypeError("User's role is higher than mine")
                 if user.id == guild.owner_id:
                     raise TypeError("User was the Owner")
-            if await self.bot.glory_cache.ratelimited(f"punishment-{guild.id}-{user.id}", 1, 60) != 0:
+            if (
+                await self.bot.glory_cache.ratelimited(
+                    f"punishment-{guild.id}-{user.id}", 1, 60
+                )
+                != 0
+            ):
                 return
 
             await guild.ban(Object(user.id), reason=reason)
@@ -155,7 +169,12 @@ class Antinuke(Cog):
                     return False
                 if user.id == guild.owner_id:
                     return False
-            if await self.bot.glory_cache.ratelimited(f"punishment-{guild.id}-{user.id}", 1, 60) != 0:
+            if (
+                await self.bot.glory_cache.ratelimited(
+                    f"punishment-{guild.id}-{user.id}", 1, 60
+                )
+                != 0
+            ):
                 return
             await user.kick(reason=reason)
         return
@@ -169,7 +188,12 @@ class Antinuke(Cog):
             if user.id == guild.owner_id:
                 return False
             after_roles = [r for r in user.roles if not r.is_assignable()]
-            if await self.bot.glory_cache.ratelimited(f"punishment-{guild.id}-{user.id}", 1, 60) != 0:
+            if (
+                await self.bot.glory_cache.ratelimited(
+                    f"punishment-{guild.id}-{user.id}", 1, 60
+                )
+                != 0
+            ):
                 return
             await user.edit(roles=after_roles, reason=reason)  # , atomic=False)
         return True
@@ -178,20 +202,17 @@ class Antinuke(Cog):
         async with self.locks[guild.id], self.user_locks[user.id]:
             # Add rate limiting for punishments
             if await self.bot.glory_cache.ratelimited(
-                f"antinuke_punish_global", 
-                *self.rl_settings['global_action']
+                f"antinuke_punish_global", *self.rl_settings["global_action"]
             ):
                 return
 
             if await self.bot.glory_cache.ratelimited(
-                f"antinuke_punish_guild:{guild.id}",
-                *self.rl_settings['guild_action']
+                f"antinuke_punish_guild:{guild.id}", *self.rl_settings["guild_action"]
             ):
                 return
 
             if await self.bot.glory_cache.ratelimited(
-                f"antinuke_punish_user:{user.id}",
-                *self.rl_settings['punishment']
+                f"antinuke_punish_user:{user.id}", *self.rl_settings["punishment"]
             ):
                 return
 
@@ -225,46 +246,50 @@ class Antinuke(Cog):
                 threshold = 0
 
             # Check whitelist and permissions first to avoid unnecessary rate limit checks
-            if (await self.bot.db.fetchval(
-                "SELECT user_id FROM antinuke_whitelist WHERE user_id = $1 AND guild_id = $2",
-                entry.user.id,
-                guild.id,
-            ) or
-                entry.user.id == guild.owner_id or
-                entry.user.id == self.bot.user.id or
-                entry.user.id in self.bot.owner_ids or
-                (hasattr(entry.user, "top_role") and entry.user.top_role >= guild.me.top_role)
+            if (
+                await self.bot.db.fetchval(
+                    "SELECT user_id FROM antinuke_whitelist WHERE user_id = $1 AND guild_id = $2",
+                    entry.user.id,
+                    guild.id,
+                )
+                or entry.user.id == guild.owner_id
+                or entry.user.id == self.bot.user.id
+                or entry.user.id in self.bot.owner_ids
+                or (
+                    hasattr(entry.user, "top_role")
+                    and entry.user.top_role >= guild.me.top_role
+                )
             ):
                 return True
 
             # Global rate limit check
             if await self.bot.glory_cache.ratelimited(
-                "antinuke_global",
-                *self.rl_settings['global_action']
+                "antinuke_global", *self.rl_settings["global_action"]
             ):
                 return True
 
             # Guild-specific rate limit
             if await self.bot.glory_cache.ratelimited(
-                f"antinuke_guild:{guild.id}",
-                *self.rl_settings['guild_action']
+                f"antinuke_guild:{guild.id}", *self.rl_settings["guild_action"]
             ):
                 return True
 
             # User-specific rate limit for this action
-            action_key = f"antinuke:{guild.id}:{entry.user.id}:{get_action(entry.action)}"
+            action_key = (
+                f"antinuke:{guild.id}:{entry.user.id}:{get_action(entry.action)}"
+            )
             exceeded = await self.bot.glory_cache.ratelimited(
                 action_key,
                 threshold,  # Use the actual threshold without forcing minimum
-                10
+                10,
             )
-            
+
             if exceeded:
                 logger.info(
                     f"User {entry.user.name} exceeded threshold of {threshold} for {entry.action}"
                 )
                 return False  # Only return False (trigger punishment) when threshold is exceeded
-            
+
             return True  # Return True if threshold not exceeded
 
         return True
@@ -282,16 +307,14 @@ class Antinuke(Cog):
     async def get_audit(self, guild: Guild, action: AuditLogAction = None):
         # Add rate limiting for audit log fetches
         if await self.bot.glory_cache.ratelimited(
-            f"audit_fetch:{guild.id}",
-            10,  # 10 fetches
-            5    # per 5 seconds
+            f"audit_fetch:{guild.id}", 10, 5  # 10 fetches  # per 5 seconds
         ):
             return None
 
         cache_key = f"audit_{guild.id}_{action}"
         if cached := await self.bot.glory_cache.get(cache_key):
             return cached
-        
+
         try:
             if not guild.me.guild_permissions.view_audit_log:
                 return None
@@ -320,7 +343,9 @@ class Antinuke(Cog):
                         logger.info(
                             f"user {str(audit.user)} invoked an event for {audit.action} on {str(audit.target)}"
                         )
-            await self.bot.glory_cache.set(cache_key, audit, self.rl_settings['cache_ttl'])
+            await self.bot.glory_cache.set(
+                cache_key, audit, self.rl_settings["cache_ttl"]
+            )
             return audit
         except Exception:
             return None
@@ -341,8 +366,7 @@ class Antinuke(Cog):
     async def attempt_cleanup(self, guild_id: int, action: callable, *args, **kwargs):
         """Helper method to attempt cleanup actions with rate limiting and retries"""
         if await self.bot.glory_cache.ratelimited(
-            f"cleanup:{guild_id}", 
-            *self.rl_settings['cleanup']
+            f"cleanup:{guild_id}", *self.rl_settings["cleanup"]
         ):
             return None
 
@@ -352,7 +376,7 @@ class Antinuke(Cog):
                 return await action(*args, **kwargs)
             except discord.HTTPException as e:
                 if e.status == 429:
-                    retry_after = e.retry_after or base_delay * (2 ** attempt)
+                    retry_after = e.retry_after or base_delay * (2**attempt)
                     await sleep(retry_after + random.uniform(0, 0.5))
                 else:
                     logger.error(f"Cleanup failed: {str(e)}")
@@ -360,7 +384,7 @@ class Antinuke(Cog):
             except Exception as e:
                 logger.error(f"Unexpected error in cleanup: {str(e)}")
                 return None
-            await sleep(base_delay * (2 ** attempt) + random.uniform(0, 0.5))
+            await sleep(base_delay * (2**attempt) + random.uniform(0, 0.5))
         return None
 
     @Cog.listener("on_audit_log_entry_create")
@@ -389,7 +413,6 @@ class Antinuke(Cog):
                     Object(entry.target.id), reason=self.make_reason("Cleanup")
                 )
             return  # await self.do_punishment(entry.guild, entry.user, reason)
-
 
     @Cog.listener("on_member_update")
     async def dangerous_role_assignment(self, before: Member, after: Member):
@@ -440,7 +463,7 @@ class Antinuke(Cog):
                 after.guild.id,
                 after.edit,
                 permissions=Permissions(before.permissions.value),
-                reason=self.make_reason("Cleanup")
+                reason=self.make_reason("Cleanup"),
             )
             return await self.do_punishment(
                 before.guild,
@@ -457,9 +480,7 @@ class Antinuke(Cog):
             return
         if await self.check_entry(role.guild, entry) is not True:
             await self.attempt_cleanup(
-                role.guild.id,
-                role.clone,
-                reason=self.make_reason("Cleanup")
+                role.guild.id, role.clone, reason=self.make_reason("Cleanup")
             )
             return await self.do_punishment(
                 role.guild, entry.user, self.make_reason("User caught deleting roles")
@@ -474,9 +495,7 @@ class Antinuke(Cog):
             return
         if await self.check_entry(role.guild, entry) is not True:
             await self.attempt_cleanup(
-                role.guild.id,
-                role.delete,
-                reason=self.make_reason("Cleanup")
+                role.guild.id, role.delete, reason=self.make_reason("Cleanup")
             )
             return await self.do_punishment(
                 role.guild, entry.user, self.make_reason("User caught creating roles")
@@ -492,9 +511,7 @@ class Antinuke(Cog):
             return
         if await self.check_entry(guild, entry) is not True:
             await self.attempt_cleanup(
-                guild.id,
-                channel.delete,
-                reason=self.make_reason("Cleanup")
+                guild.id, channel.delete, reason=self.make_reason("Cleanup")
             )
             return await self.do_punishment(
                 guild, entry.user, self.make_reason("User caught creating channels")
@@ -510,9 +527,7 @@ class Antinuke(Cog):
             return
         if await self.check_entry(guild, entry) is not True:
             await self.attempt_cleanup(
-                guild.id,
-                channel.clone,
-                reason=self.make_reason("Cleanup")
+                guild.id, channel.clone, reason=self.make_reason("Cleanup")
             )
             return await self.do_punishment(
                 guild, entry.user, self.make_reason("User caught deleting channels")
@@ -533,7 +548,7 @@ class Antinuke(Cog):
                 name=before.name,
                 position=before.position,
                 overwrites=before.overwrites,
-                reason=self.make_reason("Cleanup")
+                reason=self.make_reason("Cleanup"),
             )
             return await self.do_punishment(
                 guild, entry.user, self.make_reason("User caught updating channels")
@@ -549,9 +564,7 @@ class Antinuke(Cog):
             return
         if await self.check_entry(guild, entry) is not True:
             await self.attempt_cleanup(
-                guild.id,
-                entry.target.delete,
-                reason=self.make_reason("Cleanup")
+                guild.id, entry.target.delete, reason=self.make_reason("Cleanup")
             )
             return await self.do_punishment(
                 guild, entry.user, self.make_reason("User caught creating webhooks")
@@ -591,7 +604,7 @@ class Antinuke(Cog):
                 icon=await before.icon.read() if before.icon else None,
                 banner=await before.banner.read() if before.banner else None,
                 splash=await before.splash.read() if before.splash else None,
-                reason=self.make_reason("Cleanup")
+                reason=self.make_reason("Cleanup"),
             )
             return await self.do_punishment(
                 after, entry.user, self.make_reason("User caught updating the guild")
@@ -1170,7 +1183,12 @@ class Antinuke(Cog):
             )
         )
 
-    @command(name="hardban", aliases=["hb"], brief="Hardban a user", example=",hardban @wurri")
+    @command(
+        name="hardban",
+        aliases=["hb"],
+        brief="Hardban a user",
+        example=",hardban @wurri",
+    )
     @trusted()
     @has_permissions(ban_members=True)
     async def hardban(self, ctx: Context, user: Union[User, Member]):
@@ -1182,7 +1200,9 @@ class Antinuke(Cog):
             user.id,
         )
         if res:
-            confirm = await ctx.confirm("User is already hardbanned. Do you want to unhardban?")
+            confirm = await ctx.confirm(
+                "User is already hardbanned. Do you want to unhardban?"
+            )
             if confirm:
                 await self.bot.db.execute(
                     """DELETE FROM hardban WHERE guild_id = $1 AND user_id = $2""",
@@ -1190,20 +1210,26 @@ class Antinuke(Cog):
                     user.id,
                 )
                 try:
-                    await ctx.guild.unban(Object(id=user.id), reason="User unhardbanned by trusted admin or owner")
+                    await ctx.guild.unban(
+                        Object(id=user.id),
+                        reason="User unhardbanned by trusted admin or owner",
+                    )
                 except Exception:
                     pass
-                return await ctx.success(f"Successfully **unhardbanned** {user.mention}")
+                return await ctx.success(
+                    f"Successfully **unhardbanned** {user.mention}"
+                )
         else:
             await self.bot.db.execute(
                 """INSERT INTO hardban (guild_id, user_id) VALUES($1, $2)""",
                 ctx.guild.id,
                 user.id,
             )
-            await ctx.guild.ban(Object(id=user.id), reason="User hardbanned by trusted admin or owner")
+            await ctx.guild.ban(
+                Object(id=user.id), reason="User hardbanned by trusted admin or owner"
+            )
             return await ctx.success(f"Successfully **hardbanned** {user.mention}")
-        
-    
+
     @Cog.listener("on_member_join")
     async def hardban_listener(self, member: Member):
         res = await self.bot.db.fetchval(
@@ -1214,7 +1240,6 @@ class Antinuke(Cog):
         if res:
             with suppress(Exception):
                 await member.ban(reason="User hardbanned by trusted admin or owner")
-
 
 
 async def setup(bot):

@@ -9,6 +9,7 @@ from typing_extensions import Self
 import asyncio
 import os
 
+
 async def wait_for_file(filepath: str, timeout: float) -> bool:
     async def file_exists():
         while not os.path.isfile(filepath):
@@ -21,6 +22,7 @@ async def wait_for_file(filepath: str, timeout: float) -> bool:
     except asyncio.TimeoutError:
         return False
 
+
 def delete_file(filepath: str):
     try:
         os.remove(filepath)
@@ -28,17 +30,20 @@ def delete_file(filepath: str):
         pass
     return True
 
+
 @offloaded
 def save_file(filepath: str, data: bytes) -> str:
     with open(filepath, "wb") as file:
         file.write(data)
     return filepath
 
+
 @offloaded
 def read_file(filepath: str, mode: str = "rb", **kwargs: Any) -> Any:
     with open(filepath, mode, **kwargs) as file:
         data = file.read()
     return data
+
 
 @offloaded
 def mp3_to_ogg(filepath: str) -> str:
@@ -47,35 +52,36 @@ def mp3_to_ogg(filepath: str) -> str:
     subprocess.run(command, shell=True, check=True)
     return output_path
 
+
 class FileProcessing:
     def __init__(self: Self, bot: Client):
         self.bot = bot
         self.token = self.bot.config["token"]
 
     async def attachment(self, channel: TextChannel, filePath: str) -> dict:
-        url = f'https://discord.com/api/v9/channels/{channel.id}/attachments'
-        headers = {'Authorization': f"Bot {self.token}"}
+        url = f"https://discord.com/api/v9/channels/{channel.id}/attachments"
+        headers = {"Authorization": f"Bot {self.token}"}
         payload = {
             "files": [
                 {
                     "filename": "voice-message.ogg",
                     "file_size": VorbisFile(filePath).buffer_length,
-                    "id": "2"
+                    "id": "2",
                 }
             ]
         }
-        
+
         async with ClientSession() as session:
             async with session.post(url, headers=headers, json=payload) as response:
                 if response.status == 200:
                     data = await response.json()
-                    return data['attachments'][0]
+                    return data["attachments"][0]
                 else:
                     response_text = await response.text()
                     raise Exception(f"Attachment Error: {response_text}")
 
     async def upload_to_cloud(self, upload_url: str, filePath: str) -> bool:
-        headers = {'Content-Type': 'audio/ogg'}
+        headers = {"Content-Type": "audio/ogg"}
         async with ClientSession() as session:
             data = await read_file(filePath)
             async with session.put(upload_url, data=data, headers=headers) as response:
@@ -93,13 +99,15 @@ class FileProcessing:
             await wait_for_file(filePath, 3)
         try:
             attachment_info = await self.attachment(channel, filePath)
-            success = await self.upload_to_cloud(attachment_info['upload_url'], filePath)
-            
+            success = await self.upload_to_cloud(
+                attachment_info["upload_url"], filePath
+            )
+
             if success:
-                url = f'https://discord.com/api/v9/channels/{channel.id}/messages'
+                url = f"https://discord.com/api/v9/channels/{channel.id}/messages"
                 headers = {
-                    'Authorization': f"Bot {self.token}",
-                    'content-type': 'application/json'
+                    "Authorization": f"Bot {self.token}",
+                    "content-type": "application/json",
                 }
                 payload = {
                     "content": "",
@@ -109,18 +117,26 @@ class FileProcessing:
                     "attachments": [
                         {
                             "id": "0",
-                            "filename": attachment_info['upload_filename'].split('/')[1],
-                            "uploaded_filename": attachment_info['upload_filename'],
+                            "filename": attachment_info["upload_filename"].split("/")[
+                                1
+                            ],
+                            "uploaded_filename": attachment_info["upload_filename"],
                             "duration_secs": MFile(filePath).info.length,
-                            "waveform": "FzYACgAAAAAAACQAAAAAAAA="
+                            "waveform": "FzYACgAAAAAAACQAAAAAAAA=",
                         }
-                    ]
+                    ],
                 }
-                
+
                 async with ClientSession() as session:
-                    async with session.post(url, headers=headers, json=payload) as response:
+                    async with session.post(
+                        url, headers=headers, json=payload
+                    ) as response:
                         if response.status == 200:
-                            return True, Message(state=self.bot._connection, channel=channel, data=await response.json())
+                            return True, Message(
+                                state=self.bot._connection,
+                                channel=channel,
+                                data=await response.json(),
+                            )
                         else:
                             response_json = await response.json()
                             return False, response_json

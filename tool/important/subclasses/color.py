@@ -1,8 +1,14 @@
 from color_processing import ColorHolder
 from discord import Color, ext, Member, User
-from discord.ext.commands import ColorConverter as CV, ColourConverter, Converter, Context
+from discord.ext.commands import (
+    ColorConverter as CV,
+    ColourConverter,
+    Converter,
+    Context,
+)
 from tool.worker import offloaded
 from typing import Union
+
 
 class ColorInfo(Converter):
     async def convert(self, ctx: Context, argument: Union[Color, str, Member, User]):
@@ -41,7 +47,7 @@ class ColorConverter(Converter):
                 logger.info(f"Color Converter Errored with : {e}")
                 raise CommandError("Invalid color hex given")
 
+
 CV.convert = ColorConverter.convert
 ColourConverter.convert = ColorConverter.convert
 ext.commands.converter.ColorInfo = ColorInfo
-

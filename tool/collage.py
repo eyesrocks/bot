@@ -9,8 +9,10 @@ import aiohttp
 import discord
 from loguru import logger
 
+
 def _collage_paste(image: Image, x: int, y: int, background: Image):
     background.paste(image, (x * 256, y * 256))
+
 
 def async_executor():
     def outer(func):
@@ -18,8 +20,11 @@ def async_executor():
         async def inner(*args, **kwargs):
             loop = asyncio.get_event_loop()
             return await loop.run_in_executor(None, partial(func, *args, **kwargs))
+
         return inner
+
     return outer
+
 
 def _collage_open(image: BytesIO, resize: Optional[bool] = False):
     img = Image.open(image).convert("RGBA")
@@ -27,14 +32,15 @@ def _collage_open(image: BytesIO, resize: Optional[bool] = False):
         img = img.resize((256, 256))
     return img
 
+
 @offloaded
 def validate_image(data: bytes):
     image_formats = {
-        "JPEG": [b"\xFF\xD8\xFF"],
-        "PNG": [b"\x89\x50\x4E\x47\x0D\x0A\x1A\x0A"],
+        "JPEG": [b"\xff\xd8\xff"],
+        "PNG": [b"\x89\x50\x4e\x47\x0d\x0a\x1a\x0a"],
         "GIF": [b"\x47\x49\x46\x38\x37\x61", b"\x47\x49\x46\x38\x39\x61"],
         "WEBP": [b"\x52\x49\x46\x46\x00\x00\x00\x00\x57\x45\x42\x50"],
-        "JPG": [b"\xFF\xD8\xFF"],
+        "JPG": [b"\xff\xd8\xff"],
     }
     file_header = data[:12]
     for magic_numbers in image_formats.values():
@@ -43,6 +49,7 @@ def validate_image(data: bytes):
                 return True
     return False
 
+
 async def _validate_image_(data: bytes):
     try:
         return await validate_image(data)
@@ -50,11 +57,21 @@ async def _validate_image_(data: bytes):
         logger.info(f"validating image raised: {e}")
         return False
 
+
 @offloaded
-def _make_bar(percentage_1: float, color_1: str, percentage_2: float, color_2: str, bar_width: int = 10, height: int = 1, corner_radius: float = 0.2) -> bytes:
+def _make_bar(
+    percentage_1: float,
+    color_1: str,
+    percentage_2: float,
+    color_2: str,
+    bar_width: int = 10,
+    height: int = 1,
+    corner_radius: float = 0.2,
+) -> bytes:
     import matplotlib.pyplot as plt
     from matplotlib.patches import PathPatch, Path
     import matplotlib
+
     matplotlib.use("Agg")
 
     if not (0 <= percentage_1 <= 100 and 0 <= percentage_2 <= 100):
@@ -63,7 +80,7 @@ def _make_bar(percentage_1: float, color_1: str, percentage_2: float, color_2: s
         raise ValueError("The sum of percentages cannot exceed 100.")
 
     fig, ax = plt.subplots(figsize=(bar_width, height))
-    
+
     width_1 = (percentage_1 / 100) * bar_width
     width_2 = (percentage_2 / 100) * bar_width
 
@@ -77,11 +94,11 @@ def _make_bar(percentage_1: float, color_1: str, percentage_2: float, color_2: s
             (Path.CURVE3, [0, height - corner_radius]),
             (Path.LINETO, [0, corner_radius]),
             (Path.CURVE3, [0, 0]),
-            (Path.CURVE3, [corner_radius, 0])
+            (Path.CURVE3, [corner_radius, 0]),
         ]
         codes, verts = zip(*path_data)
         path = Path(verts, codes)
-        patch = PathPatch(path, facecolor=color_1, edgecolor='none')
+        patch = PathPatch(path, facecolor=color_1, edgecolor="none")
         ax.add_patch(patch)
 
     if width_2 > 0:
@@ -94,21 +111,23 @@ def _make_bar(percentage_1: float, color_1: str, percentage_2: float, color_2: s
             (Path.CURVE3, [width_1 + width_2, height]),
             (Path.CURVE3, [width_1 + width_2 - corner_radius, height]),
             (Path.LINETO, [width_1, height]),
-            (Path.LINETO, [width_1, 0])
+            (Path.LINETO, [width_1, 0]),
         ]
         codes, verts = zip(*path_data)
         path = Path(verts, codes)
-        patch = PathPatch(path, facecolor=color_2, edgecolor='none')
+        patch = PathPatch(path, facecolor=color_2, edgecolor="none")
         ax.add_patch(patch)
 
     ax.set_xlim(0, bar_width)
     ax.set_ylim(0, height)
-    ax.axis('off')
-    
+    ax.axis("off")
+
     buffer = BytesIO()
-    plt.savefig(buffer, format="png", transparent=True, bbox_inches='tight', pad_inches=0)
+    plt.savefig(
+        buffer, format="png", transparent=True, bbox_inches="tight", pad_inches=0
+    )
     plt.close(fig)
-    
+
     image = Image.open(buffer).convert("RGBA")
     bbox = image.getbbox()
     output_buffer = BytesIO()
@@ -117,6 +136,7 @@ def _make_bar(percentage_1: float, color_1: str, percentage_2: float, color_2: s
         image_cropped = image.crop(bbox)
         image_cropped.save(output_buffer, format="PNG")
     return output_buffer.getvalue()
+
 
 @offloaded
 def _make_chart(name: str, data: list, avatar: bytes) -> bytes:
@@ -134,7 +154,9 @@ def _make_chart(name: str, data: list, avatar: bytes) -> bytes:
     durations = [naturaldelta(timedelta(seconds=s)) for s in seconds]
     colors = ["#43b581", "#faa61a", "#f04747", "#747f8d"]
     fig, ax = plt.subplots(figsize=(6, 8))
-    wedges, _ = ax.pie(seconds, colors=colors, startangle=90, wedgeprops=dict(width=0.3))
+    wedges, _ = ax.pie(
+        seconds, colors=colors, startangle=90, wedgeprops=dict(width=0.3)
+    )
     ax.axis("equal")
     ax.set_aspect("equal")
     img = Image.open(BytesIO(avatar)).convert("RGBA")
@@ -151,7 +173,13 @@ def _make_chart(name: str, data: list, avatar: bytes) -> bytes:
     half_height = aspect_ratio * half_width
     extent = [-half_width, half_width, -half_height, half_height]
     plt.imshow(img, extent=extent, zorder=-1)
-    legend = ax.legend(wedges, durations, title=f"{name}'s activity overall", loc="upper center", bbox_to_anchor=(0.5, 0.08))
+    legend = ax.legend(
+        wedges,
+        durations,
+        title=f"{name}'s activity overall",
+        loc="upper center",
+        bbox_to_anchor=(0.5, 0.08),
+    )
     frame = legend.get_frame()
     frame.set_facecolor("#2C2F33")
     frame.set_edgecolor("#23272A")
@@ -163,8 +191,12 @@ def _make_chart(name: str, data: list, avatar: bytes) -> bytes:
     buffer.seek(0)
     return buffer.getvalue()
 
-async def make_chart(member: Union[discord.Member, discord.User], data: Any, avatar: bytes) -> bytes:
+
+async def make_chart(
+    member: Union[discord.Member, discord.User], data: Any, avatar: bytes
+) -> bytes:
     return await _make_chart(member.name, data, avatar)
+
 
 async def _collage_read(image: str):
     async with aiohttp.ClientSession() as session:
@@ -179,11 +211,13 @@ async def _collage_read(image: str):
         logger.info(f"_collage_read raised {e}")
         return None
 
+
 async def collage(images: list):
     tasks = [_collage_read(image) for image in images]
     results = await asyncio.gather(*tasks)
     valid_images = [img for img in results if img]
     return await __collage(valid_images)
+
 
 @offloaded
 def __collage(images: list):

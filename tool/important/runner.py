@@ -21,7 +21,7 @@ class RebootRunner:
         default_logger: bool = True,
         preload: bool = False,
         auto_commit: bool = False,
-        colors: bool = True
+        colors: bool = True,
     ) -> None:
         self.client: commands.Bot = client
         self.path: Path = Path(path).resolve()  # Ensure absolute path
@@ -55,14 +55,14 @@ class RebootRunner:
 
     def get_dotted_path(self, file_path: Path) -> str:
         """Generates the dotted module path for a cog.
-        
+
         If file is in a subdirectory, returns the path to the parent directory module
         Otherwise returns the path to the file directly.
         """
         try:
             relative_path = file_path.relative_to(self.path.parent)
             parts = relative_path.parts
-            
+
             if len(parts) > 2:
                 return f"{parts[0]}.{parts[1]}"
             else:
@@ -94,7 +94,11 @@ class RebootRunner:
         async for changes in awatch(self.path):
             for change_type, file_path in changes:
                 file_path = Path(file_path)
-                if ".git" in str(file_path) or file_path.suffix != ".py" or "custom" in file_path.parts:
+                if (
+                    ".git" in str(file_path)
+                    or file_path.suffix != ".py"
+                    or "custom" in file_path.parts
+                ):
                     continue
 
                 self._pending_changes[str(file_path)] = change_type
@@ -105,7 +109,9 @@ class RebootRunner:
                     except Exception as e:
                         self.logger.warning(f"Error canceling debounce timer: {e}")
 
-                self._debounce_timer = self.loop.create_task(self._process_pending_changes())
+                self._debounce_timer = self.loop.create_task(
+                    self._process_pending_changes()
+                )
 
     async def _process_pending_changes(self) -> None:
         """Process batched changes after debounce delay."""
@@ -125,18 +131,22 @@ class RebootRunner:
 
                 try:
                     cog_path = self.get_dotted_path(file_path)
-                    self.logger.debug(f"Determined cog path '{cog_path}' from file '{file_path}'")
-                    
+                    self.logger.debug(
+                        f"Determined cog path '{cog_path}' from file '{file_path}'"
+                    )
+
                     if change_type == Change.deleted:
                         await self._unload_cog(cog_path)
                     elif change_type == Change.added:
                         await self._load_cog(cog_path)
                     elif change_type == Change.modified:
                         await self._reload_cog(cog_path)
-                    
+
                     processed_paths.add(str(file_path))
                 except Exception as e:
-                    self.logger.error(f"Error processing change {change_type} for {file_path}: {e}")
+                    self.logger.error(
+                        f"Error processing change {change_type} for {file_path}: {e}"
+                    )
 
             self._pending_changes.clear()
 
@@ -175,12 +185,14 @@ class RebootRunner:
             self.logger.debug(f"Found {len(files)} potential cog files")
             batch_size = 10
             for i in range(0, len(files), batch_size):
-                batch = files[i:i + batch_size]
-                await asyncio.gather(*[
-                    self._load_cog(self.get_dotted_path(file))
-                    for file in batch
-                    if not file.name.startswith("_") and "custom" not in file.parts
-                ])
+                batch = files[i : i + batch_size]
+                await asyncio.gather(
+                    *[
+                        self._load_cog(self.get_dotted_path(file))
+                        for file in batch
+                        if not file.name.startswith("_") and "custom" not in file.parts
+                    ]
+                )
         except Exception as e:
             self.logger.error(f"Error during cog preloading: {str(e)}")
 
@@ -223,25 +235,25 @@ class RebootRunner:
         """Automatically commits changes using git."""
         try:
             self.logger.info("Performing git commit")
-            
+
             commands = [
-                ('git', 'add', '.'),
-                ('git', 'commit', '-m', 'Auto commit'),
-                ('git', 'push', '--force')
+                ("git", "add", "."),
+                ("git", "commit", "-m", "Auto commit"),
+                ("git", "push", "--force"),
             ]
-            
+
             for cmd in commands:
                 process = await asyncio.create_subprocess_exec(
-                    *cmd,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
+                    *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
                 )
                 stdout, stderr = await process.communicate()
-                
+
                 if process.returncode != 0 and stderr:
-                    self.logger.warning(f"Git command {cmd[0]} failed: {stderr.decode()}")
+                    self.logger.warning(
+                        f"Git command {cmd[0]} failed: {stderr.decode()}"
+                    )
                     return
-                
+
             self.logger.info("Successfully committed and pushed changes")
         except Exception as e:
             self.logger.error(f"Git commit failed: {e}")
@@ -256,7 +268,7 @@ def watch(
     """Decorator for initializing and starting a RebootRunner."""
 
     def decorator(
-        func: Callable[[commands.Bot], Coroutine[Any, Any, Any]]
+        func: Callable[[commands.Bot], Coroutine[Any, Any, Any]],
     ) -> Callable[[commands.Bot], Coroutine[Any, Any, Any]]:
         @wraps(func)
         async def wrapper(client: commands.Bot) -> Any:

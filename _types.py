@@ -29,7 +29,11 @@ async def suppress_error(fn: Callable, error: Type[Exception], *args, **kwargs):
 
 
 @contextmanager
-def catch(exception_type=Exception, raise_error: Optional[bool] = False, log_error: Optional[bool] = True):
+def catch(
+    exception_type=Exception,
+    raise_error: Optional[bool] = False,
+    log_error: Optional[bool] = True,
+):
     try:
         yield
     except exception_type as error:
@@ -42,13 +46,11 @@ def catch(exception_type=Exception, raise_error: Optional[bool] = False, log_err
             raise error
 
 
-
 def get_error(exception: Exception) -> str:
     exc = "".join(
         traceback.format_exception(type(exception), exception, exception.__traceback__)
     )
     return exc
-
 
 
 Numeric = Union[float, int, str]

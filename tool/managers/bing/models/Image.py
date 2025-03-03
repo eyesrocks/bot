@@ -1,15 +1,18 @@
 """
-  Author: cop-discord
-  Email: cop@catgir.ls
-  Discord: aiohttp
+Author: cop-discord
+Email: cop@catgir.ls
+Discord: aiohttp
 """
+
 from discord import Embed, Color
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 
+
 class Resolution(BaseModel):
     height: Optional[Any] = None
     width: Optional[Any] = None
+
 
 class ImageResult(BaseModel):
     url: str

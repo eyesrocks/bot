@@ -11,6 +11,8 @@ from discord import Embed
 from typing import Union
 from discord.ui import Button
 from .emotes import EMOJIS
+
+
 class PlayModal(discord.ui.Modal, title="Play"):
     def __init__(self, bot):
         super().__init__()
@@ -672,7 +674,7 @@ class VmSelectMenu(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         value = self.values[0]
-        await (getattr(self, value))(interaction)
+        await getattr(self, value)(interaction)
         self.values.clear()
         return await interaction.message.edit(view=self.view)
 
@@ -793,7 +795,7 @@ class PrivacyConfirmation(View):
     def __init__(self, bot: AutoShardedBot, invoker: Member = None) -> None:
         super().__init__(timeout=60)
         self.bot = bot
-        self.value = False 
+        self.value = False
         self.invoker = invoker
         self.default_color = 0x2D2B31
 
@@ -966,13 +968,16 @@ class EmojiConfirmation(View):
 
         self.stop()
 
+
 class VmButtons(View):
     def __init__(self, bot):
         super().__init__(timeout=None)
         self.bot = bot
         self.value = None
 
-    async def handle_interaction_error(self, interaction: discord.Interaction, embed: discord.Embed):
+    async def handle_interaction_error(
+        self, interaction: discord.Interaction, embed: discord.Embed
+    ):
         """Helper method to safely respond to interactions"""
         try:
             await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -1025,11 +1030,18 @@ import re
 from typing import Optional
 
 STYLE_MAPPING = {
-    "primary": {"aliases": ["prim", "p", "blue", "purple", "blurple"], "value": discord.ButtonStyle.primary},
-    "secondary": {"aliases": ["second", "sec", "s", "grey", "gray", "g"], "value": discord.ButtonStyle.secondary},
+    "primary": {
+        "aliases": ["prim", "p", "blue", "purple", "blurple"],
+        "value": discord.ButtonStyle.primary,
+    },
+    "secondary": {
+        "aliases": ["second", "sec", "s", "grey", "gray", "g"],
+        "value": discord.ButtonStyle.secondary,
+    },
     "success": {"aliases": ["good", "green"], "value": discord.ButtonStyle.success},
-    "danger": {"aliases": ["bad", "red"], "value": discord.ButtonStyle.danger}
+    "danger": {"aliases": ["bad", "red"], "value": discord.ButtonStyle.danger},
 }
+
 
 def to_style(value: str) -> Optional[discord.ButtonStyle]:
     if match := STYLE_MAPPING.get(value.lower()):
@@ -1040,9 +1052,27 @@ def to_style(value: str) -> Optional[discord.ButtonStyle]:
     return None
 
 
-class ButtonRole(discord.ui.DynamicItem[discord.ui.Button], template=r"button:role:(?P<guild_id>[0-9]+):(?P<role_id>[0-9]+):(?P<message_id>[0-9]+)"):
-    def __init__(self, guild_id: int, role_id: int, message_id: int, emoji: Optional[str] = None, label: Optional[str] = None, style: Optional[discord.ButtonStyle] = discord.ButtonStyle.primary):
-        super().__init__(discord.ui.Button(label=label, style=style, emoji=emoji, custom_id=f"button:role:{guild_id}:{role_id}:{message_id}"))
+class ButtonRole(
+    discord.ui.DynamicItem[discord.ui.Button],
+    template=r"button:role:(?P<guild_id>[0-9]+):(?P<role_id>[0-9]+):(?P<message_id>[0-9]+)",
+):
+    def __init__(
+        self,
+        guild_id: int,
+        role_id: int,
+        message_id: int,
+        emoji: Optional[str] = None,
+        label: Optional[str] = None,
+        style: Optional[discord.ButtonStyle] = discord.ButtonStyle.primary,
+    ):
+        super().__init__(
+            discord.ui.Button(
+                label=label,
+                style=style,
+                emoji=emoji,
+                custom_id=f"button:role:{guild_id}:{role_id}:{message_id}",
+            )
+        )
         self.guild_id = guild_id
         self.role_id = role_id
         self.message_id = message_id
@@ -1052,19 +1082,23 @@ class ButtonRole(discord.ui.DynamicItem[discord.ui.Button], template=r"button:ro
 
     @classmethod
     async def from_custom_id(cls, interaction: discord.Interaction, item: discord.ui.Button, match: re.Match[str]):  # type: ignore
-        kwargs = {"guild_id": int(match["guild_id"]), "role_id": int(match["role_id"]), "message_id": int(match["message_id"])}
+        kwargs = {
+            "guild_id": int(match["guild_id"]),
+            "role_id": int(match["role_id"]),
+            "message_id": int(match["message_id"]),
+        }
         return cls(**kwargs)
 
     async def assign_role(self, interaction: discord.Interaction, role: discord.Role):
         try:
-            await interaction.user.add_roles(role, reason = "Button Role")
+            await interaction.user.add_roles(role, reason="Button Role")
         except Exception:
             return await interaction.fail(f"i couldn't assign {role.mention} to you")
         return await interaction.success(f"successfully gave you {role.mention}")
 
     async def remove_role(self, interaction: discord.Interaction, role: discord.Role):
         try:
-            await interaction.user.remove_roles(role, reason = "Button Role")
+            await interaction.user.remove_roles(role, reason="Button Role")
         except Exception:
             return await interaction.fail(f"i couldn't assign {role.mention} to you")
         return await interaction.success(f"successfully gave you {role.mention}")
@@ -1083,6 +1117,7 @@ class ButtonRole(discord.ui.DynamicItem[discord.ui.Button], template=r"button:ro
         else:
             return await self.remove_role(interaction, role)
 
+
 class ButtonRoleView(discord.ui.View):
     def __init__(self, bot: discord.Client, guild_id: int, message_id: int):
         self.bot = bot
@@ -1090,11 +1125,22 @@ class ButtonRoleView(discord.ui.View):
         self.message_id = message_id
 
     async def prepare(self):
-        data = await self.bot.db.fetch("""SELECT * FROM button_roles WHERE guild_id = $1 AND message_id = $2 ORDER BY index DESC""", self.guild_id, self.message_id)
+        data = await self.bot.db.fetch(
+            """SELECT * FROM button_roles WHERE guild_id = $1 AND message_id = $2 ORDER BY index DESC""",
+            self.guild_id,
+            self.message_id,
+        )
         for entry in data:
-            kwargs = {"guild_id": self.guild_id, "role_id": entry.role_id, "message_id": entry.message_id, "emoji": entry.emoji, "label": entry.label, "style": to_style(entry.style)}
+            kwargs = {
+                "guild_id": self.guild_id,
+                "role_id": entry.role_id,
+                "message_id": entry.message_id,
+                "emoji": entry.emoji,
+                "label": entry.label,
+                "style": to_style(entry.style),
+            }
             self.add_item(ButtonRole(**kwargs))
-        self.bot.add_view(self, message_id = self.message_id)
+        self.bot.add_view(self, message_id=self.message_id)
 
 
 async def get_index(self, message: discord.Message) -> dict:

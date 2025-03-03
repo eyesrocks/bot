@@ -1,7 +1,7 @@
 """
-  Author: cop-discord
-  Email: cop@catgir.ls
-  Discord: aiohttp
+Author: cop-discord
+Email: cop@catgir.ls
+Discord: aiohttp
 """
 
 from typing import List, Optional, Any

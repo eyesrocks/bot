@@ -8,6 +8,7 @@ from datetime import datetime
 from tool.worker import offloaded
 from tool.greed import Greed
 
+
 def format_large(num: Union[int, float]) -> str:
     if str(num).startswith("-"):
         symbol = "-"

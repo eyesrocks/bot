@@ -7,6 +7,7 @@ from tool import views
 from tool.views import reclaim
 from contextlib import suppress
 
+
 class VmButtons(View):
     def __init__(self, bot):
         super().__init__(timeout=None)
@@ -350,7 +351,22 @@ class VmButtons(View):
                 return await interaction.response.send_message(
                     embed=embed, ephemeral=True
                 )
-            await reclaim(interaction.user.voice.channel, owner, interaction.user)
+
+            # Handle the case when owner is None or not in the server anymore
+            if owner:
+                await reclaim(interaction.user.voice.channel, owner, interaction.user)
+            else:
+                # If owner is None, just set the permissions for the new owner
+                overwrites = interaction.user.voice.channel.overwrites
+                overwrites[interaction.user] = discord.PermissionOverwrite(
+                    connect=True,
+                    speak=True,
+                    stream=True,
+                    priority_speaker=True,
+                    manage_channels=True,
+                )
+                await interaction.user.voice.channel.edit(overwrites=overwrites)
+
             # Update the owner in the database
             await self.bot.db.execute(
                 """
@@ -590,7 +606,6 @@ class Voicemaster(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-
     @commands.group(
         name="voicemaster", aliases=["vm", "vc"], invoke_without_command=True
     )
@@ -646,14 +661,12 @@ class Voicemaster(commands.Cog):
 > **Increase** - Increase the user limit of your voice channel
 > **Decrease** - Decrease the user limit of your voice channel
 > **Delete** - Delete your voice channel
-> **Information** - View information on the current voice channel"""
+> **Information** - View information on the current voice channel""",
             )
             embed.set_author(name=guild_name, icon_url=guild_icon)
             embed.set_thumbnail(url=self.bot.user.avatar if ctx.guild.icon else None)
 
-            message = await text.send(
-                embed=embed, view=VmButtons(self.bot)
-            )
+            message = await text.send(embed=embed, view=VmButtons(self.bot))
             await self.bot.db.execute(
                 """INSERT INTO voicemaster
                 (guild_id, category_id, voicechannel_id, channel_id, message_id)
@@ -984,7 +997,20 @@ class Voicemaster(commands.Cog):
         owner = ctx.guild.get_member(owner_id)
         if owner and owner in ctx.author.voice.channel.members:
             return await ctx.fail("The **owner** is still in the **voice channel**")
-        await reclaim(ctx.author.voice.channel, owner, ctx.author)
+
+        if owner:
+            await reclaim(ctx.author.voice.channel, owner, ctx.author)
+        else:
+            overwrites = ctx.author.voice.channel.overwrites
+            overwrites[ctx.author] = discord.PermissionOverwrite(
+                connect=True,
+                speak=True,
+                stream=True,
+                priority_speaker=True,
+                manage_channels=True,
+            )
+            await ctx.author.voice.channel.edit(overwrites=overwrites)
+
         # Update the owner in the database
         await self.bot.db.execute(
             """
@@ -1222,8 +1248,8 @@ class Voicemaster(commands.Cog):
                 f"**Permitted** {member.mention} to access your **voice channel**"
             )
 
-    @voicemaster.command(name = "drag", brief = "drag a user from a voice channel")
-    @commands.has_permissions(manage_channels = True)
+    @voicemaster.command(name="drag", brief="drag a user from a voice channel")
+    @commands.has_permissions(manage_channels=True)
     async def drag(self, ctx: commands.Context, *, member: discord.Member):
         if not member.voice:
             return await ctx.fail(f"{member.mention} is not in a **voice channel**")
@@ -1231,9 +1257,13 @@ class Voicemaster(commands.Cog):
             return await ctx.fail("You are **not** in a **voice channel**")
         try:
             await member.move_to(ctx.author.voice.channel)
-            return await ctx.success(f"{member.mention} has been **moved** into [{ctx.author.voice.channel.name}]({ctx.author.voice.channel.jump_url})")
+            return await ctx.success(
+                f"{member.mention} has been **moved** into [{ctx.author.voice.channel.name}]({ctx.author.voice.channel.jump_url})"
+            )
         except Exception:
-            return await ctx.fail(f"I **couldn't move** {member.mention} into your **voice channel**")
+            return await ctx.fail(
+                f"I **couldn't move** {member.mention} into your **voice channel**"
+            )
 
 
 async def setup(bot):
