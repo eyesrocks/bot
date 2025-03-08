@@ -32,10 +32,13 @@ class MusicEvents(Cog):
             return
 
         # If the track ended naturally (not skipped), scrobble it
-        if payload.reason == "FINISHED" and client.guild.id in self.lastfm_now_playing_users:
+        if (
+            payload.reason == "FINISHED"
+            and client.guild.id in self.lastfm_now_playing_users
+        ):
             guild_id = client.guild.id
             track = payload.track
-            
+
             # Get track data
             track_title = track.title
             if track.source.startswith("youtube"):
@@ -55,7 +58,7 @@ class MusicEvents(Cog):
                 "album": "",
                 "duration": track.length // 1000,
             }
-            
+
             # Scrobble for all users in the voice channel
             users_data = await self.get_users_with_session_keys(guild_id)
             if users_data:
@@ -70,7 +73,9 @@ class MusicEvents(Cog):
                             )
                             logging.info(f"Scrobbled track for user {user_id}")
                         except Exception as e:
-                            logging.error(f"Error scrobbling track for user {user_id}: {e}")
+                            logging.error(
+                                f"Error scrobbling track for user {user_id}: {e}"
+                            )
 
         # Clear now playing users for this guild
         if client.guild.id in self.lastfm_now_playing_users:
@@ -381,7 +386,9 @@ class MusicEvents(Cog):
                                         f"Disconnected from voice channel: {before.channel.name} (all users left)"
                                     )
                         except Exception as e:
-                            logging.error(f"Failed to disconnect from voice channel: {e}")
+                            logging.error(
+                                f"Failed to disconnect from voice channel: {e}"
+                            )
                 except Exception as e:
                     logging.error(f"Error handling voice state update: {e}")
 
@@ -420,9 +427,7 @@ class MusicEvents(Cog):
                 if voice_client.playing():
                     self.voice_client_last_activity[guild_id] = current_time
                 else:
-                    self.voice_client_last_activity[guild_id] = (
-                        current_time - 60
-                    ) 
+                    self.voice_client_last_activity[guild_id] = current_time - 60
                 continue
 
             if voice_client.playing():

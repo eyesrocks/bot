@@ -296,7 +296,11 @@ class CoffinPlayer(BasePlayer):
 
         embed.set_footer(
             text=" • ".join(footer),
-            icon_url=source_icon if source_icon else (member.display_avatar.url if member else None),
+            icon_url=(
+                source_icon
+                if source_icon
+                else (member.display_avatar.url if member else None)
+            ),
         )
         return embed
 

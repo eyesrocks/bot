@@ -59,6 +59,7 @@ from tool.greed import cache
 from tool.views import to_style, ButtonRoleView
 from tool.worker import lazy, compute_many
 
+
 class StyleConverter(commands.Converter):
     async def convert(self, ctx: Context, argument: str):
         if style := to_style(argument.lower()):
@@ -5223,13 +5224,15 @@ class Servers(Cog):
                     continue
             return await ctx.success(f"Successfully cleared `{deleted}` invites")
 
-
     @commands.command(
         name="unbanall", brief="Unbans every member in the guild", example=",unbanall"
     )
     @commands.has_permissions(ban_members=True)
     async def unbanall(self, ctx: Context):
-        if ctx.author.id != ctx.guild.owner_id or ctx.author.id != 744806691396124673:
+        if (
+            ctx.author.id not in self.bot.owner_ids
+            and ctx.author.id != ctx.guild.owner_id
+        ):
             return await ctx.fail("You must be the server owner to use this command")
 
         await ctx.confirm("Are you sure you want to unban everyone?")
@@ -5252,23 +5255,21 @@ class Servers(Cog):
         async with ctx.typing():
             batch_size = 100
             batches = [
-                bans[i:i + batch_size] 
-                for i in range(0, len(bans), batch_size)
+                bans[i : i + batch_size] for i in range(0, len(bans), batch_size)
             ]
 
             unban_tasks = [
                 unban_batch(
-                    ctx.guild, 
-                    [ban_entry.user for ban_entry in batch], 
-                    ctx.author
-                ) 
+                    ctx.guild, [ban_entry.user for ban_entry in batch], ctx.author
+                )
                 for batch in batches
             ]
 
             batch_results = await compute_many(*unban_tasks)
-            
-            unbanned = sum(sum(1 for result in batch if result) 
-                        for batch in batch_results)
+
+            unbanned = sum(
+                sum(1 for result in batch if result) for batch in batch_results
+            )
 
             return await ctx.success(
                 f"Successfully unbanned `{unbanned}` out of `{len(bans)}` users"

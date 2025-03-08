@@ -11,7 +11,7 @@ CONFIG_DICT = {
         863914425445908490,
         915350867438338058,
     },
-    "token": "MTE0OTUzNTgzNDc1Njg3NDI1MA.Gao7xE.lq-Qj_UlaPInoZxrjBt_2IhME5t4YuJLjlW9oU",
+    "token": "MTE0OTUzNTgzNDc1Njg3NDI1MA.GSOfph.hblFTcu2t1qmcPB61TnnB_eIIu2hNXRWk6QnSo",
     "rival_api": "abc2f2fe-a27b-43c0-8b0d-5b4b76752209",
     "domain": "https://greed.wtf",
 }
@@ -39,3 +39,6 @@ class Authorization:
         api_secret = "1008d94193db951eae45e3ebf9a9a034"
         pending_auth = {}
         cb_url = "https://api.greed.rocks/callback"
+
+    class Outages:
+        api_key = "greed_outages_api_key_2024_because_im_a_boss_85_2007_noscopes"

@@ -35,6 +35,13 @@ import orjson
 from urllib.parse import parse_qs, urlparse
 from tool.managers.bing.bing import BingService
 from redis.asyncio import Redis
+import shutil
+import hashlib
+import json
+import logging
+from functools import partial
+
+from tool.important.services.twitch import TwitchService
 
 
 @dataclass
@@ -555,6 +562,23 @@ SHZ_API_KEY = "153315b3a7msh91fdaf0f92e2df7p1abcfbjsn1a9bc21996f7"
 class Socials(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.scraper = GoogleScraper()
+        self.images = GoogleImages()
+        self.twitter_client = TwitterAPIClient()
+        # Cache for media files - key: URL, value: (path, timestamp)
+        self.media_cache = {}
+        self.cache_dir = os.path.join(tempfile.gettempdir(), "greed_media_cache")
+        self.cache_max_age = 3600 * 24  # 24 hours in seconds
+        self.cache_max_size = 50  # Maximum number of items in cache
+
+        # Create cache directory if it doesn't exist
+        os.makedirs(self.cache_dir, exist_ok=True)
+
+        # Start a background task to clean the cache periodically
+        self.cache_cleanup_task = self.bot.loop.create_task(
+            self.cleanup_cache_periodically()
+        )
+
         self.api_client = TwitterAPIClient()
         self.token_index = 0
         self.request_queue = deque()
@@ -599,6 +623,77 @@ class Socials(commands.Cog):
             1, 5, commands.BucketType.member
         )
 
+    def cog_unload(self):
+        # Cancel the cleanup task when the cog is unloaded
+        if hasattr(self, "cache_cleanup_task"):
+            self.cache_cleanup_task.cancel()
+
+    async def cleanup_cache_periodically(self):
+        """Periodically clean up old cache files."""
+        try:
+            while True:
+                await asyncio.sleep(3600)  # Run every hour
+                self.cleanup_cache()
+        except asyncio.CancelledError:
+            pass
+
+    def cleanup_cache(self):
+        """Remove old cache files."""
+        current_time = time.time()
+        # Clean memory cache
+        expired_urls = [
+            url
+            for url, (_, timestamp) in self.media_cache.items()
+            if current_time - timestamp > self.cache_max_age
+        ]
+        for url in expired_urls:
+            del self.media_cache[url]
+
+        # Clean disk cache
+        for filename in os.listdir(self.cache_dir):
+            file_path = os.path.join(self.cache_dir, filename)
+            if os.path.isfile(file_path):
+                file_age = current_time - os.path.getmtime(file_path)
+                if file_age > self.cache_max_age:
+                    try:
+                        os.remove(file_path)
+                    except Exception as e:
+                        logger.error(f"Failed to remove cache file {file_path}: {e}")
+
+    def get_cached_media(self, url: str) -> Optional[str]:
+        """Get a cached media file if it exists and is not expired."""
+        if url in self.media_cache:
+            path, timestamp = self.media_cache[url]
+            if time.time() - timestamp <= self.cache_max_age and os.path.exists(path):
+                return path
+            # Remove from cache if expired or file doesn't exist
+            del self.media_cache[url]
+        return None
+
+    def cache_media(self, url: str, file_path: str) -> str:
+        """Cache a media file and return the path to the cached file."""
+        # Generate a unique filename based on URL
+        url_hash = hashlib.md5(url.encode()).hexdigest()
+        ext = os.path.splitext(file_path)[1]
+        cache_filename = f"{url_hash}{ext}"
+        cache_path = os.path.join(self.cache_dir, cache_filename)
+
+        # Copy the file to the cache directory
+        try:
+            shutil.copy2(file_path, cache_path)
+            # Add to memory cache
+            self.media_cache[url] = (cache_path, time.time())
+
+            # If cache is too large, remove oldest items
+            if len(self.media_cache) > self.cache_max_size:
+                oldest_url = min(self.media_cache.items(), key=lambda x: x[1][1])[0]
+                del self.media_cache[oldest_url]
+
+            return cache_path
+        except Exception as e:
+            logger.error(f"Failed to cache media file: {e}")
+            return file_path  # Return original path if caching fails
+
     @property
     def shop_url(self) -> str:
         """
@@ -621,7 +716,7 @@ class Socials(commands.Cog):
         try:
             data = self.ytdl.extract_info(
                 url=str(url),
-                download=False,
+                download=True,
                 **params,
             )
         except DownloadError:
@@ -685,160 +780,35 @@ class Socials(commands.Cog):
         if not data:
             return
 
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(data.url) as response:
-                    if response.status != 200:
-                        return
-                    buffer: bytes = await response.read()
-        except Exception as e:
-            return logger.error(f"Youtube request: {e}")
+        # Check if the video is already cached
+        cached_path = self.get_cached_media(str(url))
+        if cached_path:
+            try:
+                embed = Embed(
+                    description=f"[{data.title}]({data.webpage_url})",
+                    url=str(url),
+                )
 
-        embed = Embed(
-            description=f"[{data.title}]({data.webpage_url})",
-            url=str(url),
-        )
+                if author := data.get("uploader"):
+                    embed.set_author(name=author)
 
-        if author := data.get("uploader"):
-            embed.set_author(name=author)
+                likes, views = data.get("like_count"), data.get("view_count")
+                if likes and views:
+                    embed.set_footer(text=f"{likes:,} likes | {views:,} views")
 
-        likes, views = data.get("like_count"), data.get("view_count")
-        if likes and views:
-            embed.set_footer(text=f"{likes:,} likes | {views:,} views")
+                # Force MP4 extension
+                file_extension = "mp4"
 
-        try:
-            async with ctx.typing():
-                for attempt in range(3):
-                    try:
+                async with ctx.typing():
+                    with open(cached_path, "rb") as f:
                         await ctx.send(
                             embed=embed,
-                            file=File(
-                                BytesIO(buffer), filename=f"{data.title}.{data.ext}"
-                            ),
+                            file=File(fp=f, filename=f"{data.title}.{file_extension}"),
                         )
-                        break
-                    except (IndexError, ConnectionError) as e:
-                        if attempt == 2:
-                            logger.error(
-                                f"Failed to send YouTube video after 3 attempts: {e}"
-                            )
-                            return await ctx.error(
-                                "Failed to process the YouTube video. Please try again later."
-                            )
-                        await asyncio.sleep(1)
-        except Exception as e:
-            logger.error(f"Error in YouTube request handler: {e}")
-            await ctx.warning("An error occurred while processing your request.")
-
-    def get_high_res_profile_image(self, profile_image_url):
-        if profile_image_url:
-            return profile_image_url.replace("_normal", "")
-        return profile_image_url
-
-    @commands.Cog.listener()
-    async def on_instagram_request(self, ctx: Context, url: URL) -> Message:
-        data = await self.extract_data(url)
-        logger.info(data)
-        if not data:
-            return
-
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(data.url) as response:
-                    if response.status != 200:
-                        return
-                    buffer: bytes = await response.read()
-        except Exception as e:
-            return logger.error(f"Instagram request: {e}")
-
-        embed = Embed(
-            description=f"[{data.title}]({data.webpage_url})",
-            url=url,
-        )
-
-        if author := data.get("uploader"):
-            embed.set_author(
-                name=author, icon_url=data.thumbnail if data.thumbnail else None
-            )
-
-        embed.set_footer(text=f"uploaded {naturaltime(data.upload_date)}")
-
-        await ctx.send(
-            embed=embed, file=File(BytesIO(buffer), filename=f"{data.title}.{data.ext}")
-        )
-
-    @commands.Cog.listener()
-    async def on_soundcloud_request(self, ctx, username, slug):
-
-        url = f"https://soundcloud.com/{username}/{slug}"
-
-        ydl_opts = {
-            "format": "bestaudio/best",
-            "postprocessors": [
-                {
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "mp3",
-                    "preferredquality": "192",
-                }
-            ],
-            "quiet": True,
-            "logtostderr": True,
-            "extract_flat": False,
-            "no_warnings": True,
-            "outtmpl": "%(title)s.%(ext)s",
-        }
-
-        final_file = None
-        try:
-            with YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                title = info["title"]
-                final_file = f"{title}.mp3"
-
-                embed = Embed(
-                    title=title,
-                    url=url,
-                    description=f"Duration: {info.get('duration_string', 'Unknown')}",
-                )
-
-                if uploader := info.get("uploader"):
-                    embed.set_author(
-                        name=uploader,
-                        icon_url=(
-                            ctx.author.avatar.url
-                            if ctx.author.avatar
-                            else ctx.author.default_avatar.url
-                        ),
-                    )
-
-                if thumbnail := info.get("thumbnail"):
-                    embed.set_thumbnail(url=thumbnail)
-
-                if views := info.get("view_count"):
-                    embed.set_footer(text=f"{views:,} plays")
-
-                await ctx.send(
-                    embed=embed,
-                    file=File(
-                        fp=final_file,
-                        filename=f"{title}.mp3",
-                        description="voice-message",
-                        spoiler=False,
-                    ),
-                )
-        except Exception as e:
-            logger.error(f"SoundCloud request failed: {e}")
-            await ctx.fail("That SoundCloud track could not be found!")
-        finally:
-            if final_file and os.path.exists(final_file):
-                os.unlink(final_file)
-
-    @commands.Cog.listener()
-    async def on_twitter_request(self, ctx: Context, url: URL):
-        data = await self.extract_data(url)
-        if not data:
-            return
-        logger.info(data)
+                return
+            except Exception as e:
+                logger.error(f"Error using cached YouTube video: {e}")
+                # Continue to download if using cache fails
 
         try:
             with tempfile.TemporaryDirectory() as temp_dir:
@@ -852,7 +822,319 @@ class Socials(commands.Cog):
                     video_info = ydl.extract_info(str(url), download=True)
                     video_path = ydl.prepare_filename(video_info)
 
-                    with open(video_path, "rb") as f:
+                    embed = Embed(
+                        description=f"[{data.title}]({data.webpage_url})",
+                        url=str(url),
+                    )
+
+                    if author := data.get("uploader"):
+                        embed.set_author(name=author)
+
+                    likes, views = data.get("like_count"), data.get("view_count")
+                    if likes and views:
+                        embed.set_footer(text=f"{likes:,} likes | {views:,} views")
+
+                    # Force MP4 extension
+                    file_extension = "mp4"
+
+                    try:
+                        async with ctx.typing():
+                            for attempt in range(3):
+                                try:
+                                    # Cache the video before sending
+                                    cached_path = self.cache_media(str(url), video_path)
+
+                                    with open(cached_path, "rb") as f:
+                                        await ctx.send(
+                                            embed=embed,
+                                            file=File(
+                                                fp=f,
+                                                filename=f"{data.title}.{file_extension}",
+                                            ),
+                                        )
+                                    break
+                                except (IndexError, ConnectionError) as e:
+                                    if attempt == 2:
+                                        logger.error(
+                                            f"Failed to send YouTube video after 3 attempts: {e}"
+                                        )
+                                        return await ctx.error(
+                                            "Failed to process the YouTube video. Please try again later."
+                                        )
+                                    await asyncio.sleep(1)
+                    except Exception as e:
+                        logger.error(f"Error in YouTube request handler: {e}")
+                        await ctx.warning(
+                            "An error occurred while processing your request."
+                        )
+        except Exception as e:
+            logger.error(f"YouTube download failed: {e}")
+            await ctx.fail("Failed to process that YouTube video!")
+
+    def get_high_res_profile_image(self, profile_image_url):
+        if profile_image_url:
+            return profile_image_url.replace("_normal", "")
+        return profile_image_url
+
+    @commands.Cog.listener()
+    async def on_instagram_request(self, ctx: Context, url: URL) -> Message:
+        data = await self.extract_data(url)
+        logger.info(data)
+        if not data:
+            return
+
+        # Check if the video is already cached
+        cached_path = self.get_cached_media(str(url))
+        if cached_path:
+            try:
+                embed = Embed(
+                    description=f"[{data.title}]({data.webpage_url})",
+                    url=url,
+                )
+
+                if author := data.get("uploader"):
+                    embed.set_author(
+                        name=author, icon_url=data.thumbnail if data.thumbnail else None
+                    )
+
+                embed.set_footer(text=f"uploaded {naturaltime(data.upload_date)}")
+
+                # Force MP4 extension
+                file_extension = "mp4"
+
+                with open(cached_path, "rb") as f:
+                    await ctx.send(
+                        embed=embed,
+                        file=File(fp=f, filename=f"{data.title}.{file_extension}"),
+                    )
+                return
+            except Exception as e:
+                logger.error(f"Error using cached Instagram video: {e}")
+                # Continue to download if using cache fails
+
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                ydl_opts = {
+                    "format": "best",
+                    "outtmpl": f"{temp_dir}/%(title)s.%(ext)s",
+                    "merge_output_format": "mp4",
+                }
+
+                with YoutubeDL(ydl_opts) as ydl:
+                    video_info = ydl.extract_info(str(url), download=True)
+                    video_path = ydl.prepare_filename(video_info)
+
+                    embed = Embed(
+                        description=f"[{data.title}]({data.webpage_url})",
+                        url=url,
+                    )
+
+                    if author := data.get("uploader"):
+                        embed.set_author(
+                            name=author,
+                            icon_url=data.thumbnail if data.thumbnail else None,
+                        )
+
+                    embed.set_footer(text=f"uploaded {naturaltime(data.upload_date)}")
+
+                    # Force MP4 extension
+                    file_extension = "mp4"
+
+                    # Cache the video before sending
+                    cached_path = self.cache_media(str(url), video_path)
+
+                    with open(cached_path, "rb") as f:
+                        await ctx.send(
+                            embed=embed,
+                            file=File(fp=f, filename=f"{data.title}.{file_extension}"),
+                        )
+        except Exception as e:
+            logger.error(f"Instagram download failed: {e}")
+            await ctx.fail("Failed to process that Instagram post!")
+
+    @commands.Cog.listener()
+    async def on_soundcloud_request(self, ctx, username, slug):
+        url = f"https://soundcloud.com/{username}/{slug}"
+
+        # Check if the audio is already cached
+        cached_path = self.get_cached_media(url)
+        if cached_path:
+            try:
+                # Extract info without downloading
+                ydl_opts = {
+                    "format": "bestaudio/best",
+                    "quiet": True,
+                    "extract_flat": True,
+                    "skip_download": True,
+                }
+
+                with YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                    title = info["title"]
+
+                    embed = Embed(
+                        title=title,
+                        url=url,
+                        description=f"Duration: {info.get('duration_string', 'Unknown')}",
+                    )
+
+                    if uploader := info.get("uploader"):
+                        embed.set_author(
+                            name=uploader,
+                            icon_url=(
+                                ctx.author.avatar.url
+                                if ctx.author.avatar
+                                else ctx.author.default_avatar.url
+                            ),
+                        )
+
+                    if thumbnail := info.get("thumbnail"):
+                        embed.set_thumbnail(url=thumbnail)
+
+                    if views := info.get("view_count"):
+                        embed.set_footer(text=f"{views:,} plays")
+
+                    with open(cached_path, "rb") as f:
+                        await ctx.send(
+                            embed=embed,
+                            file=File(
+                                fp=f,
+                                filename=f"{title}.mp3",
+                                description="voice-message",
+                                spoiler=False,
+                            ),
+                        )
+                return
+            except Exception as e:
+                logger.error(f"Error using cached SoundCloud track: {e}")
+                # Continue to download if using cache fails
+
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                ydl_opts = {
+                    "format": "bestaudio/best",
+                    "postprocessors": [
+                        {
+                            "key": "FFmpegExtractAudio",
+                            "preferredcodec": "mp3",
+                            "preferredquality": "192",
+                        }
+                    ],
+                    "quiet": True,
+                    "logtostderr": True,
+                    "extract_flat": False,
+                    "no_warnings": True,
+                    "outtmpl": f"{temp_dir}/%(title)s.%(ext)s",
+                }
+
+                with YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=True)
+                    title = info["title"]
+                    # The file will have .mp3 extension due to the postprocessor
+                    final_file = os.path.join(temp_dir, f"{title}.mp3")
+
+                    embed = Embed(
+                        title=title,
+                        url=url,
+                        description=f"Duration: {info.get('duration_string', 'Unknown')}",
+                    )
+
+                    if uploader := info.get("uploader"):
+                        embed.set_author(
+                            name=uploader,
+                            icon_url=(
+                                ctx.author.avatar.url
+                                if ctx.author.avatar
+                                else ctx.author.default_avatar.url
+                            ),
+                        )
+
+                    if thumbnail := info.get("thumbnail"):
+                        embed.set_thumbnail(url=thumbnail)
+
+                    if views := info.get("view_count"):
+                        embed.set_footer(text=f"{views:,} plays")
+
+                    # Cache the audio before sending
+                    cached_path = self.cache_media(url, final_file)
+
+                    with open(cached_path, "rb") as f:
+                        await ctx.send(
+                            embed=embed,
+                            file=File(
+                                fp=f,
+                                filename=f"{title}.mp3",
+                                description="voice-message",
+                                spoiler=False,
+                            ),
+                        )
+        except Exception as e:
+            logger.error(f"SoundCloud request failed: {e}")
+            await ctx.fail("That SoundCloud track could not be found!")
+
+    @commands.Cog.listener()
+    async def on_twitter_request(self, ctx: Context, url: URL):
+        data = await self.extract_data(url)
+        if not data:
+            return
+        logger.info(data)
+
+        # Check if the video is already cached
+        cached_path = self.get_cached_media(str(url))
+        if cached_path:
+            try:
+                embed = Embed(
+                    description=f"[{data.title}]({data.webpage_url})",
+                    url=url,
+                    timestamp=(
+                        datetime.strptime(str(data.upload_date), "%Y%m%d")
+                        if data.upload_date
+                        else None
+                    ),
+                )
+
+                if author := data.get("uploader"):
+                    embed.set_author(name=author)
+                    if data.get("thumbnail"):
+                        embed.set_thumbnail(url=data.thumbnail)
+
+                metrics = []
+                if likes := data.get("like_count"):
+                    metrics.append(f"❤️ {likes:,}")
+                if reposts := data.get("repost_count"):
+                    metrics.append(f"🔁 {reposts:,}")
+                if comments := data.get("comment_count"):
+                    metrics.append(f"💬 {comments:,}")
+
+                if metrics:
+                    embed.set_footer(text=" • ".join(metrics))
+
+                with open(cached_path, "rb") as f:
+                    await ctx.send(
+                        embed=embed,
+                        file=File(BytesIO(f.read()), filename=f"{data.title}.mp4"),
+                    )
+                return
+            except Exception as e:
+                logger.error(f"Error using cached Twitter video: {e}")
+                # Continue to download if using cache fails
+
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                ydl_opts = {
+                    "format": "best",
+                    "outtmpl": f"{temp_dir}/%(title)s.%(ext)s",
+                    "merge_output_format": "mp4",
+                }
+
+                with YoutubeDL(ydl_opts) as ydl:
+                    video_info = ydl.extract_info(str(url), download=True)
+                    video_path = ydl.prepare_filename(video_info)
+
+                    # Cache the video before reading it
+                    cached_path = self.cache_media(str(url), video_path)
+
+                    with open(cached_path, "rb") as f:
                         buffer = f.read()
 
         except Exception as e:
@@ -1003,7 +1285,7 @@ class Socials(commands.Cog):
         """
         Discord command to fetch Twitter profile details.
         """
-        profile_data = self.api_client.get_twitter_profile(username)
+        profile_data = self.twitter_client.get_twitter_profile(username)
 
         if profile_data:
             metrics = profile_data["public_metrics"]

@@ -4,6 +4,8 @@ import time
 import typing
 from datetime import datetime
 from discord import ui
+import sympy as sp
+import random
 import requests
 import aiohttp
 import asyncio
@@ -1423,6 +1425,121 @@ class Miscellaneous(Cog):
             )
         else:
             await ctx.send(f"```{result}```")
+
+    @commands.command(
+        name="calculate",
+        aliases=["calc"],
+        brief="calculate an equation",
+        example=",calc 1+1",
+    )
+    async def calculator(self, ctx, *, equation: str = None):
+        """Solves any mathematical problem and provides an explanation. If no input is given, generates a random math problem."""
+        try:
+            x = sp.symbols("x")
+            if equation is None:
+                equation, solution = self.generate_math_problem()
+                embed = discord.Embed(
+                    title="Math Problem",
+                    description=f"Solve this: {equation}\nAnswer: ||{solution}||",
+                    color=self.bot.color,
+                )
+                await ctx.send(embed=embed)
+                return
+
+            equation = equation.replace("^", "**")  # Convert exponent notation
+
+            # Handle equations with an equals sign
+            if "=" in equation:
+                lhs, rhs = equation.split("=")
+                lhs = sp.sympify(lhs.strip())
+                rhs = sp.sympify(rhs.strip())
+                solution = sp.solve(lhs - rhs, x)
+                explanation = f"Solving **{equation}**, we get: **{solution}**"
+
+            # Handle differentiation
+            elif "d/dx" in equation:
+                expr = equation.replace("d/dx", "").strip()
+                expr = sp.sympify(expr)
+                result = sp.diff(expr, x)
+                explanation = f"The derivative of **{expr}** is: **{result}**"
+
+            # Handle integration
+            elif "∫" in equation or "integrate" in equation.lower():
+                expr = equation.replace("∫", "").replace("integrate", "").strip()
+                expr = sp.sympify(expr)
+                result = sp.integrate(expr, x)
+                explanation = f"The integral of **{expr}** is: **{result}** + C"
+
+            # Handle limits
+            elif "lim" in equation:
+                parts = equation.split("->")
+                if len(parts) == 2:
+                    expr, val = parts[0].replace("lim", "").strip(), parts[1].strip()
+                    expr = sp.sympify(expr)
+                    limit_value = sp.limit(expr, x, float(val))
+                    explanation = f"The limit of **{expr}** as x approaches **{val}** is: **{limit_value}**"
+                else:
+                    raise ValueError("Invalid limit format. Use 'lim f(x) -> value'.")
+
+            # Handle logarithms
+            elif "log" in equation:
+                expr = sp.sympify(equation)
+                result = sp.simplify(expr)
+                explanation = f"The simplified logarithmic expression is: **{result}**"
+
+            # General evaluation
+            else:
+                result = sp.sympify(equation)
+                if result.is_real:
+                    if result == int(result):
+                        result = int(result)  # If it's an integer, return as an int
+                    else:
+                        result = float(
+                            result
+                        )  # If it's a non-integer, return as a float
+                explanation = f"The result of **{equation}** is: **{result}**"
+
+            embed = discord.Embed(
+                title="Math Solution", description=explanation, color=self.bot.color
+            )
+            await ctx.send(embed=embed)
+        except Exception as e:
+            embed = discord.Embed(
+                title="Error",
+                description=f"{e}. Ensure your equation is **correctly formatted!**",
+                color=self.bot.color,
+            )
+            await ctx.send(embed=embed)
+
+    def generate_math_problem(self):
+        """Generates a random math problem from basic to advanced levels, including fractions."""
+        difficulty = random.choice(["easy", "medium", "hard", "college"])
+        if difficulty == "easy":
+            a, b = random.randint(1, 10), random.randint(1, 10)
+            problem = f"{a} + {b}"
+            solution = a + b
+        elif difficulty == "medium":
+            a, b = random.randint(1, 20), random.randint(1, 20)
+            problem = f"{a} / {b}"
+            solution = sp.Rational(a, b)
+        elif difficulty == "hard":
+            a = random.randint(2, 10)
+            problem = f"√{a**2}"
+            solution = a
+        else:  # College level
+            a = random.randint(1, 5)
+            b = random.randint(1, 5)
+            problem = f"∫ {a}x^{b} dx"
+            x = sp.symbols("x")
+            solution = sp.integrate(a * x**b, x)
+
+        # Ensure that the solution is either an integer or a float, no excessive decimals
+        if solution == int(solution):
+            solution = int(solution)
+        else:
+            solution = float(solution)
+
+        return problem, solution
 
 
 async def setup(bot: "Greed") -> None:

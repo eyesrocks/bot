@@ -140,7 +140,7 @@ class Handler:
         """Process the modlog queue for each guild with rate limiting"""
         try:
             guilds = list(self.guild_queues.keys())
-            for batch in [guilds[i:i+5] for i in range(0, len(guilds), 5)]:
+            for batch in [guilds[i : i + 5] for i in range(0, len(guilds), 5)]:
                 tasks = []
                 for guild_id in batch:
                     if not self.guild_queues[guild_id].empty():
@@ -150,46 +150,46 @@ class Handler:
                 await asyncio.sleep(1)
         except Exception as e:
             logger.error(f"Error in process_queue_task: {e}")
-    
+
     @process_queue_task.before_loop
     async def before_process_queue(self):
         """Wait for the bot to be ready before starting the queue processing task"""
         await self.bot.wait_until_ready()
-    
+
     async def process_guild_queue(self, guild_id: int):
         """Process the queue for a specific guild with rate limiting"""
         if guild_id in self.guild_locks and self.guild_locks[guild_id].locked():
             return
-            
+
         if guild_id not in self.guild_locks:
             self.guild_locks[guild_id] = asyncio.Lock()
-            
+
         async with self.guild_locks[guild_id]:
             try:
                 queue = self.guild_queues.get(guild_id)
                 if not queue or queue.empty():
                     return
-                
+
                 batch = []
                 batch_size = 5
-                
+
                 while len(batch) < batch_size and not queue.empty():
                     try:
                         log_item = await queue.get()
                         batch.append(log_item)
                     except asyncio.QueueEmpty:
                         break
-                        
+
                 if not batch:
                     return
-                
+
                 channel_id = batch[0]["channel_id"]
                 channel = self.bot.get_channel(channel_id)
                 if not channel:
                     for item in batch:
                         queue.task_done()
                     return
-                    
+
                 if await self.bot.glory_cache.ratelimited(
                     f"modlog_channel:{channel_id}", *self.rl_settings["modlog_send"]
                 ):
@@ -198,7 +198,7 @@ class Handler:
                         queue.task_done()
                     await asyncio.sleep(1)
                     return
-                    
+
                 try:
                     for item in batch:
                         try:
@@ -208,9 +208,13 @@ class Handler:
                         except discord.HTTPException as e:
                             if e.status == 429:
                                 await queue.put(item)
-                                logger.warning(f"Rate limited while processing queue for guild {guild_id}")
+                                logger.warning(
+                                    f"Rate limited while processing queue for guild {guild_id}"
+                                )
                                 queue.task_done()
-                                await asyncio.sleep(e.retry_after + random.uniform(0.5, 1))
+                                await asyncio.sleep(
+                                    e.retry_after + random.uniform(0.5, 1)
+                                )
                                 break
                             else:
                                 logger.error(f"HTTP error sending queued embed: {e}")
@@ -218,15 +222,15 @@ class Handler:
                         except Exception as e:
                             logger.error(f"Error sending queued embed: {e}")
                             queue.task_done()
-                        
+
                 except Exception as e:
                     logger.error(f"Error processing batch for guild {guild_id}: {e}")
                     for _ in range(len(batch)):
                         queue.task_done()
-                    
+
             except Exception as e:
                 logger.error(f"Error processing queue for guild {guild_id}: {e}")
-                
+
     async def check_user(self, user: Union[Member, User, Object]):
         """Check user with improved rate limiting and caching"""
         if not user:
@@ -237,7 +241,7 @@ class Handler:
             return user.mention
 
         cache_key = f"user_mention:{user.id}"
-        
+
         # Try Redis cache first
         if cached := await self.bot.glory_cache.get(cache_key):
             return cached
@@ -253,12 +257,16 @@ class Handler:
 
         # Check global rate limit
         global_key = "global_user_fetch"
-        if await self.bot.glory_cache.ratelimited(global_key, 20, 60):  # Reduced to 20 fetches per minute
+        if await self.bot.glory_cache.ratelimited(
+            global_key, 20, 60
+        ):  # Reduced to 20 fetches per minute
             return str(user.id)
 
         # Check per-user rate limit
         user_key = f"user_fetch:{user.id}"
-        if await self.bot.glory_cache.ratelimited(user_key, *self.rl_settings["user_fetch"]):
+        if await self.bot.glory_cache.ratelimited(
+            user_key, *self.rl_settings["user_fetch"]
+        ):
             return str(user.id)
 
         try:
@@ -722,15 +730,15 @@ class Handler:
                     """SELECT channel_id FROM moderation_channel WHERE guild_id = $1""",
                     c.guild.id,
                 )
-                
+
                 if not channel_id:
                     return
-                    
+
                 queue = self.guild_queues.get(c.guild.id)
                 if not queue:
                     queue = asyncio.Queue()
                     self.guild_queues[c.guild.id] = queue
-                
+
                 await queue.put({"channel_id": channel_id, "embed": embed})
 
         except Exception as e:

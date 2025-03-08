@@ -64,7 +64,7 @@ def compress_image(image_bytes: bytes, quality: int = None) -> bytes:
 
 
 @offloaded
-def do_caption(para: list, image_bytes: bytes, message_data: dict):
+async def do_caption(para: list, image_bytes: bytes, message_data: dict):
     if isinstance(image_bytes, BytesIO):
         image_bytes = image_bytes.getvalue()
 

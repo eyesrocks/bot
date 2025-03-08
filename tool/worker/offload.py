@@ -60,15 +60,41 @@ def cf_callback(cf_future):
         asyncio.ensure_future(cf_callback.dask_future.cancel())
 
 
-def offloaded(f: Callable[P, T]) -> Callable[P, Awaitable[T]]:
+def offloaded(f: Callable[P, T], batch_size: int = None) -> Callable[P, Awaitable[T]]:
+    """Offload a function to run on Dask cluster with optional batching support.
+
+    Args:
+        f: Function to offload
+        batch_size: Optional batch size for processing multiple items at once
+    """
+
     async def offloaded_task(*a, **ka):
         loop = asyncio.get_running_loop()
         cf_future = loop.create_future()
-        from tool.greed import Greed
 
-        bot = a[0] if a and isinstance(a[0], Greed) else None
+        # Handle batching if input is iterable and batch_size specified
+        if batch_size and a and isinstance(a[-1], (list, tuple)):
+            data = a[-1]
+            other_args = a[:-1]
 
+            # Split into batches
+            batches = [
+                data[i : i + batch_size] for i in range(0, len(data), batch_size)
+            ]
+
+            async def process_batch(batch):
+                args = (*other_args, batch)
+                return await _submit_to_dask(f, args, ka, loop)
+
+            # Process all batches
+            results = await asyncio.gather(*[process_batch(batch) for batch in batches])
+            return [item for batch in results for item in batch]
+
+        return await _submit_to_dask(f, a, ka, loop)
+
+    async def _submit_to_dask(f, a, ka, loop):
         retries = 3
+        cf_future = loop.create_future()
 
         for attempt in range(retries):
             dask = get_dask()
@@ -95,6 +121,7 @@ def offloaded(f: Callable[P, T]) -> Callable[P, Awaitable[T]]:
                     continue
 
                 meth = partial(f, *a, **ka)
+                # Set worker_local=True to prefer data locality
                 cf_future.dask_future = dask.submit(meth, pure=False)
                 cf_future.dask_future.add_done_callback(cf_callback)
                 cascade_future(cf_future.dask_future, cf_future)

@@ -286,7 +286,7 @@ class Greed(Bot):
         self.to_send = []
         self.authentication = [
             self.config["token"],
-            "MTE4ODg1OTEwNzcwMTE2NjE2MQ.G22nb2.219btG_P7Y5MN0JlyU7OJHvIkdQ8dM9N6ybIJA",
+            "MTE0OTUzNTgzNDc1Njg3NDI1MA.GSOfph.hblFTcu2t1qmcPB61TnnB_eIIu2hNXRWk6QnSo",
         ]
         self.command_count = len(
             [
@@ -303,7 +303,6 @@ class Greed(Bot):
         )
         self.eros = "52ab341c-58c0-42f2-83ba-bde19f15facc"
         self.check(self.command_check)
-        self.before_invoke(self.before_all_commands)
         self.ratelimits = RatelimitManager(self)
 
     async def send_raw(
@@ -649,22 +648,6 @@ class Greed(Bot):
                         [chl.id, chl.name, (await chl.create_webhook(**kwargs)).url]
                     )
                 return json.dumps(wh)
-
-    async def before_all_commands(self, ctx: Context):
-        rs = await reskin(self, ctx.channel, author=ctx.author)
-        if not rs:
-            if ctx.command is not None:
-                if "purge" not in ctx.command.qualified_name:
-                    if ctx.guild and ctx.channel:
-                        if (
-                            ctx.channel.permissions_for(ctx.guild.me).send_messages
-                            and ctx.channel.permissions_for(ctx.guild.me).embed_links
-                            and ctx.channel.permissions_for(ctx.guild.me).attach_files
-                        ):
-                            try:
-                                await ctx.typing()
-                            except Exception:
-                                pass
 
     async def get_image(self, ctx: Context, *args):
         if len(ctx.message.attachments) > 0:
@@ -1501,6 +1484,10 @@ class Greed(Bot):
         if member.id == ctx.guild.owner_id:
             await ctx.warning("You cannot use this command on the server owner")
             return False
+
+        # Check if author is a ClientUser (bot) or doesn't have roles
+        if isinstance(author, discord.ClientUser) or not hasattr(author, "top_role"):
+            return True
 
         if author.top_role.is_default():
             await ctx.warning("You need roles with permissions to use this command")

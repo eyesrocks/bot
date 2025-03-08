@@ -11,7 +11,7 @@ from asyncio import ensure_future
 from typing import Callable, Any, get_type_hints
 import functools
 from loguru import logger
-import orjson
+import orjson, ujson
 from dataclasses import dataclass
 
 
@@ -31,8 +31,6 @@ def cache():
     It generates a cache key using the function name, class name, and kwargs.
     If a value exists in Redis for the function's name and kwargs, it returns the cached value.
     Otherwise, it executes the coroutine, caches the result, and returns it.
-    If you supply cached=False to any cached coroutine it will not get the cached result
-    but instead return a fresh result and cache the fresh result
     """
 
     def decorator(func: Callable):
@@ -42,54 +40,97 @@ def cache():
             redis_client = self.redis
             val = f"{self.__class__.__name__}.{func.__name__}-{'-'.join(str(m) for m in args)}{orjson.dumps(kwargs, option=orjson.OPT_SORT_KEYS)}"
             key = hash_(val)
-            logger.info(f"{val}\n{key}")
-            if redis_client:
+
+            if redis_client and hasattr(
+                redis_client, "get"
+            ):  # Verify Redis client is valid
                 if kwargs.pop("cached", True) is not False:
                     type_hints = get_type_hints(func)
                     return_type = type_hints.get("return", None)
-                    if cached_value := await redis_client.get(key):
-                        if isinstance(cached_value, bytes):
-                            data = orjson.loads(cached_value)
-                        else:
-                            data = cached_value
-                        data["cached"] = True
-                        self.status = False
-                        if return_type:
-                            return return_type(**data)
-                        else:
-                            return data
+                    try:
+                        cached_value = await redis_client.get(key)
+                        if cached_value:
+                            try:
+                                # Always try to decode bytes first
+                                if isinstance(cached_value, bytes):
+                                    data = orjson.loads(cached_value)
+                                elif isinstance(cached_value, str):
+                                    data = ujson.loads(cached_value)
+                                elif isinstance(cached_value, (dict, list)):
+                                    data = cached_value
+                                else:
+                                    logger.warning(
+                                        f"Unexpected cache value type: {type(cached_value)}"
+                                    )
+                                    data = None
+
+                                if data and isinstance(data, dict):
+                                    data["cached"] = True
+                                    self.status = False
+                                    if return_type:
+                                        try:
+                                            return return_type(**data)
+                                        except Exception as e:
+                                            logger.warning(
+                                                f"Failed to construct return type from cached data: {e}"
+                                            )
+                                            # Clear invalid cache
+                                            if hasattr(redis_client, "delete"):
+                                                await redis_client.delete(key)
+                                    else:
+                                        return data
+
+                            except (ValueError, TypeError, AttributeError) as e:
+                                logger.warning(f"Failed to parse cached value: {e}")
+                                # Clear invalid cache
+                                if hasattr(redis_client, "delete"):
+                                    await redis_client.delete(key)
+
+                    except Exception as e:
+                        logger.error(f"Cache retrieval error: {str(e)}")
+                        # Don't re-raise, continue to get fresh data
 
             self.last_query = kwargs.get("query")
             self.queries += 1
 
             try:
                 result = await func(self, *args, **kwargs)
-                if redis_client:
-                    if self.ttl:
-                        ensure_future(
-                            redis_client.set(
-                                key,
-                                (
-                                    orjson.dumps(result.dict())
-                                    if not isinstance(result, (bytes, dict, list))
-                                    else result
-                                ),
-                                ex=self.ttl,
-                            )
-                        )
-                    else:
-                        ensure_future(
-                            redis_client.set(
-                                key,
-                                (
-                                    orjson.dumps(result.dict())
-                                    if not isinstance(result, (bytes, dict, list))
-                                    else result
-                                ),
-                            )
-                        )
+                if (
+                    redis_client and hasattr(redis_client, "set") and result
+                ):  # Verify Redis client is valid
+                    try:
+                        cache_data = None
+                        if hasattr(result, "dict"):
+                            try:
+                                cache_data = result.dict()
+                            except Exception as e:
+                                logger.warning(f"Failed to convert result to dict: {e}")
+                                cache_data = None
+                        elif isinstance(result, (dict, list)):
+                            cache_data = result
+
+                        if cache_data:
+                            try:
+                                serialized_data = orjson.dumps(cache_data)
+                                if self.ttl:
+                                    ensure_future(
+                                        redis_client.set(
+                                            key, serialized_data, ex=self.ttl
+                                        )
+                                    )
+                                else:
+                                    ensure_future(
+                                        redis_client.set(key, serialized_data)
+                                    )
+                            except Exception as e:
+                                logger.error(f"Failed to serialize cache data: {e}")
+
+                    except Exception as e:
+                        logger.error(f"Failed to cache result: {str(e)}")
+
                 self.succeeded += 1
                 self.status = False
+
             except Exception as error:
                 self.failed += 1
                 self.status = False

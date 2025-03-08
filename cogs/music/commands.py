@@ -29,7 +29,7 @@ from wavelink import (
     Playlist,
     Pool,
     Node,
-    TrackEndEventPayload
+    TrackEndEventPayload,
 )
 from aiohttp import ClientSession
 from bs4 import BeautifulSoup
@@ -293,7 +293,9 @@ class MusicCommands(Cog):
         if music_events and hasattr(music_events, "lastfm_now_playing_users"):
             guild_id = ctx.guild.id
             if guild_id in music_events.lastfm_now_playing_users:
-                scrobbling_users_count = len(music_events.lastfm_now_playing_users[guild_id])
+                scrobbling_users_count = len(
+                    music_events.lastfm_now_playing_users[guild_id]
+                )
 
         embed = await ctx.voice_client.embed(track, scrobbling_users_count)
         return await ctx.reply(embed=embed, view=Panel(self))
@@ -307,18 +309,20 @@ class MusicCommands(Cog):
     async def queue_nowplaying(self, ctx: Context) -> Message:
         """View the currently playing track in the queue."""
         player = await self.get_player(ctx)
-        
+
         if not (track := player.current):
             return await ctx.fail("There isn't a track being played")
-        
+
         # Get the count of users who are scrobbling this track
         scrobbling_users_count = 0
         music_events = self.bot.get_cog("MusicEvents")
         if music_events and hasattr(music_events, "lastfm_now_playing_users"):
             guild_id = ctx.guild.id
             if guild_id in music_events.lastfm_now_playing_users:
-                scrobbling_users_count = len(music_events.lastfm_now_playing_users[guild_id])
-        
+                scrobbling_users_count = len(
+                    music_events.lastfm_now_playing_users[guild_id]
+                )
+
         embed = await player.embed(track, scrobbling_users_count)
         return await ctx.reply(embed=embed, view=Panel(self))
 
@@ -326,10 +330,10 @@ class MusicCommands(Cog):
     async def queue_view(self, ctx: Context):
         """View all tracks in the queue."""
         player = await self.get_player(ctx)
-        
+
         if not (tracks := player.queue):
             return await ctx.fail("There are no tracks in the queue")
-            
+
         queue_items = []
         for index, track in enumerate(tracks):
             requester = ctx.guild.get_member(getattr(track.extras, "requester_id") or 0)

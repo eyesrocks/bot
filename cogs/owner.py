@@ -39,8 +39,8 @@ class Owner(commands.Cog):
         self.cooldown_time = 3
         self.static_message = "<@&1302845236242022440>"
         self.webhook_url = "https://discord.com/api/webhooks/1312262024750825484/fzvkQJDh5PbZshuDuoGz_VNpxwDlN5GS9O-xc0XPgI6u6__6EhDevYTXopAeBOG4-g7Z"
-#        self.check_subs.start()
-#        self.check_boosts.start()
+        self.check_subs.start()
+        self.check_boosts.start()
 
     async def cog_load(self):
         #        setattr(self.bot.connection.__events, "on_rival_information", self.bot.on_rival_information)
@@ -98,9 +98,9 @@ class Owner(commands.Cog):
         """
         )
 
-#    def cog_unload(self):
-#        self.check_subs.cancel()
-#        self.check_boosts.cancel()
+    def cog_unload(self):
+        self.check_subs.cancel()
+        self.check_boosts.cancel()
 
     @tasks.loop(seconds=60)
     async def check_boosts(self):
@@ -153,7 +153,8 @@ class Owner(commands.Cog):
                 return
             premium = guild.get_role(1305842894111768587)
             donator = guild.get_role(1338595841962934372)
-            if not (donator and premium):
+            tier = guild.get_role(1329427024850190387)
+            if not (donator and premium and tier):
                 logger.warning("Could not find subscription roles")
                 return
 
@@ -180,35 +181,6 @@ class Owner(commands.Cog):
 
         except Exception as e:
             logger.error(f"Error in subscription check: {e}", exc_info=True)
-
-    @commands.Cog.listener("on_member_join")
-    async def global_ban_event(self, member: Member):
-        if global_ban := await self.bot.db.fetchval(
-            """SELECT reason FROM globalbans WHERE user_id = $1""", member.id
-        ):
-            try:
-                await member.guild.ban(member, reason=f"Global banned: {global_ban}")
-            except Exception:
-                pass
-
-    async def do_ban(self, guild: Guild, member: Union[User, Member], reason: str):
-        if guild.get_member(member.id):
-            try:
-                await guild.ban(member, reason=reason)
-                return 1
-            except Exception:
-                return 0
-        else:
-            return 0
-
-    async def do_global_ban(self, member: Union[Member, User], reason: str):
-        if len(member.mutual_guilds) > 0:
-            bans = await asyncio.gather(
-                *[self.do_ban(guild, member, reason) for guild in member.mutual_guilds]
-            )
-            return sum(bans)
-        else:
-            return 0
 
     @commands.command(name="saveemoji")
     @commands.is_owner()
@@ -511,35 +483,6 @@ class Owner(commands.Cog):
         )
         embed.add_field(name="Context", value=f"`{data.content}`", inline=False)
         return await ctx.send(embed=embed)
-
-    @commands.command(name="restart", hidden=True)
-    @commands.is_owner()
-    async def restart(self, ctx):
-        await ctx.success("**Restarting bot...**")
-        os.execv(sys.executable, ["python"] + sys.argv)
-
-    @commands.command(name="globalban", hidden=True)
-    @commands.is_owner()
-    async def globalban(self, ctx, user: Union[User, Member], *, reason: str):
-        if await self.bot.db.fetch(
-            """SELECT reason FROM globalbans WHERE user_id = $1""", user.id
-        ):
-            await self.bot.db.execute(
-                """DELETE FROM globalbans WHERE user_id = $1""", user.id
-            )
-            return await ctx.success(
-                f"successfully unglobally banned {user.mention} ({user.id})"
-            )
-        else:
-            await self.bot.db.execute(
-                """INSERT INTO globalbans (user_id, reason) VALUES ($1, $2)""",
-                user.id,
-                reason,
-            )
-            bans = await self.do_global_ban(user, reason)
-            return await ctx.success(
-                f"**Global banned** {user.mention} ({user.id}) from **{bans} guilds**"
-            )
 
     @commands.command(aliases=["guilds"], hidden=True)
     @commands.is_owner()
@@ -900,74 +843,22 @@ class Owner(commands.Cog):
             if self.bot.user.avatar.url
             else self.bot.user.default_avatar.url
         )
-        x = discord.Embed(title="Documentation guide", color=0x2B2D31)
+        x = discord.Embed(title="Documentation", color=self.bot.color)
 
         x.set_thumbnail(url=bot_avatar_url)
 
         x.add_field(
             name="**Important Information**",
             value=(
-                "> [Initial Setup](https://docs.greed.bot/settings/setup)\n"
-                "> [Reskin](https://docs.greed.bot/settings/Reskin)\n"
-                "> [Custom Context](https://docs.greed.bot/settings/Context)"
+                "> **[Antinuke](https://discord.com/channels/1301617147964821524/1346819569175760898)**\n"
+                "> **[Jail](https://discord.com/channels/1301617147964821524/1346820159968514224)**\n"
+                "> **[Voicemaster](https://discord.com/channels/1301617147964821524/1346820763281260594)**\n"
+                "> **[Embed](https://discord.com/channels/1301617147964821524/1346826402900480030)**\n"
+                "> **-# please read this first before pinging a staff member for questions, the gallery channel will also be updated.**\n"
             ),
             inline=False,
         )
-
-        x.add_field(
-            name="**Security Setup**",
-            value=(
-                "> [Antinuke](https://docs.greed.bot/securitysetup/antinuke)\n"
-                "> [Automod Filter](https://docs.greed.bot/securitysetup/automod) \n"
-                "> [Fake Permissions](https://docs.greed.bot/securitysetup/Fake-Permissions)\n"
-                "> [Enabling/Disabling Commands](https://docs.greed.bot/securitysetup/Command-Toggle)"
-            ),
-            inline=False,
-        )
-
-        x.add_field(
-            name="**Server Setup**",
-            value=(
-                "> [Autoresponders](https://docs.greed.bot/serversetup/Autoresponders)\n"
-                "> [Booster Roles](https://docs.greed.bot/serversetup/Booster-Messages)\n"
-                "> [Booster Messages](https://docs.greed.bot/serversetup/Booster-Roles)\n"
-                "> [Lock Setup](https://docs.greed.bot/serversetup/Lock-Setup)\n"
-                "> [Pagination](https://docs.greed.bot/serversetup/Pagination)\n"
-                "> [Reaction Roles](https://docs.greed.bot/serversetup/Reaction-Roles)\n"
-                "> [Starboard](https://docs.greed.bot/serversetup/Starboard)\n"
-                "> [Vanity Roles](https://docs.greed.bot/serversetup/Vanity-Roles)\n"
-                "> [VoiceMaster](https://docs.greed.bot/serversetup/VoiceMaster)\n"
-                "> [Webhook Creation](https://docs.greed.bot/serversetup/Webhooks-Creation)"
-            ),
-            inline=False,
-        )
-
-        x.add_field(
-            name="**Socials**",
-            value=(
-                "> [Pinterest](https://docs.greed.bot/socials/Pinterest)\n"
-                "> [TikTok](https://docs.greed.bot/socials/TikTok)\n"
-                "> [Twitter](https://docs.greed.bot/socials/Twitter)\n"
-                "> [YouTube Shorts](https://docs.greed.bot/socials/Youtube-Shorts)"
-            ),
-            inline=False,
-        )
-
-        x.add_field(
-            name="**Utilitys**",
-            value=(
-                "> [Embed Builder](https://docs.greed.bot/serversetup/Embeds)\n"
-                "> [Variables](https://docs.greed.bot/tools/Variables)"
-            ),
-            inline=False,
-        )
-
         await ctx.send(embed=x)
-        y = discord.Embed(
-            description="<:greedinfo:1270587726080770049> When **greed** is added to a guild, **its self role** should be moved to the **top 5 roles**. Default prefix is set to `,`",
-            color=0x44CCF4,
-        )
-        await ctx.send(embed=y)
 
     @commands.command(hidden=True)
     @commands.is_owner()
@@ -977,45 +868,73 @@ class Owner(commands.Cog):
             if self.bot.user.avatar.url
             else self.bot.user.default_avatar.url
         )
-        x = discord.Embed(title="Terms of Service\n", color=0x2B2D31)
 
-        x.set_thumbnail(url=bot_avatar_url)
+        tos_embed = discord.Embed(
+            title="Greed Bot - Terms of Service", color=self.bot.color
+        )
+        tos_embed.set_thumbnail(url=bot_avatar_url)
 
-        x.add_field(
-            name="Disclaimer",
+        # Support Guidelines
+        tos_embed.add_field(
+            name="**Support Guidelines**",
             value=(
-                "> While this bot is provided free of charge, receiving a ban from a moderator for any of the reasons listed below will result in a **simultaneous blacklisting** from the use of Greed. "
+                "Our staff handles numerous inquiries about the bot's usage and support. Please:\n"
+                "- Be respectful and patient while waiting for a response.\n"
+                "- Read available documentation before asking questions.\n"
+                "- Avoid spamming support channels or staff DMs.\n"
+                "Failure to follow these guidelines may result in a mute or blacklist."
             ),
             inline=False,
         )
 
-        x.add_field(
-            name="Support Guidelines",
+        # Abuse Policy
+        tos_embed.add_field(
+            name="**Abuse Policy**",
             value=(
-                "> Our staff receives numerous inquiries regarding the bot's usage and support. Please be respectful, wait your turn, and you will receive the assistance you need."
+                "Any attempt to exploit, abuse, or manipulate Greed Bot's systems will result in an immediate blacklist, preventing you from adding the bot to any servers or using its features. "
+                "Examples of abuse include but are not limited to:\n"
+                "- Using automation or self-bots to interact with Greed.\n"
+                "- Exploiting bugs or unintended features.\n"
+                "- Attempting to crash or overload the bot."
             ),
             inline=False,
         )
 
-        x.add_field(
-            name="Abuse Policy",
+        # Pinging Staff & Help Channel Rules
+        tos_embed.add_field(
+            name="**Pinging Staff & Help Channel Usage**",
             value=(
-                "> Any attempt to abuse our services will result in your server and account being blacklisted. This action will prevent you from adding the bot to any of your guilds or utilizing Greed's features."
+                "Do **NOT** unnecessarily ping server staff for support. The <#1334596948753256458> channel contains resources that answer most common questions.\n"
+                "- Users who open tickets or ping staff for trivial matters will be **muted** or **blacklisted**.\n"
+                "- Read the embed in <#1334596948753256458> before asking questions.\n"
+                "- Only create a ticket if your issue is **not covered** in the help documents."
             ),
             inline=False,
         )
 
-        y = discord.Embed(
-            title="<:luma_info:1302336751599222865> Notifications & Access",
-            description=(
-                "> - React with <:check2:1302206610701287526> to **agree with our policy**\n> -"
-                " React with <:topgg_ico_notifications:1302336130527793162> to receive **update notifications**"
+        # Terms of Service Enforcement
+        tos_embed.add_field(
+            name="**Enforcement of Rules**",
+            value=(
+                "Violations of these rules will result in consequences ranging from warnings to permanent blacklisting.\n"
+                "- Minor offenses may result in temporary mutes or warnings.\n"
+                "- Repeated or severe violations will lead to a **permanent ban** from Greed Bot.\n"
+                "By using Greed Bot, you **agree** to these terms and acknowledge that punishments are at staff discretion."
             ),
-            color=0x44CCF4,
+            inline=False,
         )
 
-        await ctx.send(embed=x)
-        await ctx.send(embed=y)
+        # Reaction Embed
+        react_embed = discord.Embed(
+            title="Notifications",
+            description="-# React here to get updates on greed",
+            color=self.bot.color,
+        )
+
+        # Send the embeds and add reaction
+        msg = await ctx.send(embed=tos_embed)
+        msg2 = await ctx.send(embed=react_embed)
+        await msg2.add_reaction("✅")
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild) -> discord.Guild:
@@ -1121,6 +1040,57 @@ class Owner(commands.Cog):
         return await ctx.success(
             f"**{member.mention}'s balance is set to `{format_int(amount)}` bucks**"
         )
+
+    @commands.command(name="cacheusers", hidden=True)
+    @commands.is_owner()
+    async def cache_users(self, ctx: Context):
+        """Cache all users into the bot's internal user cache."""
+        import time
+
+        start_time = time.time()
+        total_users = 0
+        cached_users = 0
+
+        # Create a status message that we'll update
+        status_message = await ctx.send("Starting user cache process...")
+
+        try:
+            for guild in self.bot.guilds:
+                # Fetch all members for this guild if we have the required intents
+                if guild.chunked:
+                    guild_users = len(guild.members)
+                else:
+                    try:
+                        await guild.chunk(cache=True)
+                        guild_users = len(guild.members)
+                    except discord.HTTPException as e:
+                        await ctx.warning(f"Failed to chunk guild {guild.name}: {e}")
+                        continue
+
+                total_users += guild_users
+                cached_users += guild_users
+
+                # Update status every few guilds to avoid rate limits
+                if guild.id % 5 == 0:
+                    elapsed = time.time() - start_time
+                    await status_message.edit(
+                        content=f"Caching users... Processed {cached_users:,} users from {guild.id % 5} guilds. "
+                        f"({elapsed:.2f}s elapsed)"
+                    )
+
+            elapsed_time = time.time() - start_time
+            await status_message.edit(
+                content=f"✅ Successfully cached {cached_users:,} users across {len(self.bot.guilds):,} guilds in {elapsed_time:.2f} seconds."
+            )
+
+            # Log the cache operation
+            logger.info(
+                f"User cache operation completed: {cached_users:,} users cached in {elapsed_time:.2f}s"
+            )
+
+        except Exception as e:
+            logger.error(f"Error during user caching: {e}", exc_info=True)
+            await ctx.fail(f"An error occurred while caching users: {e}")
 
 
 async def setup(bot):

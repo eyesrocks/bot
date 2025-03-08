@@ -6,6 +6,7 @@ from tornado import gen
 from typing import Callable
 from loguru import logger
 import os
+import logging
 
 GLOBAL_DASK = {}
 
@@ -46,20 +47,34 @@ async def start_dask(bot, address: str) -> distributed.Client:
             if port_in_use:
                 logger.info(f"Port in use, binding to existing Dask scheduler...")
                 client = await distributed.Client(
-                    scheduler_file=scheduler_file, asynchronous=True, name="greed"
+                    scheduler_file=scheduler_file,
+                    asynchronous=True,
+                    name="greed",
+                    set_as_default=True,
                 )
             else:
+                # Optimize worker configuration
+                n_workers = psutil.cpu_count(logical=False)  # Use physical cores
+                threads_per_worker = 2  # Balance between parallelism and overhead
+                memory_limit = "16GB"  # Adjust based on system memory
+
                 client = await distributed.Client(
                     distributed.LocalCluster(
                         dashboard_address="127.0.0.1:8787",
                         asynchronous=True,
                         processes=True,
-                        threads_per_worker=4,
-                        n_workers=8,
+                        n_workers=n_workers,
+                        threads_per_worker=threads_per_worker,
+                        memory_limit=memory_limit,
+                        lifetime="1h",  # Restart workers periodically to prevent memory leaks
+                        lifetime_stagger="5m",  # Stagger restarts
+                        worker_class="distributed.Worker",  # Use process-based workers
+                        silence_logs=logging.WARNING,  # Reduce log noise
                     ),
                     direct_to_workers=True,
                     asynchronous=True,
                     name="greed",
+                    set_as_default=True,
                 )
                 client.write_scheduler_file(scheduler_file)
 

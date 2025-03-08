@@ -6,6 +6,7 @@ from loguru import logger
 from tool.greed import Greed
 from config import CONFIG_DICT
 import aiohttp
+
 setup_logging()
 
 
@@ -25,7 +26,6 @@ def chunk_list(data: list, amount: int) -> list[list]:
     return _chunks
 
 
-
 TOKEN = CONFIG_DICT["token"]
 
 parser = argparse.ArgumentParser(
@@ -43,7 +43,7 @@ if not (1 <= cluster_id <= 3):
 async def main():
     ips = ["23.160.168.122", "23.160.168.124", "23.160.168.125"]
 
-    shard_count = 26
+    shard_count = 36
     clusters = 3
     per_cluster = (shard_count + clusters - 1) // clusters
 
