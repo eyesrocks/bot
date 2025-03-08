@@ -1,13 +1,30 @@
 import asyncio
 import uvloop
 import argparse
-from discord.utils import chunk_list, setup_logging
+from discord.utils import setup_logging
 from loguru import logger
 from tool.greed import Greed
 from config import CONFIG_DICT
-
+import aiohttp
 setup_logging()
-asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+
+
+def chunk_list(data: list, amount: int) -> list[list]:
+    # makes lists of a big list of values every x amount of values
+    if len(data) < amount:
+        _chunks = [data]
+    else:
+        chunks = zip(*[iter(data)] * amount)
+        _chunks = list(list(_) for _ in chunks)
+    from itertools import chain
+
+    l = list(chain.from_iterable(_chunks))  # noqa: E741
+    nul = [d for d in data if d not in l]
+    if len(nul) > 0:
+        _chunks.append(nul)
+    return _chunks
+
+
 
 TOKEN = CONFIG_DICT["token"]
 

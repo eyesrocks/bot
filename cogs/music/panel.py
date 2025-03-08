@@ -138,6 +138,17 @@ class Panel(View):
         votes.append(interaction.user)
         if self.is_privileged(interaction) or len(votes) >= required:
             votes.clear()
+            
+            # Clear now playing users for this guild
+            music_events = self.player.bot.get_cog("MusicEvents")
+            if music_events:
+                guild_id = self.player.guild.id
+                if (
+                    hasattr(music_events, "lastfm_now_playing_users")
+                    and guild_id in music_events.lastfm_now_playing_users
+                ):
+                    del music_events.lastfm_now_playing_users[guild_id]
+            
             await self.player.skip(force=True)
             embed = Embed(
                 description=f"{interaction.user.mention} has skipped the current track"

@@ -6,12 +6,14 @@ import aiohttp
 import discord
 from typing import TypedDict, Union, Optional, List
 from aiohttp.web import Application, Request, Response, _run_app, json_response
+import aiohttp.web
 from discord.ext.commands import Cog, Group, Command
 from prometheus_async import aio
 import socket
 from tool.greed import Greed
 import urllib.parse
 from config import Authorization
+import asyncio
 
 
 class CommandData(TypedDict):
@@ -28,6 +30,7 @@ class WebServer(Cog):
         self.bot = bot
         self.app = Application()
         self._setup_routes()
+        self.server_task = None
 
     def _setup_routes(self) -> None:
         routes = [
@@ -44,13 +47,32 @@ class WebServer(Cog):
     async def cog_load(self) -> None:
         if self.bot.connection.local_name != "cluster1":
             return
-        self.bot.loop.create_task(self._run())
+        self.server_task = self.bot.loop.create_task(self._run())
 
     async def cog_unload(self) -> None:
+        if self.server_task:
+            self.server_task.cancel()
+            try:
+                await self.server_task
+            except asyncio.CancelledError:
+                pass
+
         await self.app.shutdown()
+        await self.app.cleanup()
 
     async def _run(self) -> None:
-        await _run_app(self.app, host="0.0.0.0", port=2027, handle_signals=False)
+        runner = aiohttp.web.AppRunner(self.app)
+        await runner.setup()
+        site = aiohttp.web.TCPSite(runner, "0.0.0.0", 2027)
+        self.runner = runner
+        await site.start()
+
+        try:
+            while True:
+                await asyncio.sleep(3600)
+        except asyncio.CancelledError:
+            await runner.cleanup()
+            raise
 
     @staticmethod
     async def index(_: Request) -> Response:
@@ -128,12 +150,12 @@ class WebServer(Cog):
         if not tracking_id:
             return Response(text="No tracking ID provided", status=400)
 
-        if not hasattr(Authorization.LastFM, "pending_auth"):
-            return Response(text="No pending authorizations", status=400)
-
-        user_id = Authorization.LastFM.pending_auth.get(tracking_id)
-        if not user_id:
+        # Get user ID from Redis
+        user_id_str = await self.bot.redis.get(f"lastfm:auth:{tracking_id}")
+        if not user_id_str:
             return Response(text="Invalid or expired tracking ID", status=400)
+
+        user_id = int(user_id_str)
 
         try:
             # Generate signature for LastFM API
@@ -229,9 +251,8 @@ class WebServer(Cog):
                         except discord.Forbidden:
                             pass
 
-                    # Remove from pending auth
-                    if tracking_id in Authorization.LastFM.pending_auth:
-                        del Authorization.LastFM.pending_auth[tracking_id]
+                    # Delete the tracking ID from Redis
+                    await self.bot.redis.delete(f"lastfm:auth:{tracking_id}")
 
                     return Response(
                         text="LastFM Authorized - You can close this window", status=200

@@ -29,6 +29,7 @@ from wavelink import (
     Playlist,
     Pool,
     Node,
+    TrackEndEventPayload
 )
 from aiohttp import ClientSession
 from bs4 import BeautifulSoup
@@ -200,13 +201,6 @@ class MusicCommands(Cog):
             ):
                 del music_events.lastfm_now_playing_users[guild_id]
 
-            if hasattr(music_events, "lastfm_scrobble_timers"):
-                for user_id, timer_data in list(
-                    music_events.lastfm_scrobble_timers.items()
-                ):
-                    if timer_data.get("guild_id") == guild_id:
-                        del music_events.lastfm_scrobble_timers[user_id]
-
         player.skip_votes.clear()
         await player.stop()
         return await ctx.send("⏭️ Skipped the current track.")
@@ -293,15 +287,49 @@ class MusicCommands(Cog):
         if not (track := ctx.voice_client.current):
             return await ctx.fail("There isn't a track being played")
 
-        embed = await ctx.voice_client.embed(track)
+        # Get the count of users who are scrobbling this track
+        scrobbling_users_count = 0
+        music_events = self.bot.get_cog("MusicEvents")
+        if music_events and hasattr(music_events, "lastfm_now_playing_users"):
+            guild_id = ctx.guild.id
+            if guild_id in music_events.lastfm_now_playing_users:
+                scrobbling_users_count = len(music_events.lastfm_now_playing_users[guild_id])
+
+        embed = await ctx.voice_client.embed(track, scrobbling_users_count)
         return await ctx.reply(embed=embed, view=Panel(self))
 
     @group(invoke_without_command=True, aliases=["q"])
     async def queue(self, ctx: Context):
-        """View all tracks in the queue."""
+        """View the queue."""
+        return await self.queue_view(ctx)
 
-        if not (tracks := ctx.voice_client.queue):
+    @queue.command(name="nowplaying", aliases=["np", "current"], with_app_command=True)
+    async def queue_nowplaying(self, ctx: Context) -> Message:
+        """View the currently playing track in the queue."""
+        player = await self.get_player(ctx)
+        
+        if not (track := player.current):
+            return await ctx.fail("There isn't a track being played")
+        
+        # Get the count of users who are scrobbling this track
+        scrobbling_users_count = 0
+        music_events = self.bot.get_cog("MusicEvents")
+        if music_events and hasattr(music_events, "lastfm_now_playing_users"):
+            guild_id = ctx.guild.id
+            if guild_id in music_events.lastfm_now_playing_users:
+                scrobbling_users_count = len(music_events.lastfm_now_playing_users[guild_id])
+        
+        embed = await player.embed(track, scrobbling_users_count)
+        return await ctx.reply(embed=embed, view=Panel(self))
+
+    @queue.command(name="view", with_app_command=True)
+    async def queue_view(self, ctx: Context):
+        """View all tracks in the queue."""
+        player = await self.get_player(ctx)
+        
+        if not (tracks := player.queue):
             return await ctx.fail("There are no tracks in the queue")
+            
         queue_items = []
         for index, track in enumerate(tracks):
             requester = ctx.guild.get_member(getattr(track.extras, "requester_id") or 0)
@@ -318,12 +346,6 @@ class MusicCommands(Cog):
             embeds.append(embed)
 
         return await ctx.paginate(embeds)
-
-    @queue.command(name="view", with_app_command=True)
-    async def queue_view(self, ctx: Context):
-        """Alias for the `queue` command."""
-
-        return await self.queue(ctx)
 
     @queue.command(name="clear", aliases=("empty",))
     async def queue_clear(self, ctx: Context) -> Message:

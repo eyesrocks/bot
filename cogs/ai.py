@@ -10,7 +10,7 @@ from tools import timeit
 from cashews import cache
 import humanize
 from cogs.miscellaneous import get_donator
-
+from discord.app_commands import allowed_contexts, allowed_installs
 cache.setup("mem://")
 
 
@@ -181,7 +181,9 @@ class ai(commands.Cog):
         # Split the text into chunks of `chunk_size` characters
         return [text[i : i + chunk_size] for i in range(0, len(text), chunk_size)]
 
-    @commands.command(name="ai")
+    @commands.hybrid_command(name="ai")
+    @allowed_contexts(guilds=True, dms=True, private_channels=True)
+    @allowed_installs(guilds=True, users=True)
     async def ask(self, ctx, *, question: str):
         """Command to ask the AI a question."""
         if not await get_donator(ctx, ctx.author.id):

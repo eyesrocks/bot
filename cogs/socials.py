@@ -1095,17 +1095,6 @@ class Socials(commands.Cog):
                 if avatar_url := await user.avatar_url():
                     embed.set_thumbnail(url=avatar_url)
 
-                if presence := await user.presence():
-                    embed.add_field(
-                        name="Presence",
-                        value=(
-                            f"Status: {presence.status}\n"
-                            f"Location: {presence.location}\n"
-                            f"Last Online: {format_dt(presence.last_online, 'R')}"
-                        ),
-                        inline=False,
-                    )
-
                 if badges := await user.badges():
                     embed.add_field(
                         name="Badges",

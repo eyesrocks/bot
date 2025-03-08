@@ -39,8 +39,8 @@ class Owner(commands.Cog):
         self.cooldown_time = 3
         self.static_message = "<@&1302845236242022440>"
         self.webhook_url = "https://discord.com/api/webhooks/1312262024750825484/fzvkQJDh5PbZshuDuoGz_VNpxwDlN5GS9O-xc0XPgI6u6__6EhDevYTXopAeBOG4-g7Z"
-        self.check_subs.start()
-        self.check_boosts.start()
+#        self.check_subs.start()
+#        self.check_boosts.start()
 
     async def cog_load(self):
         #        setattr(self.bot.connection.__events, "on_rival_information", self.bot.on_rival_information)
@@ -98,9 +98,9 @@ class Owner(commands.Cog):
         """
         )
 
-    def cog_unload(self):
-        self.check_subs.cancel()
-        self.check_boosts.cancel()
+#    def cog_unload(self):
+#        self.check_subs.cancel()
+#        self.check_boosts.cancel()
 
     @tasks.loop(seconds=60)
     async def check_boosts(self):

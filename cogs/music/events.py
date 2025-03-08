@@ -3,7 +3,7 @@ from .player import CoffinPlayer, Context
 from typing import cast, Dict, List, Optional, Union
 from wavelink import TrackEndEventPayload, TrackStartEventPayload
 from contextlib import suppress
-from discord import Client, HTTPException, Member, VoiceState
+from discord import Client, HTTPException, Member, VoiceState, NotFound
 import aiohttp
 import time
 import hashlib
@@ -17,13 +17,13 @@ class MusicEvents(Cog):
     def __init__(self, bot: Client):
         self.bot = bot
         self.lastfm_now_playing_users = {}
-        self.lastfm_scrobble_timers = {}
         self.lastfm_api_key = Authorization.LastFM.api_key
         self.lastfm_api_secret = Authorization.LastFM.api_secret
-        self.scrobble_task.start()
+        self.inactive_voice_check.start()
+        self.voice_client_last_activity = {}
 
     def cog_unload(self):
-        self.scrobble_task.cancel()
+        self.inactive_voice_check.cancel()
 
     @Cog.listener()
     async def on_wavelink_track_end(self, payload: TrackEndEventPayload):
@@ -31,12 +31,53 @@ class MusicEvents(Cog):
         if not client:
             return
 
+        # If the track ended naturally (not skipped), scrobble it
+        if payload.reason == "FINISHED" and client.guild.id in self.lastfm_now_playing_users:
+            guild_id = client.guild.id
+            track = payload.track
+            
+            # Get track data
+            track_title = track.title
+            if track.source.startswith("youtube"):
+                track_title = await client.deserialize(track.title)
+
+            artist = track.author
+            title = track_title
+
+            if " - " in track_title:
+                parts = track_title.split(" - ", 1)
+                artist = parts[0].strip()
+                title = parts[1].strip()
+
+            track_data = {
+                "artist": artist,
+                "track": title,
+                "album": "",
+                "duration": track.length // 1000,
+            }
+            
+            # Scrobble for all users in the voice channel
+            users_data = await self.get_users_with_session_keys(guild_id)
+            if users_data:
+                api_key, api_secret = await self.get_lastfm_api_credentials()
+                if api_key and api_secret:
+                    timestamp = int(time.time())
+                    for user_id, user_data in users_data.items():
+                        try:
+                            session_key = user_data["session_key"]
+                            await self._send_lastfm_scrobble(
+                                session_key, track_data, timestamp, api_key, api_secret
+                            )
+                            logging.info(f"Scrobbled track for user {user_id}")
+                        except Exception as e:
+                            logging.error(f"Error scrobbling track for user {user_id}: {e}")
+
+        # Clear now playing users for this guild
         if client.guild.id in self.lastfm_now_playing_users:
             del self.lastfm_now_playing_users[client.guild.id]
 
-        for user_id, timer_data in list(self.lastfm_scrobble_timers.items()):
-            if timer_data.get("guild_id") == client.guild.id:
-                del self.lastfm_scrobble_timers[user_id]
+        if client.guild.id in self.voice_client_last_activity and not client.queue:
+            self.voice_client_last_activity[client.guild.id] = int(time.time())
 
         if client.queue:
             await client.play(client.queue.get())
@@ -50,9 +91,8 @@ class MusicEvents(Cog):
         )
 
     async def get_lastfm_api_credentials(self):
-        """Get LastFM API credentials from the database or environment"""
-        if self.lastfm_api_key and self.lastfm_api_secret:
-            return self.lastfm_api_key, self.lastfm_api_secret
+        """Get LastFM API credentials"""
+        return self.lastfm_api_key, self.lastfm_api_secret
 
     async def get_users_with_session_keys(
         self, guild_id: int
@@ -120,24 +160,6 @@ class MusicEvents(Cog):
 
             self.lastfm_now_playing_users[guild_id] = list(users_data.keys())
 
-            current_time = int(time.time())
-            for user_id, user_data in users_data.items():
-                try:
-                    duration = track_data.get("duration", 240)
-                    scrobble_time = min(duration // 2, 240)
-
-                    self.lastfm_scrobble_timers[user_id] = {
-                        "guild_id": guild_id,
-                        "track_data": track_data,
-                        "scrobble_time": current_time + scrobble_time,
-                        "session_key": user_data["session_key"],
-                        "username": user_data["username"],
-                    }
-                except Exception as e:
-                    logging.error(
-                        f"Error setting up scrobble timer for user {user_id}: {e}"
-                    )
-
             successful_updates = 0
             for user_id, user_data in users_data.items():
                 try:
@@ -148,12 +170,11 @@ class MusicEvents(Cog):
                     if success:
                         successful_updates += 1
                 except Exception as e:
-                    logging.error(f"Error updating now playing for user {user_id}: {e}")
+                    logging.error(
+                        f"Error updating LastFM now playing for user {user_id}: {e}"
+                    )
 
-            logging.info(
-                f"Updated LastFM now playing for {successful_updates}/{len(users_data)} users in guild {guild_id}"
-            )
-            return len(users_data)
+            return successful_updates
         except Exception as e:
             logging.error(f"Error in update_lastfm_now_playing: {e}")
             return 0
@@ -204,84 +225,6 @@ class MusicEvents(Cog):
             logging.error(f"Error updating LastFM now playing: {e}")
             return False
 
-    async def _send_lastfm_scrobble(
-        self,
-        session_key: str,
-        track_data: Dict[str, str],
-        timestamp: int,
-        api_key: str,
-        api_secret: str,
-    ):
-        """Send scrobble to LastFM"""
-        try:
-            params = {
-                "method": "track.scrobble",
-                "artist": track_data["artist"],
-                "track": track_data["track"],
-                "timestamp": str(timestamp),
-                "api_key": api_key,
-                "sk": session_key,
-            }
-
-            if "album" in track_data and track_data["album"]:
-                params["album"] = track_data["album"]
-
-            sig_content = "".join([f"{k}{params[k]}" for k in sorted(params.keys())])
-            sig_content += api_secret
-            api_sig = hashlib.md5(sig_content.encode()).hexdigest()
-            params["api_sig"] = api_sig
-            params["format"] = "json"
-
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    "http://ws.audioscrobbler.com/2.0/", data=params
-                ) as resp:
-                    if resp.status != 200:
-                        response_text = await resp.text()
-                        logging.error(f"LastFM scrobble failed: {response_text}")
-                        return False
-
-                    return True
-
-        except Exception as e:
-            logging.error(f"Error scrobbling to LastFM: {e}")
-            return False
-
-    @tasks.loop(seconds=30)
-    async def scrobble_task(self):
-        """Task to check and process pending scrobbles"""
-        current_time = int(time.time())
-
-        for user_id, timer_data in list(self.lastfm_scrobble_timers.items()):
-            if timer_data["scrobble_time"] <= current_time:
-                api_key, api_secret = await self.get_lastfm_api_credentials()
-                if api_key and api_secret:
-                    try:
-                        session_key = timer_data["session_key"]
-                        track_data = timer_data["track_data"]
-                        timestamp = int(time.time())
-
-                        success = await self._send_lastfm_scrobble(
-                            session_key, track_data, timestamp, api_key, api_secret
-                        )
-
-                        if success:
-                            logging.info(
-                                f"Successfully scrobbled track for user {user_id}"
-                            )
-                    except Exception as e:
-                        logging.error(f"Error scrobbling track for user {user_id}: {e}")
-                else:
-                    logging.warning(
-                        f"Cannot scrobble for user {user_id} - API credentials not available"
-                    )
-
-                del self.lastfm_scrobble_timers[user_id]
-
-    @scrobble_task.before_loop
-    async def before_scrobble_task(self):
-        await self.bot.wait_until_ready()
-
     @Cog.listener()
     async def on_wavelink_track_start(self, payload: TrackStartEventPayload) -> None:
         client = cast(CoffinPlayer, payload.player)
@@ -289,6 +232,8 @@ class MusicEvents(Cog):
 
         if not client:
             return
+
+        self.voice_client_last_activity[client.guild.id] = int(time.time())
 
         if client.context and track.source != "local":
             track_title = track.title
@@ -307,19 +252,30 @@ class MusicEvents(Cog):
                 "artist": artist,
                 "track": title,
                 "album": "",
-                "duration": track.length // 1000,  # Convert ms to seconds
+                "duration": track.length // 1000,
             }
 
-            scrobbling_users_count = await self.update_lastfm_now_playing(
+            now_playing_users_count = await self.update_lastfm_now_playing(
                 client.guild.id, track_data
             )
 
-            await client.send_panel(track, scrobbling_users_count)
+            await client.send_panel(track, now_playing_users_count)
 
     @Cog.listener()
     async def on_voice_state_update(
         self, member: Member, before: VoiceState, after: VoiceState
     ):
+        if member.id == self.bot.user.id:
+            if after.channel and not before.channel:
+                guild_id = after.channel.guild.id
+                self.voice_client_last_activity[guild_id] = int(time.time())
+
+            elif before.channel and not after.channel:
+                guild_id = before.channel.guild.id
+                if guild_id in self.voice_client_last_activity:
+                    del self.voice_client_last_activity[guild_id]
+            return
+
         if member.bot:
             return
 
@@ -386,21 +342,6 @@ class MusicEvents(Cog):
                                         member.id
                                     )
 
-                                current_time = int(time.time())
-                                track_position = player.position // 1000
-                                duration = track.length // 1000
-                                remaining_time = duration - track_position
-
-                                if remaining_time > 30:
-                                    scrobble_time = min(remaining_time // 2, 240)
-                                    self.lastfm_scrobble_timers[member.id] = {
-                                        "guild_id": guild_id,
-                                        "track_data": track_data,
-                                        "scrobble_time": current_time + scrobble_time,
-                                        "session_key": session_data["session_key"],
-                                        "username": session_data["username"],
-                                    }
-
                                 await player.refresh_panel()
                 except Exception as e:
                     logging.error(f"Error handling voice state update: {e}")
@@ -415,9 +356,6 @@ class MusicEvents(Cog):
                     ):
                         self.lastfm_now_playing_users[guild_id].remove(member.id)
 
-                    if member.id in self.lastfm_scrobble_timers:
-                        del self.lastfm_scrobble_timers[member.id]
-
                     player = None
                     for p in self.bot.voice_clients:
                         if isinstance(p, CoffinPlayer) and p.guild.id == guild_id:
@@ -426,8 +364,136 @@ class MusicEvents(Cog):
 
                     if player:
                         await player.refresh_panel()
+
+                    if (
+                        before.channel
+                        and len([m for m in before.channel.members if not m.bot]) == 0
+                    ):
+                        try:
+                            if (
+                                player
+                                and player.channel
+                                and player.channel.id == before.channel.id
+                            ):
+                                with suppress(NotFound):
+                                    await player.disconnect()
+                                    logging.info(
+                                        f"Disconnected from voice channel: {before.channel.name} (all users left)"
+                                    )
+                        except Exception as e:
+                            logging.error(f"Failed to disconnect from voice channel: {e}")
                 except Exception as e:
                     logging.error(f"Error handling voice state update: {e}")
+
+    @tasks.loop(minutes=1)
+    async def inactive_voice_check(self):
+        """Check for inactive voice clients and disconnect them after 5 minutes of inactivity."""
+        current_time = int(time.time())
+
+        for voice_client in list(self.bot.voice_clients):
+            if not isinstance(voice_client, CoffinPlayer):
+                continue
+
+            guild_id = voice_client.guild.id
+
+            if (
+                voice_client.channel
+                and len([m for m in voice_client.channel.members if not m.bot]) == 0
+            ):
+                try:
+                    logging.info(
+                        f"Disconnecting from voice channel in guild {guild_id} because bot is alone"
+                    )
+                    with suppress(NotFound):
+                        await voice_client.disconnect()
+
+                    if guild_id in self.voice_client_last_activity:
+                        del self.voice_client_last_activity[guild_id]
+
+                    continue
+                except Exception as e:
+                    logging.error(
+                        f"Error disconnecting from empty voice channel in guild {guild_id}: {e}"
+                    )
+
+            if guild_id not in self.voice_client_last_activity:
+                if voice_client.playing():
+                    self.voice_client_last_activity[guild_id] = current_time
+                else:
+                    self.voice_client_last_activity[guild_id] = (
+                        current_time - 60
+                    ) 
+                continue
+
+            if voice_client.playing():
+                self.voice_client_last_activity[guild_id] = current_time
+                continue
+
+            if current_time - self.voice_client_last_activity[guild_id] >= 300:
+                try:
+                    logging.info(
+                        f"Disconnecting from voice channel in guild {guild_id} due to 5 minutes of inactivity"
+                    )
+                    with suppress(NotFound):
+                        await voice_client.disconnect()
+
+                    if guild_id in self.voice_client_last_activity:
+                        del self.voice_client_last_activity[guild_id]
+
+                except Exception as e:
+                    logging.error(
+                        f"Error disconnecting from inactive voice channel in guild {guild_id}: {e}"
+                    )
+
+    @inactive_voice_check.before_loop
+    async def before_inactive_voice_check(self):
+        await self.bot.wait_until_ready()
+
+    async def _send_lastfm_scrobble(
+        self,
+        session_key: str,
+        track_data: Dict[str, str],
+        timestamp: int,
+        api_key: str,
+        api_secret: str,
+    ):
+        """Send scrobble to LastFM"""
+        try:
+            params = {
+                "method": "track.scrobble",
+                "artist": track_data["artist"],
+                "track": track_data["track"],
+                "timestamp": str(timestamp),
+                "api_key": api_key,
+                "sk": session_key,
+            }
+
+            if "album" in track_data and track_data["album"]:
+                params["album"] = track_data["album"]
+
+            if "duration" in track_data and track_data["duration"]:
+                params["duration"] = str(track_data["duration"])
+
+            sig_content = "".join([f"{k}{params[k]}" for k in sorted(params.keys())])
+            sig_content += api_secret
+            api_sig = hashlib.md5(sig_content.encode()).hexdigest()
+            params["api_sig"] = api_sig
+            params["format"] = "json"
+
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    "http://ws.audioscrobbler.com/2.0/", data=params
+                ) as resp:
+                    if resp.status != 200:
+                        response_text = await resp.text()
+                        logging.error(f"LastFM scrobble failed: {response_text}")
+                        return False
+
+                    return True
+
+        except Exception as e:
+            logging.error(f"Error scrobbling to LastFM: {e}")
+            return False
 
 
 async def setup(bot: Client):

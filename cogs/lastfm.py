@@ -570,10 +570,12 @@ class LastFM(commands.Cog):
                 f"{ctx.author.id}{datetime.datetime.now().timestamp()}".encode()
             ).hexdigest()
 
-            if not hasattr(Authorization.LastFM, "pending_auth"):
-                Authorization.LastFM.pending_auth = {}
-
-            Authorization.LastFM.pending_auth[tracking_id] = ctx.author.id
+            # Store tracking ID in Redis with a 30-minute expiration
+            await self.bot.redis.set(
+                f"lastfm:auth:{tracking_id}",
+                str(ctx.author.id),
+                ex=1800,  # 30 minutes expiration
+            )
 
             callback_url = f"{Authorization.LastFM.cb_url}?tracking_id={tracking_id}"
 
@@ -688,6 +690,21 @@ class LastFM(commands.Cog):
     async def nowplaying(self, ctx: Context, *, user: discord.Member = None):
         if user is None:
             user = ctx.author
+            
+        # Check if the user is in a voice channel and scrobbling
+        if user.voice and user.voice.channel:
+            music_events = self.bot.get_cog("MusicEvents")
+            if music_events and hasattr(music_events, "lastfm_now_playing_users"):
+                guild_id = ctx.guild.id
+                if (
+                    guild_id in music_events.lastfm_now_playing_users and
+                    user.id in music_events.lastfm_now_playing_users[guild_id]
+                ):
+                    # User is in a voice channel and scrobbling, redirect to queue nowplaying
+                    music_commands = self.bot.get_cog("MusicCommands")
+                    if music_commands and hasattr(music_commands, "queue_nowplaying"):
+                        return await music_commands.queue_nowplaying(ctx)
+        
         if not (
             conf := await self.bot.db.fetchrow(
                 "SELECT * FROM lastfm.conf WHERE user_id = $1", user.id

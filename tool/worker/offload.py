@@ -72,9 +72,13 @@ def offloaded(f: Callable[P, T]) -> Callable[P, Awaitable[T]]:
 
         for attempt in range(retries):
             dask = get_dask()
-            if dask is None or dask.status == "closed":
+            if dask is None or dask.status in ("closed", "closing"):
                 try:
                     dask = await start_dask("greed", "127.0.0.1:8787")
+                    if dask.status != "running":
+                        raise RuntimeError(
+                            f"Dask client is in {dask.status} state after restart"
+                        )
                 except Exception as e:
                     if attempt == retries - 1:
                         raise RuntimeError(
@@ -84,15 +88,31 @@ def offloaded(f: Callable[P, T]) -> Callable[P, Awaitable[T]]:
                     continue
 
             try:
+                if dask.status != "running":
+                    if attempt == retries - 1:
+                        raise RuntimeError(f"Dask client is in {dask.status} state")
+                    await asyncio.sleep(1)
+                    continue
+
                 meth = partial(f, *a, **ka)
                 cf_future.dask_future = dask.submit(meth, pure=False)
                 cf_future.dask_future.add_done_callback(cf_callback)
                 cascade_future(cf_future.dask_future, cf_future)
                 return await cf_future
-            except (distributed.client.TimeoutError, distributed.client.CancelledError):
+            except (
+                distributed.client.TimeoutError,
+                distributed.client.CancelledError,
+            ) as e:
                 if attempt == retries - 1:
                     raise
                 await asyncio.sleep(1)
                 continue
+            except Exception as e:
+                if "after closing" in str(e) or "closed" in str(e):
+                    if attempt == retries - 1:
+                        raise RuntimeError(f"Dask client closed unexpectedly: {e}")
+                    await asyncio.sleep(1)
+                    continue
+                raise
 
     return offloaded_task

@@ -335,7 +335,7 @@ class Antinuke(Cog):
                     )
                 ][0]
             if audit.user_id == self.bot.user.id:
-                if "|" in audit.reason:
+                if audit.reason is not None and "|" in audit.reason:
                     audit.user = self.bot.get_user(
                         int(audit.reason.split(" | ")[-1].strip())
                     )
@@ -402,7 +402,7 @@ class Antinuke(Cog):
         else:
             return
         if entry.user_id == self.bot.user.id:
-            if "|" in entry.reason:
+            if entry.reason is not None and "|" in entry.reason:
                 entry.user = self.bot.get_user(
                     int(entry.reason.split(" | ")[-1].strip())
                 )

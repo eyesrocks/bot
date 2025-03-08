@@ -1,117 +1,222 @@
 import discord
 from discord.ext import commands
 from io import BytesIO
-from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageSequence
+from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageSequence, ImageFilter
 import os
 import json
 from loguru import logger
+from functools import lru_cache
+from typing import Dict, Tuple, Optional
+import colorsys
 
-arial_bold_font_path = "/root/greed/data/fonts/arial_bold.ttf"
+# Constants
+CARD_WIDTH = 800  # Increased width for better proportions
+CARD_HEIGHT = 400  # Increased height for better proportions
+AVATAR_SIZE = 140  # Larger avatar
+DECO_SIZE = 170  # Larger decoration
+BORDER_SIZE = 80
+BORDER_RADIUS = 30  # Increased radius for smoother corners
+BORDER_THICKNESS = 10
+BOX_WIDTH = 160  # Wider stat boxes
+BOX_HEIGHT = 70  # Increased height for better text spacing
+BOX_PADDING = 12
+BOX_COLOR = (44, 47, 51, 180)  # Added transparency
+DEFAULT_BG_COLOR = "#2f3136"
 
+# Enhanced status colors with better visibility
+STATUS_COLORS = {
+    "online": (67, 181, 129, 255),  # Brighter green
+    "idle": (250, 168, 26, 255),    # Warmer yellow
+    "dnd": (240, 71, 71, 255),      # Brighter red
+    "offline": (116, 127, 141, 255), # Lighter grey
+}
+
+# Font paths and defaults
+FONTS_DIR = "/root/greed/data/fonts"
+ARIAL_BOLD_FONT_PATH = os.path.join(FONTS_DIR, "arial_bold.ttf")
+DEFAULT_FONT_PATH = os.path.join(FONTS_DIR, "arial.ttf")
+
+def create_gradient(width: int, height: int, color1: tuple, color2: tuple) -> Image.Image:
+    """Creates a gradient background."""
+    base = Image.new('RGBA', (width, height), color1)
+    top = Image.new('RGBA', (width, height), color2)
+    mask = Image.new('L', (width, height))
+    mask_data = []
+    
+    for y in range(height):
+        mask_data.extend([int(255 * (1 - y / height))] * width)
+    
+    mask.putdata(mask_data)
+    base.paste(top, (0, 0), mask)
+    return base
+
+def adjust_color_brightness(color: str, factor: float) -> tuple:
+    """Adjusts the brightness of a hex color."""
+    # Convert hex to RGB
+    color = color.lstrip('#')
+    r = int(color[:2], 16)
+    g = int(color[2:4], 16)
+    b = int(color[4:], 16)
+    
+    # Convert to HSV
+    h, s, v = colorsys.rgb_to_hsv(r/255, g/255, b/255)
+    
+    # Adjust brightness (v)
+    v = min(1.0, v * factor)
+    
+    # Convert back to RGB
+    r, g, b = colorsys.hsv_to_rgb(h, s, v)
+    return (int(r*255), int(g*255), int(b*255))
+
+@lru_cache(maxsize=10)
+def get_font(font_path: str, size: int) -> ImageFont.FreeTypeFont:
+    """Cache and return fonts to avoid reloading. Falls back to default font if specified font cannot be loaded."""
+    try:
+        return ImageFont.truetype(font_path, size)
+    except (OSError, IOError) as e:
+        logger.warning(f"Failed to load font {font_path}: {e}")
+        try:
+            # Try default font
+            return ImageFont.truetype(DEFAULT_FONT_PATH, size)
+        except (OSError, IOError) as e:
+            logger.error(f"Failed to load default font: {e}")
+            # Last resort: Use a system font that should be available
+            return ImageFont.load_default()
 
 class Card(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.message_tracking = {}
-        self.user_preferences = {}  # In-memory dictionary to store user preferences
-        self.bot.loop.create_task(self.load_decos())  # Load decorations from the folder
-        self.decos = {}  # Holds decoration names
+        self.user_preferences = {}
+        self.decos = {}
+        self.available_fonts = set()
+        self.bot.loop.create_task(self._initialize())
+
+    async def _initialize(self):
+        """Initialize both decorations and fonts."""
+        await self.load_decos()
+        self._load_available_fonts()
+
+    def _load_available_fonts(self):
+        """Load and validate available fonts."""
+        self.available_fonts = set()
+        try:
+            if os.path.exists(FONTS_DIR):
+                for file_name in os.listdir(FONTS_DIR):
+                    if file_name.lower().endswith('.ttf'):
+                        font_path = os.path.join(FONTS_DIR, file_name)
+                        try:
+                            # Verify the font can be loaded
+                            ImageFont.truetype(font_path, 40)
+                            self.available_fonts.add(os.path.splitext(file_name)[0])
+                        except (OSError, IOError) as e:
+                            logger.warning(f"Failed to load font {file_name}: {e}")
+            
+            if not self.available_fonts:
+                logger.warning("No valid fonts found in fonts directory")
+        except Exception as e:
+            logger.error(f"Error loading fonts: {e}")
+
+    def _get_valid_font_path(self, font_name: str) -> str:
+        """Get a valid font path, falling back to default if necessary."""
+        if font_name in self.available_fonts:
+            return os.path.join(FONTS_DIR, f"{font_name}.ttf")
+        return DEFAULT_FONT_PATH
 
     async def load_decos(self):
         """Loads all PNG and GIF decorations from the deco folder into a JSON file and handles APNG renaming."""
         deco_folder = "/root/greed/data/decos"
         deco_data = {}
 
-        for file_name in os.listdir(deco_folder):
-            if file_name.endswith(".png"):
+        try:
+            # Load existing deco data if available
+            if os.path.exists("decos.json"):
+                with open("decos.json", "r") as f:
+                    deco_data = json.load(f)
+
+            # Scan for new or modified files
+            for file_name in os.listdir(deco_folder):
+                if not file_name.endswith((".png", ".apng")):
+                    continue
+
                 file_path = os.path.join(deco_folder, file_name)
+                base_name = os.path.splitext(file_name)[0]
 
                 try:
                     with Image.open(file_path) as img:
-                        # Check if the image is an APNG
-                        if "apng" in img.format.lower():
-                            # Rename the file to have the .apng extension if it is an APNG
-                            new_file_name = file_name.replace(".png", ".apng")
+                        # Handle APNG files
+                        if "apng" in img.format.lower() and file_name.endswith(".png"):
+                            new_file_name = f"{base_name}.apng"
                             new_file_path = os.path.join(deco_folder, new_file_name)
 
-                            # Rename the file
-                            os.rename(file_path, new_file_path)
-                            # Update the decoration data with the new file name
-                            deco_data[file_name.replace(".png", "")] = new_file_name
+                            # Only rename if necessary
+                            if not os.path.exists(new_file_path):
+                                os.rename(file_path, new_file_path)
+                            deco_data[base_name] = new_file_name
                         else:
-                            # If it's not an APNG, keep the original PNG format
-                            deco_data[file_name.replace(".png", "")] = file_name
+                            deco_data[base_name] = file_name
+
                 except Exception as e:
-                    print(f"Error processing {file_name}: {e}")
-                    continue  # Skip problematic files
+                    logger.error(f"Error processing decoration {file_name}: {e}")
+                    continue
 
-        # Save decorations data into a JSON file
-        with open("decos.json", "w") as f:
-            json.dump(deco_data, f)
+            # Save updated deco data
+            with open("decos.json", "w") as f:
+                json.dump(deco_data, f, indent=2)
 
-        self.decos = deco_data  # Load into the class's in-memory dictionary
+            self.decos = deco_data
+
+        except Exception as e:
+            logger.error(f"Error loading decorations: {e}")
+            self.decos = {}
 
     @commands.Cog.listener()
     async def on_message(self, message):
         """Tracks message count and updates rank per server."""
         try:
-            if any(
-                [
-                    message.author.bot,
-                    not message.guild,
-                    not message.author,
-                ]
-            ):
+            if any([message.author.bot, not message.guild, not message.author]):
                 return
 
             guild_id = str(message.guild.id)
             user_id = str(message.author.id)
 
+            # Initialize tracking dictionaries if they don't exist
             if guild_id not in self.message_tracking:
                 self.message_tracking[guild_id] = {}
 
-            if user_id not in self.message_tracking[guild_id]:
-                self.message_tracking[guild_id][user_id] = {
-                    "message_count": 0,
-                    "rank": 1,
-                }
+            # Get or create user data with default values
+            user_data = self.message_tracking[guild_id].setdefault(
+                user_id, {"message_count": 0, "rank": 1}
+            )
 
             # Update message count
-            try:
-                self.message_tracking[guild_id][user_id]["message_count"] += 1
-            except Exception as e:
-                logger.error(f"Error updating message count: {e}")
-                self.message_tracking[guild_id][user_id] = {
-                    "message_count": 1,
-                    "rank": 1,
-                }
+            user_data["message_count"] += 1
 
-            # Update ranks
-            try:
-                # Sort users by message count
-                sorted_users = sorted(
-                    self.message_tracking[guild_id].items(),
-                    key=lambda item: item[1].get(
-                        "message_count", 0
-                    ),  # Safely get message count
-                    reverse=True,
-                )
-
-                # Update ranks
-                for rank, (uid, data) in enumerate(sorted_users, start=1):
-                    if (
-                        uid in self.message_tracking[guild_id]
-                    ):  # Check if user still exists
-                        self.message_tracking[guild_id][uid]["rank"] = rank
-
-            except Exception as e:
-                logger.error(f"Error updating ranks: {e}")
-                # If ranking fails, at least the message count was updated
+            # Only update ranks every 10 messages to reduce processing
+            if user_data["message_count"] % 10 == 0:
+                await self._update_ranks(guild_id)
 
         except Exception as e:
             logger.error(f"Error in message tracking: {e}")
-            # Don't raise the exception to prevent breaking the bot
-            return
+
+    async def _update_ranks(self, guild_id: str):
+        """Updates ranks for all users in a guild."""
+        try:
+            guild_data = self.message_tracking[guild_id]
+            
+            # Sort users by message count
+            sorted_users = sorted(
+                guild_data.items(),
+                key=lambda x: x[1]["message_count"],
+                reverse=True
+            )
+
+            # Update ranks
+            for rank, (user_id, _) in enumerate(sorted_users, 1):
+                guild_data[user_id]["rank"] = rank
+
+        except Exception as e:
+            logger.error(f"Error updating ranks: {e}")
 
     @commands.group(name="card", invoke_without_command=True)
     async def card_group(self, ctx):
@@ -123,275 +228,291 @@ class Card(commands.Cog):
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def user_card(self, ctx, member: discord.Member = None):
         """Generates and displays a user card with avatar, status, and banner."""
-        member = (
-            member or ctx.author
-        )  # Default to command sender if no member is mentioned
-
-        # Fetch user preferences from the in-memory dictionary
+        member = member or ctx.author
         user_data = self.user_preferences.get(member.id, {})
 
-        # Default preferences if no record exists
-        background_color = user_data.get("background_color", "#2f3136")
+        # Get user preferences with defaults
+        background_color = user_data.get("background_color", DEFAULT_BG_COLOR)
         avatar_deco_name = user_data.get("avatar_deco", "")
-        banner_image = user_data.get("banner", None)
-        font_name = user_data.get("font", "arial.ttf")  # Default font
-        custom_status = user_data.get(
-            "status", member.status.name.capitalize()
-        )  # Default to current status
+        font_name = user_data.get("font", "arial.ttf")
+        custom_status = user_data.get("status", member.status.name.capitalize())
 
-        # Fetch user avatar
+        # Create base card
+        card = await self._create_base_card(background_color)
+        
+        # Process avatar
+        avatar_img = await self._process_avatar(member)
+        
+        # Add avatar to card
+        card = await self._add_avatar_to_card(card, avatar_img, avatar_deco_name)
+        
+        # Add text and stats
+        card = await self._add_text_and_stats(
+            card, 
+            member, 
+            ctx.guild.id, 
+            font_name, 
+            custom_status
+        )
+
+        # Create final masked card
+        final_card = self._create_masked_card(card)
+
+        # Save and send
+        buffer = BytesIO()
+        final_card.save(buffer, format="PNG")
+        buffer.seek(0)
+        await ctx.send(file=discord.File(buffer, filename="usercard.png"))
+
+    def _create_masked_card(self, card: Image.Image) -> Image.Image:
+        """Creates the final masked card with proper rounded corners and no extra space."""
+        # Create a mask with rounded corners
+        mask = Image.new('L', (CARD_WIDTH, CARD_HEIGHT), 0)
+        mask_draw = ImageDraw.Draw(mask)
+        mask_draw.rounded_rectangle(
+            [0, 0, CARD_WIDTH, CARD_HEIGHT],
+            radius=BORDER_RADIUS,
+            fill=255
+        )
+        
+        # Create a new transparent image
+        final_card = Image.new('RGBA', (CARD_WIDTH, CARD_HEIGHT), (0, 0, 0, 0))
+        
+        # Paste the card using the mask
+        final_card.paste(card, (0, 0), mask)
+        
+        return final_card
+
+    async def _create_base_card(self, background_color: str) -> Image.Image:
+        """Creates the base card with background and border."""
+        # Create gradient background
+        color1 = adjust_color_brightness(background_color, 1.2)  # Lighter
+        color2 = adjust_color_brightness(background_color, 0.8)  # Darker
+        card = create_gradient(CARD_WIDTH, CARD_HEIGHT, color1, color2)
+        
+        # Add subtle noise texture
+        noise = Image.effect_noise((CARD_WIDTH, CARD_HEIGHT), 10).convert('RGBA')
+        noise = noise.filter(ImageFilter.GaussianBlur(radius=1))
+        card = Image.blend(card, noise, 0.02)
+        
+        # Add glass-like border effect
+        draw = ImageDraw.Draw(card)
+        
+        # Inner shadow (slightly reduced size to prevent edge artifacts)
+        shadow_color = (0, 0, 0, 50)
+        draw.rounded_rectangle(
+            [
+                2,
+                2,
+                CARD_WIDTH - 2,
+                CARD_HEIGHT - 2
+            ],
+            radius=BORDER_RADIUS,
+            fill=None,
+            outline=shadow_color,
+            width=BORDER_THICKNESS
+        )
+        
+        # Main border with glass effect (slightly reduced size)
+        border_color = (*adjust_color_brightness(background_color, 1.3), 180)
+        draw.rounded_rectangle(
+            [
+                1,
+                1,
+                CARD_WIDTH - 1,
+                CARD_HEIGHT - 1
+            ],
+            radius=BORDER_RADIUS,
+            fill=None,
+            outline=border_color,
+            width=BORDER_THICKNESS//2
+        )
+        
+        return card
+
+    async def _process_avatar(self, member: discord.Member) -> Image.Image:
+        """Processes and returns the user's avatar."""
         avatar_url = member.avatar.url if member.avatar else member.default_avatar.url
         avatar_response = await self.fetch_image(avatar_url)
         avatar_img = Image.open(BytesIO(avatar_response)).convert("RGBA")
-        deco_size = 135
-        border3_size = 60  # Fixed border size
-        avatar_size = 105
-        avatar_img = avatar_img.resize((avatar_size, avatar_size))
-        avatar_img = self.make_avatar_circular(avatar_img)
+        
+        # Resize with high-quality resampling
+        avatar_img = avatar_img.resize((AVATAR_SIZE, AVATAR_SIZE), Image.LANCZOS)
+        
+        # Create circular mask with anti-aliasing
+        mask = Image.new('L', (AVATAR_SIZE, AVATAR_SIZE), 0)
+        draw = ImageDraw.Draw(mask)
+        draw.ellipse((0, 0, AVATAR_SIZE, AVATAR_SIZE), fill=255)
+        mask = mask.filter(ImageFilter.GaussianBlur(radius=0.5))
+        
+        # Apply mask
+        avatar_img.putalpha(mask)
+        
+        # Add subtle inner shadow
+        shadow = Image.new('RGBA', (AVATAR_SIZE, AVATAR_SIZE), (0, 0, 0, 0))
+        shadow_draw = ImageDraw.Draw(shadow)
+        shadow_draw.ellipse((2, 2, AVATAR_SIZE-2, AVATAR_SIZE-2), fill=(0, 0, 0, 50))
+        shadow = shadow.filter(ImageFilter.GaussianBlur(radius=2))
+        
+        # Composite shadow and avatar
+        avatar_img = Image.alpha_composite(avatar_img, shadow)
+        
+        return avatar_img
 
-        # Create a circular border around the avatar
-        border_total_size3 = avatar_size + 17 * border3_size
-        avatar_with_border = Image.new(
-            "RGBA", (border_total_size3, border_total_size3), (0, 0, 0, 0)
+    async def _add_avatar_to_card(
+        self, 
+        card: Image.Image, 
+        avatar_img: Image.Image, 
+        deco_name: str
+    ) -> Image.Image:
+        """Adds the avatar and decoration to the card."""
+        # Create glow effect
+        glow = Image.new('RGBA', (AVATAR_SIZE + 20, AVATAR_SIZE + 20), (0, 0, 0, 0))
+        glow_draw = ImageDraw.Draw(glow)
+        glow_draw.ellipse((0, 0, AVATAR_SIZE + 20, AVATAR_SIZE + 20), fill=(255, 255, 255, 30))
+        glow = glow.filter(ImageFilter.GaussianBlur(radius=10))
+        
+        # Calculate positions
+        avatar_x = 60  # Moved slightly to the left
+        avatar_y = (CARD_HEIGHT - AVATAR_SIZE) // 2
+        
+        # Add glow
+        card.paste(glow, (avatar_x - 10, avatar_y - 10), glow)
+        
+        # Add avatar
+        card.paste(avatar_img, (avatar_x, avatar_y), avatar_img)
+        
+        # Add decoration if specified
+        if deco_name:
+            deco_path = self._get_deco_path(deco_name)
+            if deco_path:
+                try:
+                    with Image.open(deco_path) as deco_img:
+                        # Process decoration
+                        deco_img = deco_img.convert("RGBA")
+                        deco_img = deco_img.resize((DECO_SIZE, DECO_SIZE), Image.LANCZOS)
+                        
+                        # Add glow to decoration
+                        deco_glow = Image.new('RGBA', (DECO_SIZE + 20, DECO_SIZE + 20), (0, 0, 0, 0))
+                        deco_glow_draw = ImageDraw.Draw(deco_glow)
+                        deco_glow_draw.ellipse((0, 0, DECO_SIZE + 20, DECO_SIZE + 20), fill=(255, 255, 255, 20))
+                        deco_glow = deco_glow.filter(ImageFilter.GaussianBlur(radius=5))
+                        
+                        # Calculate decoration position
+                        x = avatar_x - 15
+                        y = avatar_y - 15
+                        
+                        # Add decoration glow and decoration
+                        card.paste(deco_glow, (x - 10, y - 10), deco_glow)
+                        card.paste(deco_img, (x, y), deco_img)
+                except Exception as e:
+                    logger.error(f"Error applying decoration {deco_name}: {e}")
+        
+        return card
+
+    def _get_deco_path(self, deco_name: str) -> Optional[str]:
+        """Returns the path to the decoration image."""
+        deco_path_apng = f"/root/greed/data/decos/{deco_name}.apng"
+        deco_path_png = f"/root/greed/data/decos/{deco_name}.png"
+        return (
+            deco_path_apng if os.path.exists(deco_path_apng)
+            else deco_path_png if os.path.exists(deco_path_png)
+            else None
         )
-        draw = ImageDraw.Draw(avatar_with_border)
-        draw.ellipse(
-            (0, 0, border_total_size3, border_total_size3), fill="black"
-        )  # Black border
-        avatar_with_border.paste(avatar_img, (border3_size, border3_size), avatar_img)
 
-        # Apply avatar decoration if specified and place it over the avatar
-        deco_path = None
-        if avatar_deco_name:
-            # Check for both PNG and APNG files
-            deco_path_png = f"/root/greed/data/decos/{avatar_deco_name}.png"
-            deco_path_apng = f"/root/greed/data/decos/{avatar_deco_name}.apng"
-
-            # First, check for APNG file
-            if os.path.exists(deco_path_apng):
-                deco_path = deco_path_apng
-            elif os.path.exists(deco_path_png):
-                deco_path = deco_path_png
-
-        # Create card canvas with rounded corners
-        width, height = 600, 300
-        total_avatar_size = avatar_size + 60 * 2
-        # Handle banner
-        # Handle banner
-        banner_url = user_data.get("banner_url")
-        if banner_url:
-            banner_img = await self.fetch_image(banner_url)
-            banner_img = Image.open(BytesIO(banner_img)).convert("RGBA")
-            banner_img = banner_img.resize((600, 300))  # Resize banner to fit the card
-        else:
-            banner_img = Image.new(
-                "RGBA", (600, 300), background_color
-            )  # Default background
-
-        # Create card canvas with rounded corners
-        card = Image.new(
-            "RGBA", (600, 300), (0, 0, 0, 0)
-        )  # Transparent background for the rounded corners
-
-        # Create a new background layer for the card
-        card_bg = Image.new("RGBA", (600, 300), background_color)
-        card.paste(card_bg, (0, 0))  # This applies the background color over the canvas
-
-        # Draw the rounded rectangle with a black border
+    async def _add_text_and_stats(
+        self,
+        card: Image.Image,
+        member: discord.Member,
+        guild_id: int,
+        font_name: str,
+        status: str,
+    ) -> Image.Image:
+        """Adds username, status, and stats to the card."""
         draw = ImageDraw.Draw(card)
-        border_radius = 20  # Rounded corner radius
-        border_thickness = 8  # Thickness of the black border
-
-        # Create a new background layer for the card
-        card_bg = Image.new("RGBA", (width, height), background_color)
-        card.paste(card_bg, (0, 0))
-
-        # Draw the rounded rectangle with a black border around the card
-        draw.rounded_rectangle(
-            [
-                border_thickness,
-                border_thickness,
-                width - border_thickness,
-                height - border_thickness,
-            ],
-            radius=border_radius,
-            fill=background_color,
+        
+        # Load fonts with proper fallback
+        main_font = get_font(self._get_valid_font_path(font_name), 48)  # Larger font
+        stats_font = get_font(ARIAL_BOLD_FONT_PATH, 20)  # Larger stats font
+        
+        # Add text shadow effect
+        def draw_text_with_shadow(x, y, text, font, color):
+            # Draw shadow
+            shadow_color = (0, 0, 0, 100)
+            draw.text((x+2, y+2), text, font=font, fill=shadow_color)
+            # Draw main text
+            draw.text((x, y), text, font=font, fill=color)
+        
+        # Draw username with shadow
+        draw_text_with_shadow(240, 140, member.name, main_font, (255, 255, 255, 255))
+        
+        # Draw status with glow effect
+        status_words = " ".join(status.split()[:4])
+        status_color = STATUS_COLORS.get(status_words.lower(), (255, 255, 255, 255))
+        
+        # Status indicator circle
+        circle_x, circle_y = 240, 200
+        circle_radius = 8
+        draw.ellipse(
+            [circle_x, circle_y, circle_x + circle_radius*2, circle_y + circle_radius*2],
+            fill=status_color
         )
-        card.paste(banner_img, (0, 0), banner_img)
-        draw.rounded_rectangle(
-            [
-                border_thickness - 1,
-                border_thickness - 1,
-                width - border_thickness + 1,
-                height - border_thickness + 1,
-            ],
-            radius=border_radius,
-            outline="black",
-            width=border_thickness,
+        
+        # Draw status text
+        draw_text_with_shadow(265, 195, status_words, stats_font, status_color)
+        
+        # Get and draw stats with modern box design
+        message_count, server_rank = self._get_user_stats(str(guild_id), str(member.id))
+        
+        # Function to draw modern stat box
+        def draw_stat_box(x, y, label, value):
+            # Box background with gradient
+            box_gradient = create_gradient(
+                BOX_WIDTH, 
+                BOX_HEIGHT,
+                (*BOX_COLOR[:3], 150),  # More transparent at top
+                (*BOX_COLOR[:3], 200)   # Less transparent at bottom
+            )
+            card.paste(box_gradient, (x, y), box_gradient)
+            
+            # Draw stat value
+            value_font = get_font(ARIAL_BOLD_FONT_PATH, 24)
+            label_font = get_font(ARIAL_BOLD_FONT_PATH, 16)
+            
+            # Center align text
+            value_w = value_font.getlength(str(value))
+            label_w = label_font.getlength(label)
+            
+            value_x = x + (BOX_WIDTH - value_w) // 2
+            label_x = x + (BOX_WIDTH - label_w) // 2
+            
+            # Adjusted vertical positioning - value at top, label at bottom with more space
+            draw_text_with_shadow(value_x, y + 12, str(value), value_font, (255, 255, 255, 255))
+            draw_text_with_shadow(label_x, y + BOX_HEIGHT - 30, label, label_font, (200, 200, 200, 255))
+        
+        # Draw stat boxes
+        draw_stat_box(240, 260, "MESSAGES", message_count)
+        draw_stat_box(240 + BOX_WIDTH + 20, 260, "RANK", f"#{server_rank}")
+        
+        return card
+
+    def _get_user_stats(self, guild_id: str, user_id: str) -> Tuple[int, int]:
+        """Returns message count and server rank for a user."""
+        user_data = self.message_tracking.get(guild_id, {}).get(user_id, {})
+        return (
+            user_data.get("message_count", 0),
+            user_data.get("rank", 1)
         )
-
-        # Add padding around the avatar to prevent clipping
-        avatar_border_padding = 20  # Add padding to the avatar
-        total_avatar_size = (
-            avatar_size + avatar_border_padding * 2
-        )  # Total size with padding
-
-        avatar_with_padding = Image.new(
-            "RGBA", (total_avatar_size, total_avatar_size), (0, 0, 0, 0)
-        )  # Transparent padded image
-        avatar_with_padding.paste(
-            avatar_img, (avatar_border_padding, avatar_border_padding)
-        )  # Paste the avatar into the center of the padded area
-
-        # Paste avatar with border and padding onto the card
-        card.paste(
-            avatar_with_padding,
-            (30, (height - total_avatar_size) // 2),
-            avatar_with_padding,
-        )
-
-        # If deco_path is set, apply decoration over the avatar
-        if deco_path:
-            with Image.open(deco_path) as deco_img:
-                deco_img = deco_img.convert("RGBA")
-                deco_img = deco_img.resize(
-                    (deco_size, deco_size)
-                )  # Resize decoration to match the avatar size
-                x, y = (
-                    border3_size + avatar_border_padding - 43,
-                    border3_size + avatar_border_padding - 0,
-                )  # Position of decoration
-                card.paste(
-                    deco_img, (x, y), deco_img
-                )  # Apply decoration over the avatar
-
-        # Set the path to the font file
-        font_path = f"/root/greed/data/fonts/{font_name}.ttf"  # Path to the custom font
-
-        # Try loading the custom font
-        try:
-            font = ImageFont.truetype(font_path, 40)
-        except IOError:
-            # If the custom font is not found, fall back to the default 'arial.ttf'
-            font_path = "/root/greed/data/fonts/arial.ttf"
-            font = ImageFont.truetype(font_path, 40)
-
-        # Draw username and status
-        username_text = f"{member.name}"
-        draw.text((180, 110), username_text, font=font, fill=(255, 255, 255))
-
-        # Draw user status
-        status_words = custom_status.split()[:4]  # Limit to 4 words
-        status_text = " ".join(status_words)
-        status_colors = {
-            "online": (67, 181, 129),
-            "idle": (250, 168, 26),
-            "dnd": (240, 71, 71),
-            "offline": (116, 127, 141),
-        }
-        status_color = status_colors.get(status_text.lower(), (255, 255, 255))
-        draw.text((180, 160), f"{status_text}", font=font, fill=status_color)
-
-        # Message count and global rank
-        guild_id = str(ctx.guild.id)  # Get the guild ID as a string for uniqueness
-        message_count = (
-            self.message_tracking.get(guild_id, {})
-            .get(str(member.id), {})
-            .get("message_count", 0)
-        )
-        server_rank = (
-            self.message_tracking.get(guild_id, {})
-            .get(str(member.id), {})
-            .get("rank", 1)
-        )
-
-        # Create smaller rounded boxes for message count and global rank, side by side
-        box_width = 120  # Smaller width
-        box_height = 40  # Smaller height
-        box_padding = 8
-
-        # Dark grey color for the box
-        box_color = (44, 47, 51)
-
-        # Message count box
-        draw.rounded_rectangle(
-            [180, 220, 180 + box_width, 220 + box_height], radius=10, fill=box_color
-        )
-        draw.text(
-            (180 + box_padding, 220 + box_padding),
-            f"msgs: {message_count}",
-            font=ImageFont.truetype(arial_bold_font_path, 16),
-            fill="white",
-        )
-
-        # Global rank box (next to message count box)
-        draw.rounded_rectangle(
-            [180 + box_width + 10, 220, 180 + 2 * box_width + 10, 220 + box_height],
-            radius=10,
-            fill=box_color,
-        )
-        draw.text(
-            (180 + box_width + 10 + box_padding, 220 + box_padding),
-            f"rank: {server_rank}",
-            font=ImageFont.truetype(arial_bold_font_path, 16),
-            fill="white",
-        )
-
-        # Save image to a buffer
-        buffer = BytesIO()
-        card.save(buffer, format="PNG")
-        buffer.seek(0)
-
-        # Send image
-        file = discord.File(buffer, filename="usercard.png")
-        await ctx.send(file=file)
-
-    #    @card_group.command(name="status")
-    #    async def set_status(self, ctx, *, custom_text: str):
-    #        """Set a custom status text."""
-    #        # Limit custom text to 4 words
-    #        custom_status = " ".join(custom_text.split()[:4])
-    #
-    #        # Update the user's custom status in the preferences
-    #        if ctx.author.id not in self.user_preferences:
-    #            self.user_preferences[ctx.author.id] = {}
-    #
-    #        self.user_preferences[ctx.author.id]['status'] = custom_status
-    #        await ctx.success(f"Your custom status has been updated to: `{custom_status}`.")
-
-    #    @card_group.command(name="banner")
-    #    async def card_set_banner(self, ctx, url: str = None):
-    #        """Set a custom banner for the user card."""
-    #        # Allow setting the banner from an attachment or a URL
-    #        if url:
-    #            # Validate if it's a URL or attachment
-    #            if url.startswith("http"):
-    #                self.user_preferences[ctx.author.id] = self.user_preferences.get(ctx.author.id, {})
-    #                self.user_preferences[ctx.author.id]['banner_url'] = url
-    #                await ctx.success(f"Your banner has been updated to: {url}")
-    #            else:
-    #                await ctx.fail("Please provide a valid image URL.")
-    #        else:
-    #            if len(ctx.message.attachments) > 0:
-    #                # Get the first attachment's URL
-    #                url = ctx.message.attachments[0].url
-    #                self.user_preferences[ctx.author.id] = self.user_preferences.get(ctx.author.id, {})
-    #                self.user_preferences[ctx.author.id]['banner_url'] = url
-    #                await ctx.success(f"Your banner has been updated with your attachment.")
-    #            else:
-    #                await ctx.fail("You need to provide a valid image URL or an attachment.")
 
     @card_group.command(name="font")
-    async def set_font(self, ctx, font_name: str):
+    async def set_font(self, ctx, font_name: str = "arial"):
         """Set a custom font for the user's name in the user card."""
-        # Check if the font file exists
-        font_path = f"/root/greed/data/fonts/{font_name}.ttf"  # Modify with your actual font path
-        if not os.path.exists(font_path):
+        if font_name not in self.available_fonts:
+            available_fonts = "`, `".join(sorted(self.available_fonts)) or "None"
             return await ctx.fail(
-                f"The font `{font_name}` does not exist. Please choose a valid font."
+                f"The font `{font_name}` is not available. Available fonts: `{available_fonts}`"
             )
 
-        # Update the user's font preference
         if ctx.author.id not in self.user_preferences:
             self.user_preferences[ctx.author.id] = {}
 
@@ -463,14 +584,6 @@ class Card(commands.Cog):
         """Helper method to fetch an image from a URL."""
         async with self.bot.session.get(url) as response:
             return await response.read()
-
-    def make_avatar_circular(self, avatar_img: Image):
-        """Converts the avatar image into a circular shape."""
-        mask = Image.new("L", avatar_img.size, 0)
-        draw = ImageDraw.Draw(mask)
-        draw.ellipse((0, 0, avatar_img.size[0], avatar_img.size[1]), fill=255)
-        avatar_img.putalpha(mask)
-        return avatar_img
 
 
 # Cog setup

@@ -23,6 +23,7 @@ from .panel import Panel
 from aiohttp import ClientSession
 from discord.ext.commands import Context as BaseContext
 from typing import Union
+import logging
 
 
 class Context(BaseContext):
@@ -280,7 +281,7 @@ class CoffinPlayer(BasePlayer):
 
         if hasattr(track, "scrobbling_users") and track.scrobbling_users:
             footer.append(
-                f"{track.scrobbling_users} {'user is' if track.scrobbling_users == 1 else 'users are'} scrobbling"
+                f"{track.scrobbling_users} {'user is' if track.scrobbling_users == 1 else 'users are'} using LastFM"
             )
 
         embed = Embed(
@@ -295,23 +296,27 @@ class CoffinPlayer(BasePlayer):
 
         embed.set_footer(
             text=" • ".join(footer),
-            icon_url=source_icon or member and member.display_avatar,
+            icon_url=source_icon if source_icon else (member.display_avatar.url if member else None),
         )
         return embed
 
     async def send_panel(
-        self, track: Track, scrobbling_users_count: int = 0
+        self, track: Track, now_playing_users_count: int = 0
     ) -> Optional[Message]:
-        try:
-            track.scrobbling_users = scrobbling_users_count
-        except (AttributeError, TypeError):
-            embed = await self.embed(track, scrobbling_users_count)
-            self.controller = await self.context.send(embed=embed, view=Panel(self))
-            return self.controller
+        """Send a new player panel."""
+        if not self.context:
+            return None
+
+        if now_playing_users_count > 0:
+            track.scrobbling_users = now_playing_users_count
 
         embed = await self.embed(track)
-        self.controller = await self.context.send(embed=embed, view=Panel(self))
-        return self.controller
+        try:
+            self.controller = await self.context.send(embed=embed, view=Panel(self))
+            return self.controller
+        except (ClientException, HTTPException, OpusNotLoaded) as e:
+            logging.error(f"Error sending player panel: {e}")
+            return None
 
     async def refresh_panel(self):
         if not self.controller:
