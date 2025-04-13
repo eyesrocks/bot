@@ -56,10 +56,6 @@ from discord.ext.commands import (
     BucketType,
     CommandOnCooldown,
 )
-
-
-
-
 # from cogs.tickets import TicketView
 # from tool import MemberConverter
 Interaction.success = GreedInteraction.success
@@ -73,8 +69,6 @@ get_changes = Union[
     Guild,
     AuditLogEntry,
 ]
-
-
 @offloaded
 def read_file(filepath: str, mode: str = "rb"):
     with open(filepath, mode) as file:
