@@ -1093,7 +1093,7 @@ class Greed(Bot):
                 self.ipc = IPC(self)
                 await self.ipc.setup()
         else:
-            if not self.get_guild(1301617147964821524):
+            if not self.get_guild(1361040232035909704):
                 await self.request_invite(self.user.id)
         if not self.loaded:
             await self.levels.setup(self)
