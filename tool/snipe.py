@@ -1,11 +1,12 @@
-import discord
-import datetime
-import typing
-import asyncio
+import datetime, typing, asyncio
 from collections import deque
+from discord import (
+    Message,
+    TextChannel
+)
+from discord.ext import commands
 
-
-class SnipeError(discord.ext.commands.errors.CommandError):
+class SnipeError(commands.errors.CommandError):
     def __init__(self, message, **kwargs):
         super().__init__(message)
         self.kwargs = kwargs
@@ -16,8 +17,8 @@ class Snipe(object):
         self.bot = bot
         self.data = {}
 
-    async def add_entry(self, type: str, message: typing.Union[discord.Message, tuple]):
-        if isinstance(message, discord.Message):
+    async def add_entry(self, type: str, message: typing.Union[Message, tuple]):
+        if isinstance(message, Message):
             entry: dict = {
                 "timestamp": message.created_at.timestamp(),
                 "content": message.content,
@@ -83,7 +84,7 @@ class Snipe(object):
 
         return entry
 
-    async def get_entry(self, channel: discord.TextChannel, type: str, index: int):
+    async def get_entry(self, channel: TextChannel, type: str, index: int):
         if type.lower() == "snipe":
             if data := self.data.get(f"s-{channel.id}"):
                 if len(data) < index - 1:
@@ -134,7 +135,7 @@ class Snipe(object):
                     f"There are **no reaction removals** for **{channel.mention}**"
                 )
 
-    async def delete_entry(self, channel: discord.TextChannel, type: str, index: int):
+    async def delete_entry(self, channel: TextChannel, type: str, index: int):
         if type.lower() == "snipe":
             if data := self.data.get(f"s-{channel.id}"):
                 self.data[f"s-{channel.id}"].remove(data[index - 1])
@@ -153,8 +154,8 @@ class Snipe(object):
                     f"There has **not** been `{index}` **reactions removed** recently"
                 )
 
-    async def clear_entries(self, channel: discord.TextChannel):
-        async def pop_entry(f: str, channel: discord.TextChannel):
+    async def clear_entries(self, channel: TextChannel):
+        async def pop_entry(f: str, channel: TextChannel):
             try:
                 self.data.pop(f"{f}{channel.id}")
             except Exception:
