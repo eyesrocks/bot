@@ -1,22 +1,25 @@
 from __future__ import annotations
 
-import datetime
-import hashlib
-import aiohttp
-import discord
-import json
-import uuid
+import datetime, hashlib, aiohttp, discord, json, uuid, asyncio
 from typing import TypedDict, Union, Optional, List, Dict, Any
-from aiohttp.web import Application, Request, Response, _run_app, json_response
-import aiohttp.web
 from aiohttp_cors import setup as setup_cors, ResourceOptions, CorsViewMixin
-from discord.ext.commands import Cog, Group, Command
+from aiohttp.web import (
+    Application,
+    AppRunner,
+    TCPSite,
+    Request, 
+    Response, 
+    _run_app, 
+    json_response
+)
+from discord.ext.commands import (
+    Cog, 
+    Group, 
+    Command
+)
 from prometheus_async import aio
-import socket
 from tool.greed import Greed
-import urllib.parse
 from config import Authorization
-import asyncio
 
 
 class CommandData(TypedDict):
@@ -109,9 +112,9 @@ class WebServer(Cog):
         await self.app.cleanup()
 
     async def _run(self) -> None:
-        runner = aiohttp.web.AppRunner(self.app)
+        runner = AppRunner(self.app)
         await runner.setup()
-        site = aiohttp.web.TCPSite(runner, "0.0.0.0", 2027)
+        site = TCPSite(runner, "0.0.0.0", 2027)
         self.runner = runner
         await site.start()
 
@@ -131,7 +134,7 @@ class WebServer(Cog):
         # If there's an origin header, reflect it back to allow any origin
         if origin:
             # For localhost and other trusted origins, allow credentials
-            if origin == "http://localhost:3000" or origin.endswith(".greed.rocks"):
+            if origin == "http://localhost:3000" or origin.endswith(".eyes.rocks"):
                 response.headers["Access-Control-Allow-Origin"] = origin
                 response.headers["Access-Control-Allow-Credentials"] = "true"
             else:
@@ -155,7 +158,7 @@ class WebServer(Cog):
         # If there's an origin header, reflect it back to allow any origin
         if origin:
             # For localhost and other trusted origins, allow credentials
-            if origin == "http://localhost:3000" or origin.endswith(".greed.rocks"):
+            if origin == "http://localhost:3000" or origin.endswith(".eyes.rocks"):
                 response.headers["Access-Control-Allow-Origin"] = origin
                 response.headers["Access-Control-Allow-Credentials"] = "true"
             else:
@@ -210,7 +213,7 @@ class WebServer(Cog):
         # If there's an origin header, reflect it back to allow any origin
         if origin:
             # For localhost and other trusted origins, allow credentials
-            if origin == "http://localhost:3000" or origin.endswith(".greed.rocks"):
+            if origin == "http://localhost:3000" or origin.endswith(".eyes.rocks"):
                 response.headers["Access-Control-Allow-Origin"] = origin
                 response.headers["Access-Control-Allow-Credentials"] = "true"
             else:
@@ -251,7 +254,7 @@ class WebServer(Cog):
         # If there's an origin header, reflect it back to allow any origin
         if origin:
             # For localhost and other trusted origins, allow credentials
-            if origin == "http://localhost:3000" or origin.endswith(".greed.rocks"):
+            if origin == "http://localhost:3000" or origin.endswith(".eyes.rocks"):
                 response.headers["Access-Control-Allow-Origin"] = origin
                 response.headers["Access-Control-Allow-Credentials"] = "true"
             else:
@@ -278,7 +281,7 @@ class WebServer(Cog):
             # If there's an origin header, reflect it back to allow any origin
             if origin:
                 # For localhost and other trusted origins, allow credentials
-                if origin == "http://localhost:3000" or origin.endswith(".greed.rocks"):
+                if origin == "http://localhost:3000" or origin.endswith(".eyes.rocks"):
                     response.headers["Access-Control-Allow-Origin"] = origin
                     response.headers["Access-Control-Allow-Credentials"] = "true"
                 else:
@@ -435,7 +438,7 @@ class WebServer(Cog):
             # If there's an origin header, reflect it back to allow any origin
             if origin:
                 # For localhost and other trusted origins, allow credentials
-                if origin == "http://localhost:3000" or origin.endswith(".greed.rocks"):
+                if origin == "http://localhost:3000" or origin.endswith(".eyes.rocks"):
                     response.headers["Access-Control-Allow-Origin"] = origin
                     response.headers["Access-Control-Allow-Credentials"] = "true"
                 else:
@@ -514,7 +517,7 @@ class WebServer(Cog):
             # Add CORS headers
             origin = request.headers.get("Origin", "")
             if origin:
-                if origin == "http://localhost:3000" or origin.endswith(".greed.rocks"):
+                if origin == "http://localhost:3000" or origin.endswith(".eyes.rocks"):
                     response.headers["Access-Control-Allow-Origin"] = origin
                     response.headers["Access-Control-Allow-Credentials"] = "true"
                 else:
@@ -536,7 +539,7 @@ class WebServer(Cog):
             # Add CORS headers
             origin = request.headers.get("Origin", "")
             if origin:
-                if origin == "http://localhost:3000" or origin.endswith(".greed.rocks"):
+                if origin == "http://localhost:3000" or origin.endswith(".eyes.rocks"):
                     response.headers["Access-Control-Allow-Origin"] = origin
                     response.headers["Access-Control-Allow-Credentials"] = "true"
                 else:
@@ -649,7 +652,7 @@ class WebServer(Cog):
         origin = request.headers.get("Origin", "")
 
         if origin:
-            if origin == "http://localhost:3000" or origin.endswith(".greed.rocks"):
+            if origin == "http://localhost:3000" or origin.endswith(".eyes.rocks"):
                 response.headers["Access-Control-Allow-Origin"] = origin
                 response.headers["Access-Control-Allow-Credentials"] = "true"
             else:
