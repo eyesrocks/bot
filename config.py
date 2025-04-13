@@ -1,15 +1,11 @@
 from discord import Intents  # type: ignore
 
-CONFIG_DICT = {
+CONFIG = {
     "prefix": ".",
     "intents": Intents.all(),
     "owners": {
-        977036206179233862,
-        352190010998390796,
-        978402974667800666,
-        744806691396124673,
-        863914425445908490,
-        915350867438338058,
+        961016602944483459,
+        1294487023272595511,
     },
     "token": "MTE0OTUzNTgzNDc1Njg3NDI1MA.GSOfph.hblFTcu2t1qmcPB61TnnB_eIIu2hNXRWk6QnSo",
     "rival_api": "abc2f2fe-a27b-43c0-8b0d-5b4b76752209",

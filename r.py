@@ -36,12 +36,12 @@ _str["shorten"] = shorten_
 
 from tool.greed import Greed  # type: ignore  # noqa: E402
 from asyncio import run  # noqa: E402
-from config import CONFIG_DICT  # noqa: E402
+from config import CONFIG  # noqa: E402
 from discord import utils  # noqa: E402
 
 utils.setup_logging()
 
-bot = Greed(CONFIG_DICT)
+bot = Greed(CONFIG)
 
 
 if __name__ == "__main__":
