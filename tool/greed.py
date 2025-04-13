@@ -1,25 +1,20 @@
-# import log
-
-# log.make_dask_sink("rival")
-
 import discord_ios  # type: ignore # noqa: F401
-import traceback
-import os
-import discord
-import datetime
-import orjson
-import aiohttp
+import traceback, os, datetime, discord, orjson, aiohttp, json, asyncio, tuuid, time, redis
 from tool.important.levels import Level
-import json
 from tool.worker import start_dask, offloaded  # type: ignore
-import asyncio  # type: ignore
-import tuuid
 from tool.views import VoicemasterInterface  # type: ignore
-from loguru import logger
 from tool.important.services.Webhook import Webhook as Webhooks
-
-# from logging import getLogger
-# logger = getLogger(__name__)
+from tool.aliases import fill_commands  # type: ignore
+from tool.modlogs import Handler  # type: ignore
+from tool.processing import Transformers  # type: ignore # noqa: E402
+from tool.important import Cache, Context, Database, MyHelpCommand, Red  # type: ignore
+from tool.important.subclasses.parser import Script  # type: ignore
+from tool.important.subclasses.context import NonRetardedCache, MSG, reskin  # type: ignore
+from tool.important.runner import RebootRunner  # type: ignore
+from tool.snipe import Snipe  # type: ignore
+from tool.views import GiveawayView  # type: ignore
+from tool.important.subclasses.interaction import GreedInteraction 
+from loguru import logger
 from typing import Any, Dict, Optional, Union, Callable, Sequence
 from psutil import Process
 from aiohttp import ClientSession
@@ -38,6 +33,7 @@ from discord import (
     AllowedMentions,
     MessageReference,
     PartialMessage,
+    Interaction
 )
 from discord.ui import View
 from discord.ext import commands
@@ -46,22 +42,13 @@ from discord.ext.commands import (
     when_mentioned_or,
     BotMissingPermissions,
 )
-from tool.aliases import fill_commands  # type: ignore
-from tool.modlogs import Handler  # type: ignore
+
 from cashews import cache
 from .emotes import EMOJIS
 
 # from cogs.tickets import TicketView
-from tool.processing import Transformers  # type: ignore # noqa: E402
 from tool.managers.ipc import IPC
 from cogs.voicemaster import VmButtons
-from tool.important import Cache, Context, Database, MyHelpCommand, Red  # type: ignore
-from tool.important.subclasses.parser import Script  # type: ignore
-from tool.important.subclasses.context import NonRetardedCache, MSG, reskin  # type: ignore
-from tool.important.runner import RebootRunner  # type: ignore
-from tool.snipe import Snipe  # type: ignore
-from tool.views import GiveawayView  # type: ignore
-from tool.important.subclasses.interaction import GreedInteraction  # type: ignore # noqa: F401
 
 # from tool import MemberConverter
 from rival_tools import ratelimit, lock  # type: ignore
@@ -69,24 +56,20 @@ from tool.rival import RivalAPI, get_statistics as get_stats, Statistics  # type
 from tool.paginate import Paginate  # type: ignore
 from sys import stdout
 from .emotes import EMOJIS
-import time
 from contextlib import suppress
 
-discord.Interaction.success = GreedInteraction.success
-discord.Interaction.fail = GreedInteraction.fail
-discord.Interaction.warning = GreedInteraction.warning
-discord.Interaction.normal = GreedInteraction.normal
-discord.Interaction.voice_client = GreedInteraction.voice_client
+Interaction.success = GreedInteraction.success
+Interaction.fail = GreedInteraction.fail
+Interaction.warning = GreedInteraction.warning
+Interaction.normal = GreedInteraction.normal
+Interaction.voice_client = GreedInteraction.voice_client
+Message.edit = MSG.edit
 from pathlib import Path
-import redis
 
-# discord.message.Message.edit = edit
 get_changes = Union[
     Guild,
     AuditLogEntry,
 ]
-
-Message.edit = MSG.edit
 
 
 @offloaded
