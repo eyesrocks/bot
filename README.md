@@ -1,5 +1,0 @@
-# GreedBot
-
-- darius, aka lim (@korrosu "internet famous")
-
-# the site that is linked to greed was completely ai coded, along with most of the sites you have seen. the only difference between darius & others, he is a repulsive liar, one who has cheaped out on those around him, leaving greed the first time & having it picked up because he could barely afford anything & needed to touch grass. he was supposed to pay a developer but left, vanished into thin are as the developer was coding his bot for him, without payment & knew nothing until it obviously happened. afterwards exit-scamming his community, claiming he was selling the source for cheap, and once again, randomly vanished. he was brought back in a team to help his reputation gain what it needed to, instead decided to make cheap, ai-made, skidded premium commands for his community, simply because he "had no job" & in this case, still does not. everything made was ai related, simply for the thrill of gaining $3 from a premium member. knowing what he was doing, continued it because once more, he "had no job," or has.
