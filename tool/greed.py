@@ -277,10 +277,10 @@ class Greed(Bot):
             ]
         )
         self._cd = CooldownMapping.from_cooldown(
-            3.0, 6.0, commands.BucketType.user
+            3.0, 6.0, BucketType.user
         )
         self.__cd = CooldownMapping.from_cooldown(
-            1.0, 3.0, commands.BucketType.user
+            1.0, 3.0, BucketType.user
         )
         self.eros = "52ab341c-58c0-42f2-83ba-bde19f15facc"
         self.check(self.command_check)
@@ -1005,7 +1005,6 @@ class Greed(Bot):
             return await ctx.alternative_paginate(embeds)
         else:
             embed.description = "".join(f"{r}\n" for r in rows)
-            # t = plural(len(rows)):type.title()
             embed.set_footer(text=f"Page 1/1 ({plural(rows).do_plural(type.title())})")
             return await ctx.send(embed=embed)
 
@@ -1033,7 +1032,6 @@ class Greed(Bot):
     async def load_cogs(self):
         if self.loaded is not False:
             return
-        from pathlib import Path
 
         cogs_path = Path("cogs/")
         cogs = []
