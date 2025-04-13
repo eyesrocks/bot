@@ -151,8 +151,8 @@ class Owner(commands.Cog):
         try:
             if not (guild := self.bot.get_guild(self.guild_id)):
                 return
-            premium = guild.get_role(1305842894111768587)
-            donator = guild.get_role(1338595841962934372)
+            premium = guild.get_role(1361065985892810792)
+            donator = guild.get_role(1361066015576035458)
             tier = guild.get_role(1329427024850190387)
             if not (donator and premium and tier):
                 logger.warning("Could not find subscription roles")
@@ -187,7 +187,7 @@ class Owner(commands.Cog):
     async def saveemoji(self, ctx: Context, *emojis: discord.PartialEmoji):
         for emoji in emojis:
             await emoji.save(
-                f"assets/{emoji.name}.{'gif' if emoji.animated else 'png'}"
+                f"assets/emojis/{emoji.name}.{'gif' if emoji.animated else 'png'}"
             )
 
     @commands.command(name="resetampoules")

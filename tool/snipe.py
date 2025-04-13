@@ -4,9 +4,8 @@ from discord import (
     Message,
     TextChannel
 )
-from discord.ext import commands
-
-class SnipeError(commands.errors.CommandError):
+from discord.ext.commands.errors import CommandError
+class SnipeError(CommandError):
     def __init__(self, message, **kwargs):
         super().__init__(message)
         self.kwargs = kwargs
