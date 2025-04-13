@@ -718,14 +718,10 @@ class Greed(Bot):
         return True
 
     async def guild_count(self) -> int:
-        if self.user.name != "greed":
-            return len(self.guilds)
-        return sum(await self.ipc.roundtrip("get_guild_count"))
+        return len(self.guilds)
 
     async def user_count(self) -> int:
-        if self.user.name != "greed":
-            return sum(i for i in self.get_all_members())
-        return sum(await self.ipc.roundtrip("get_user_count"))
+        return sum(i for i in self.get_all_members())
 
     async def role_count(self) -> int:
         if self.user.name != "greed":
@@ -1343,7 +1339,7 @@ class Greed(Bot):
             try:
                 return await guild.owner.send(
                     embed=discord.Embed(
-                        description="> Left due to the guild not having over **5 members**",
+                        description="> Left due to the guild not having over **25 members**",
                         color=self.color,
                     )
                 )
@@ -1353,7 +1349,7 @@ class Greed(Bot):
         try:
             return await channels[0].send(
                 embed=discord.Embed(
-                    description="> Left due to the guild not having over **5 members**",
+                    description="> Left due to the guild not having over **2 members**",
                     color=self.color,
                 )
             )
@@ -1410,10 +1406,10 @@ class Greed(Bot):
         )
         if check:
             return await guild.leave()
-        if guild == self.get_guild(1305757833064611860):
+        if guild == self.get_guild(1361040232035909704):
             return
 
-        if len(guild.members) < 3:
+        if len(guild.members) < 25:
             # if len(guild.members) < 75:
             #     if owner := guild.owner:
             #         try:
