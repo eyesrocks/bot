@@ -1,26 +1,32 @@
-import discord_ios  # type: ignore # noqa: F401
-import traceback, os, datetime, discord, orjson, aiohttp, json, asyncio, tuuid, time, redis
-from tool.important.levels import Level
-from tool.worker import start_dask, offloaded  # type: ignore
-from tool.views import VoicemasterInterface  # type: ignore
-from tool.important.services.Webhook import Webhook as Webhooks
-from tool.aliases import fill_commands  # type: ignore
-from tool.modlogs import Handler  # type: ignore
-from tool.processing import Transformers  # type: ignore # noqa: E402
-from tool.important import Cache, Context, Database, MyHelpCommand, Red  # type: ignore
-from tool.important.subclasses.parser import Script  # type: ignore
-from tool.important.subclasses.context import NonRetardedCache, MSG, reskin  # type: ignore
-from tool.important.runner import RebootRunner  # type: ignore
-from tool.snipe import Snipe  # type: ignore
-from tool.views import GiveawayView  # type: ignore
-from tool.important.subclasses.interaction import GreedInteraction 
-from loguru import logger
+import traceback, os, datetime, discord, orjson, aiohttp, json, asyncio, tuuid, time, redis, discord_ios
+from tool.important.subclasses.context import NonRetardedCache, MSG, reskin
+from tool.rival import RivalAPI, get_statistics as get_stats, Statistics
+from tool.important import Cache, Context, Database, MyHelpCommand, Red
+from tool.important.subclasses.interaction import GreedInteraction
 from typing import Any, Dict, Optional, Union, Callable, Sequence
-from psutil import Process
-from aiohttp import ClientSession
-from discord.utils import MISSING
+from tool.important.services.Webhook import Webhook as Webhooks
+from tool.important.subclasses.parser import Script
 from discord.http import handle_message_parameters
 from discord.types.snowflake import SnowflakeList
+from tool.important.runner import RebootRunner
+from tool.worker import start_dask, offloaded
+from tool.views import VoicemasterInterface
+from tool.processing import Transformers
+from tool.important.levels import Level
+from cogs.voicemaster import VmButtons
+from tool.aliases import fill_commands
+from tool.views import GiveawayView
+from tool.paginate import Paginate
+from discord.utils import MISSING
+from aiohttp import ClientSession
+from tool.modlogs import Handler
+from contextlib import suppress
+from tool.snipe import Snipe
+from psutil import Process
+from loguru import logger
+from cashews import cache
+from pathlib import Path
+from sys import stdout
 from discord import (
     Message,
     Guild,
@@ -48,28 +54,21 @@ from discord.ext.commands import (
     CommandOnCooldown,
 )
 
-from cashews import cache
+
 from .emotes import EMOJIS
 
 # from cogs.tickets import TicketView
 from tool.managers.ipc import IPC
-from cogs.voicemaster import VmButtons
+
 
 # from tool import MemberConverter
-from rival_tools import ratelimit, lock  # type: ignore
-from tool.rival import RivalAPI, get_statistics as get_stats, Statistics  # type: ignore
-from tool.paginate import Paginate  # type: ignore
-from sys import stdout
-from .emotes import EMOJIS
-from contextlib import suppress
-
+from rival_tools import ratelimit, lock
 Interaction.success = GreedInteraction.success
 Interaction.fail = GreedInteraction.fail
 Interaction.warning = GreedInteraction.warning
 Interaction.normal = GreedInteraction.normal
 Interaction.voice_client = GreedInteraction.voice_client
 Message.edit = MSG.edit
-from pathlib import Path
 
 get_changes = Union[
     Guild,
@@ -1124,7 +1123,7 @@ class Greed(Bot):
         return message
 
     async def setup_dask(self):
-        self.dask = await start_dask("greed", "127.0.0.1:8787")
+        self.dask = await start_dask("eyes", "127.0.0.1:8787")
         await self.setup_emojis()
 
     async def setup_hook(self) -> None:
