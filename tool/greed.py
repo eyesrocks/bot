@@ -33,7 +33,10 @@ from discord import (
     AllowedMentions,
     MessageReference,
     PartialMessage,
-    Interaction
+    Interaction,
+    AllowedMentions,
+    Activity,
+    CustomActivity
 )
 from discord.ui import View
 from discord.ext import commands
@@ -41,6 +44,8 @@ from discord.ext.commands import (
     AutoShardedBot as Bot,
     when_mentioned_or,
     BotMissingPermissions,
+    BucketType,
+    CommandOnCooldown,
 )
 
 from cashews import cache
@@ -217,11 +222,11 @@ class Greed(Bot):
     def __init__(self, config: Dict[str, Any], *args, **kwargs) -> None:
         super().__init__(
             command_prefix=self.get_prefix,
-            allowed_mentions=discord.AllowedMentions(
+            allowed_mentions=AllowedMentions(
                 users=True, roles=False, everyone=False
             ),
-            activity=discord.Activity(
-                type=discord.ActivityType.custom,
+            activity=Activity(
+                type=CustomActivity,
                 name=" ",
                 state="🔗 /greedbot",
             ),
@@ -259,7 +264,7 @@ class Greed(Bot):
         self._closing_task = None
         self.transformers = Transformers(self)
         self.process = Process(os.getpid())
-        self.domain = "https://greed.rocks"
+        self.domain = "https://eyes.rocks"
         self.support_server = "https://discord.gg/greedbot"
         self.author_only_message = "**only the `author` can use this**"
         self.cache = NonRetardedCache(self)
@@ -905,8 +910,8 @@ class Greed(Bot):
                         await ctx.warning(
                             f"You're being ratelimited! Please wait {retry_after:.1f} seconds."
                         )
-                        raise commands.CommandOnCooldown(
-                            None, retry_after, commands.BucketType.default
+                        raise CommandOnCooldown(
+                            None, retry_after, BucketType.default
                         )
         except redis.RedisError as e:
             logger.error(f"Redis error in ratelimit check: {e}")
@@ -914,8 +919,8 @@ class Greed(Bot):
             bucket = self._cd.get_bucket(ctx.message)
             retry_after = bucket.update_rate_limit()
             if retry_after:
-                raise commands.CommandOnCooldown(
-                    None, retry_after, commands.BucketType.default
+                raise CommandOnCooldown(
+                    None, retry_after, BucketType.default
                 )
 
         # Check command restrictions last since they require DB query
