@@ -55,6 +55,8 @@ from discord.ext.commands import (
     BotMissingPermissions,
     BucketType,
     CommandOnCooldown,
+    CooldownMapping,
+    BucketType,
 )
 # from cogs.tickets import TicketView
 # from tool import MemberConverter
@@ -256,7 +258,6 @@ class Greed(Bot):
         self._closing_task = None
         self.transformers = Transformers(self)
         self.process = Process(os.getpid())
-        self.domain = "https://eyes.rocks"
         self.support_server = "https://discord.gg/greedbot"
         self.author_only_message = "**only the `author` can use this**"
         self.cache = NonRetardedCache(self)
@@ -275,10 +276,10 @@ class Greed(Bot):
                 if cmd.cog_name not in ("Jishaku", "events", "Owner")
             ]
         )
-        self._cd = commands.CooldownMapping.from_cooldown(
+        self._cd = CooldownMapping.from_cooldown(
             3.0, 6.0, commands.BucketType.user
         )
-        self.__cd = commands.CooldownMapping.from_cooldown(
+        self.__cd = CooldownMapping.from_cooldown(
             1.0, 3.0, commands.BucketType.user
         )
         self.eros = "52ab341c-58c0-42f2-83ba-bde19f15facc"

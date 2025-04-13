@@ -13,7 +13,7 @@ CONFIG_DICT = {
     },
     "token": "MTE0OTUzNTgzNDc1Njg3NDI1MA.GSOfph.hblFTcu2t1qmcPB61TnnB_eIIu2hNXRWk6QnSo",
     "rival_api": "abc2f2fe-a27b-43c0-8b0d-5b4b76752209",
-    "domain": "https://greed.wtf",
+    "domain": "https://eyes.rocks",
 }
 
 # testing token MTMwMTg2MTExNTMxMTAzMDMzMw.GMZuAn.BMEDBuh0Tk1MYZUs81-moajFDaV8JbcIQR1OX8
