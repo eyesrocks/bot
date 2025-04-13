@@ -1,9 +1,16 @@
-import asyncio
-import re
-from discord.abc import GuildChannel  # type: ignore
-from discord.ui import View, Button, Select, Modal, TextInput, DynamicItem  # type: ignore
-from discord.ext import commands  # type: ignore
-from discord.ext.commands import (  # type: ignore
+import asyncio, re
+from tool.important.subclasses.parser import EmbedConverter
+from discord.abc import GuildChannel
+from discord.ext import commands
+from discord.ui import (
+    View, 
+    Button, 
+    Select, 
+    Modal, 
+    TextInput, 
+    DynamicItem
+)
+from discord.ext.commands import (
     PartialEmojiConverter,
     group,
     Cog,
@@ -13,8 +20,7 @@ from discord.ext.commands import (  # type: ignore
     bot_has_permissions,
     CommandError,
 )
-from tool.important.subclasses.parser import EmbedConverter  # type: ignore
-from discord import (  # type: ignore
+from discord import (
     PermissionOverwrite,
     Member,
     Embed,
@@ -264,7 +270,7 @@ class OpenTicket(
         )
 
         if not embed:
-            embed = "{embed}{author: {user.name} && https://greed.wtf/ && {user.avatar}}$v{title: {title}}$v{content: {user.mention}}$v{description: A **ticket master** will be avaliable to you shortly. **To close the ticket** Press the button below.}$v{color: #2b2d31}".replace(
+            embed = "{embed}{author: {user.name} && https://eyes.rocks && {user.avatar}}$v{title: {title}}$v{content: {user.mention}}$v{description: A **ticket master** will be avaliable to you shortly. **To close the ticket** Press the button below.}$v{color: #2b2d31}".replace(
                 "{title}", title or "Ticket Opened"
             )
 

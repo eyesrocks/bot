@@ -61,18 +61,6 @@ class Usernames(commands.Cog):
                     except Exception:
                         pass
                 return
-                try:
-                    data = {"method": "username_change", "username": old_username}
-                    #                    return await self.bot.connection.inform(data, destinations=self.bot.ipc.sources)
-                    await self.bot.ipc.roundtrip(
-                        "send_message",
-                        channel_id=channel_ids,
-                        embed=embed.to_dict(),
-                    )
-                except Exception as e:
-                    self.logger.warning(
-                        f"Failed to send username change notifications: {e}"
-                    )
 
     @commands.Cog.listener("on_username_change")
     async def dispatch_username_change(self, username: str):
