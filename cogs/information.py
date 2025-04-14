@@ -25,7 +25,7 @@ from aiohttp import ContentTypeError
 from discord import Interaction, app_commands, Color  # type: ignore
 from discord.app_commands import Choice
 from typing import Union, Optional, List, Annotated  # type: ignore
-from tool.greed import Greed  # type: ignore
+from tool.eyes import Eyes  # type: ignore
 from tool.emotes import EMOJIS  # type: ignore
 
 # from tool.shazam import Recognizer  # type: ignore
@@ -56,7 +56,7 @@ GUILD_ID = 1301617147964821524
 
 @offloaded
 def get_timezone(location: str) -> str:
-    geolocator = Nominatim(user_agent="Greed-Bot")
+    geolocator = Nominatim(user_agent="Eyes-Bot")
     location = geolocator.geocode(location)
     if location is None:
         raise ValueError("Location not found")
@@ -276,7 +276,7 @@ class Object:
 
 
 class AuditLogParser:
-    def __init__(self, bot: Greed, logs: List[discord.AuditLogEntry]):
+    def __init__(self, bot: Eyes, logs: List[discord.AuditLogEntry]):
         self.bot = bot
         self.logs = logs
 
@@ -809,7 +809,7 @@ class Information(commands.Cog):
         embed = discord.Embed(
             color=self.bot.color,
             description=(
-                f"**[Greed](https://greed.rocks)** is serving **{num_guilds:,}** guilds "
+                f"**[Eyes](https://eyes.rocks)** is serving **{num_guilds:,}** guilds "
                 f"with **{num_users:,}** users.\n\n"
             ),
         )
@@ -1953,10 +1953,10 @@ class Information(commands.Cog):
 
     @commands.command(name="vote")
     async def vote(self, ctx):
-        """Command to send an embed with a button to vote for Greed bot on top.gg."""
+        """Command to send an embed with a button to vote for Eyes bot on top.gg."""
         bot_id = str(self.bot.user.id)  # Use the bot's ID dynamically
         embed = Embed(
-            title="Vote for Greed Bot!",
+            title="Vote for Eyes Bot!",
             color=self.bot.color,
             description=f"Vote for **{self.bot.user.name}** and get voter perks and econonmy rewards!",
         )

@@ -45,7 +45,8 @@ from discord import (
     Interaction,
     AllowedMentions,
     Activity,
-    CustomActivity
+    CustomActivity,
+    Intents,
 )
 from discord.ui import View
 from discord.ext import commands
@@ -212,7 +213,7 @@ class RatelimitManager:
         self.bot.loop.create_task(self.adjust_limits())
 
 
-class Greed(Bot):
+class Eyes(Bot):
     def __init__(self, config: Dict[str, Any], *args, **kwargs) -> None:
         super().__init__(
             command_prefix=self.get_prefix,
@@ -225,7 +226,7 @@ class Greed(Bot):
                 state="🔗 /greedbot",
             ),
             strip_after_prefix=True,
-            intents=config["intents"],
+            intents=Intents.all(),
             case_insensitive=True,
             owner_ids=config["owners"],
             anti_cloudflare_ban=True,

@@ -35,7 +35,7 @@ from loguru import logger
 from tool.emotes import EMOJIS
 from discord import Embed, ui, Interaction
 from discord import ui, Embed, ButtonStyle
-from tool.greed import Greed
+from tool.eyes import Eyes
 import time
 
 log = logger
@@ -477,7 +477,8 @@ EMOJIS["diamond"] = "💎"
 
 
 class Economy(commands.Cog):
-    def __init__(self, bot: Greed):
+    def __init__(self, bot: Eyes):
+
         self.bot = bot
         self.winner = None
         self.first_wealthy_user = None  # Track the first user to hit 10 million

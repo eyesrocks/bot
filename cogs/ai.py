@@ -132,8 +132,8 @@ class AI:
         ret = ret.replace("<br>", "")
         ret = (
             ret.replace(", try unlimited chat https://www.blackbox.ai/", "")
-            .replace("blackbox.ai", "greed")
-            .replace("blackbox", "greed")
+            .replace("blackbox.ai", "eyes.rocks")
+            .replace("blackbox", "eyes")
         )
         return ret
 
@@ -216,7 +216,7 @@ class ai(commands.Cog):
                     ]
                 )
         except Exception as e:
-            if ctx.author.name == "aiohttp":
+            if ctx.author.name == "stabbed.me":
                 raise e
             raise commands.CommandError("that was a flagged prompt")
 

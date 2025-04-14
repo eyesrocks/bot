@@ -1,44 +1,27 @@
-import discord
+import discord, aiohttp, datetime, random
 from discord import (
-    CustomActivity,
-    Embed,
-    Guild,
-    Invite,
     Member,
-    Message,
-    Permissions,
-    Status,
-    Thread,
     User,
-    Message,
-    MessageType,
+    Webhook,
 )
-import datetime
-import os
-import sys
-import random
-import asyncio
 from discord.ext import commands, tasks
 from tool.important import Context  # type: ignore
 from jishaku.codeblocks import codeblock_converter
-from discord import User, Member, Guild
 from typing import Union, Optional, Literal
 from loguru import logger
-from tool.greed import Greed
+from tool.eyes import Eyes
 from asyncio import TimeoutError, sleep
-from discord import Webhook
-import aiohttp
 from cogs.economy import format_int
 
 
 class Owner(commands.Cog):
-    def __init__(self, bot: Greed):
+    def __init__(self, bot: Eyes):
         self.bot = bot
-        self.guild_id = 1301617147964821524
+        self.guild_id = 1361040232035909704
         self.cooldowns = {}
         self.cooldown_time = 3
-        self.static_message = "<@&1302845236242022440>"
-        self.webhook_url = "https://discord.com/api/webhooks/1312262024750825484/fzvkQJDh5PbZshuDuoGz_VNpxwDlN5GS9O-xc0XPgI6u6__6EhDevYTXopAeBOG4-g7Z"
+        self.static_message = "<@&1361147961295372520>"
+        self.webhook_url = "https://discord.com/api/webhooks/1361149405201436882/VRNSkCjjC_l0zRWXxrgFsrxYOe1ADEmYjfxJ2nAqroKz1kt7SZrYZSk96QUhIpkBR9or"
         self.check_subs.start()
         self.check_boosts.start()
 
@@ -200,7 +183,7 @@ class Owner(commands.Cog):
     @commands.group(name="donator", invoke_without_command=True)
     @commands.is_owner()
     async def donator(self, ctx: commands.Context, *, member: Union[Member, User]):
-        role_id = 1338595841962934372  # Donator role ID
+        role_id = 1361066015576035458  # Donator role ID
         guild = ctx.guild
         role = guild.get_role(role_id)
 
@@ -870,7 +853,7 @@ class Owner(commands.Cog):
         )
 
         tos_embed = discord.Embed(
-            title="Greed Bot - Terms of Service", color=self.bot.color
+            title="Eyes Bot - Terms of Service", color=self.bot.color
         )
         tos_embed.set_thumbnail(url=bot_avatar_url)
 
@@ -918,8 +901,8 @@ class Owner(commands.Cog):
             value=(
                 "Violations of these rules will result in consequences ranging from warnings to permanent blacklisting.\n"
                 "- Minor offenses may result in temporary mutes or warnings.\n"
-                "- Repeated or severe violations will lead to a **permanent ban** from Greed Bot.\n"
-                "By using Greed Bot, you **agree** to these terms and acknowledge that punishments are at staff discretion."
+                "- Repeated or severe violations will lead to a **permanent ban** from Eyes Bot.\n"
+                "By using Eyes Bot, you **agree** to these terms and acknowledge that punishments are at staff discretion."
             ),
             inline=False,
         )
@@ -927,7 +910,7 @@ class Owner(commands.Cog):
         # Reaction Embed
         react_embed = discord.Embed(
             title="Notifications",
-            description="-# React here to get updates on greed",
+            description="-# React here to get updates on eyes",
             color=self.bot.color,
         )
 
@@ -966,7 +949,7 @@ class Owner(commands.Cog):
         embed.set_thumbnail(url=self.bot.user.display_avatar)
         embed.add_field(name="invite", value=invite, inline=True)
         embed.set_footer(
-            text=f"greed joined a server | we are at {await self.bot.guild_count():,} servers"
+            text=f"eyes joined a server | we are at {await self.bot.guild_count():,} servers"
         )
 
         # Send the embed to the designated channel

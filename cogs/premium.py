@@ -1,18 +1,24 @@
-from discord import User, Asset, Member, Embed, File, Message  # type: ignore
-from discord.ext.commands import (  # type: ignore
+import orjson, lxml, string, os, random, io, humanize, re, faster_whisper, ctranslate2
+from discord import (
+    User, 
+    Asset, 
+	Member, 
+	Embed, 
+	File, 
+	Message
+)
+from discord.ext.commands import (
 	Cog,
 	Context,
 	check,
 	hybrid_group,
 )
-import orjson
 from tool.important.services import get_bing_results
 from bs4 import BeautifulSoup
 from aiomisc.backoff import asyncretry
 from itertools import chain
 from lxml import html
 from DataProcessing import ServiceManager
-import lxml
 from httpx import AsyncClient
 from rival_tools import timeit
 from aiofiles import open as async_open
@@ -22,8 +28,6 @@ from rival_tools import thread, lock, ratelimit  # type: ignore
 from tool.worker import offloaded
 from tool.pinterest import Pinterest  # type: ignore
 from tool.pinpostmodels import Model  # type: ignore
-from PIL import Image  # type: ignore
-import imagehash as ih  # type: ignore
 from io import BytesIO
 from logging import getLogger
 from tool.worker import offloaded
@@ -33,9 +37,6 @@ from typing import Union, Optional  # type: ignore
 from asyncio.subprocess import PIPE  # type: ignore
 from aiohttp import ClientSession  # type: ignore
 from contextlib import suppress  # type: ignore
-import os  # type: ignore
-import string  # type: ignore
-import random  # type: ignore
 from aiomisc.backoff import asyncretry  # type: ignore
 import datetime  # type: ignore
 import asyncio  # type: ignore
@@ -46,15 +47,12 @@ from discord.utils import chunk_list  # type: ignore
 from rust_chart_generator import create_chart  # type: ignore
 from tool.expressions import YOUTUBE_WILDCARD  # type: ignore
 from tool.important.services.Twitter import Tweet, from_id
-import humanize  # type: ignore
 from cogs.information import get_instagram_user  # type: ignore
 from tuuid import tuuid  # type: ignore
-import io  # type: ignore
 from tool.important.services.Eros import PostResponse  # type: ignore
 from tool.processing.media import MediaHandler  # type: ignore
 from cashews import cache  # type: ignore
 from aiohttp import ClientSession as Session  # type: ignore
-import re
 from loguru import logger
 from voice import save_file
 
@@ -78,8 +76,6 @@ async def do_transcribe(filepath: str):
 def do_whisper(filepath: str):
 	from voice import Whisper
 	whisper = Whisper()
-	import faster_whisper, ctranslate2
-	import os
 	text = ""
 	segments, _ = whisper.model.transcribe(filepath, vad_filter=True)
 	result = "".join(r.text for r in [m for m in segments])
@@ -183,7 +179,7 @@ async def donator_check(ctx: Context, member: Optional[Union[Member, User]] = No
 		return True
 	if (
 		member
-		in ctx.bot.get_guild(1262921792440242286).get_role(1262957377427341383).members
+		in ctx.bot.get_guild(1361040232035909704).get_role(1262957377427341383).members
 	):
 		return True
 	data = await ctx.bot.db.fetchrow(
@@ -195,9 +191,9 @@ async def donator_check(ctx: Context, member: Optional[Union[Member, User]] = No
 		):
 			return
 		if member:
-			m = f"{member.mention} doesn't have [**greed Premium**](https://discord.gg/greedbot)"
+			m = f"{member.mention} doesn't have [**eyes premium**](https://discord.gg/greedbot)"
 		else:
-			m = "[**greed Premium**](https://discord.gg/greedbot) is **required for this command**"
+			m = "[**eyes premium**](https://discord.gg/greedbot) is **required for this command**"
 		await ctx.fail(m)
 		return False
 	return True
@@ -254,8 +250,6 @@ def image_hash(data: bytes):
 	from io import BytesIO
 	from PIL import Image
 	import imagehash as ih
-	import random
-	import string
 
 	image = BytesIO(data)
 	result = str(ih.average_hash(image=Image.open(image), hash_size=8))

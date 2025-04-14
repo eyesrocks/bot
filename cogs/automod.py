@@ -5,7 +5,7 @@ from discord.ext import commands
 from tool.important import Context  # type: ignore
 from typing import Union  # type: ignore
 from discord import Guild
-from tool.greed import Greed  # type: ignore
+from tool.eyes import Eyes  # type: ignore
 from tool.emotes import EMOJIS
 
 TUPLE = ()
@@ -15,7 +15,7 @@ default_timeout = 20
 
 
 class Automod(commands.Cog):
-    def __init__(self: "Automod", bot: Greed):
+    def __init__(self: "Automod", bot: Eyes):
         self.bot = bot
 
     async def check_setup(self, guild: Guild) -> bool:
@@ -1224,5 +1224,5 @@ class Automod(commands.Cog):
         )
 
 
-async def setup(bot: Greed):
+async def setup(bot: Eyes):
     await bot.add_cog(Automod(bot))

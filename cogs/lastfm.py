@@ -12,7 +12,7 @@ import orjson
 from discord.ext import commands, menus
 from typing import Any, Union
 from tool.important import Context  # type: ignore
-from tool.greed import Greed  # type: ignore
+from tool.eyes import Eyes  # type: ignore
 from tool.emotes import EMOJIS
 from PIL import ImageDraw, ImageFont
 from tool.worker import offloaded
@@ -401,7 +401,7 @@ class LastFMLoginView(discord.ui.View):
 
 
 class LastFM(commands.Cog):
-    def __init__(self, bot: Greed):
+    def __init__(self, bot: Eyes):
         self.bot = bot
         self.requester = LastFMHTTPRequester(api_key="260c08af4a7f26f90743f66637572031")
         self.vars = [

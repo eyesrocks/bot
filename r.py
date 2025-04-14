@@ -34,14 +34,14 @@ __int["minimum"] = minimum_
 __int["positive"] = positive_
 _str["shorten"] = shorten_
 
-from tool.greed import Greed  # type: ignore  # noqa: E402
+from tool.eyes import Eyes  # type: ignore  # noqa: E402
 from asyncio import run  # noqa: E402
 from config import CONFIG  # noqa: E402
 from discord import utils  # noqa: E402
 
 utils.setup_logging()
 
-bot = Greed(CONFIG)
+bot = Eyes(CONFIG)
 
 
 if __name__ == "__main__":

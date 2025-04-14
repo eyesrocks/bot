@@ -13,7 +13,7 @@ import json
 from tool.important.services.twitch import TwitchService
 from tool.important.services.twitch import Stream, Channel, StreamResponse
 
-from tool.greed import Greed
+from tool.eyes import Eyes
 from loguru import logger
 
 class StreamStatus(Enum):
@@ -134,7 +134,7 @@ class FeedManager:
     - Adaptive polling with error handling
     """
 
-    def __init__(self, bot: Greed) -> None:
+    def __init__(self, bot: Eyes) -> None:
         """
         Initialize the feed manager.
 

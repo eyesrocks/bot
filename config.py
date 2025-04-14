@@ -1,8 +1,5 @@
-from discord import Intents  # type: ignore
-
 CONFIG = {
-    "prefix": ".",
-    "intents": Intents.all(),
+    "prefix": ";",
     "owners": {
         961016602944483459,
         1294487023272595511,
@@ -34,7 +31,7 @@ class Authorization:
         api_key = "ac82ef7e341d3e9dd71c2e7f5625b6a8"
         api_secret = "1008d94193db951eae45e3ebf9a9a034"
         pending_auth = {}
-        cb_url = "https://api.greed.rocks/callback"
+        cb_url = "https://api.eyes.rocks/callback"
 
     class Outages:
         api_key = "greed_outages_api_key_2024_because_im_a_boss_85_2007_noscopes"
