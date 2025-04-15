@@ -21,7 +21,7 @@ class Vanity(commands.Cog):
 
     @commands.group(
         name="vanity",
-        example=",vanity",
+        example=";vanity",
         invoke_without_command=True,
     )
     @commands.has_permissions(manage_roles=True)
