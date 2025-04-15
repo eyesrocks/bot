@@ -124,7 +124,7 @@ class Confessions(Cog):
     @confessions.command(
         name="unmute",
         brief="unmute a member that sent a specified confession",
-        example="confessions unmute @sudosql",
+        example="confessions unmute @stabbed.me",
     )
     @has_permissions(manage_messages=True)
     async def connfessions_unmute(self, ctx: Context, *, confession: str):
