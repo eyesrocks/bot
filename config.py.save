@@ -5,10 +5,10 @@ CONFIG_DICT = {
     "intents": Intents.all(),
     "owners": {
         961016602944483459,
-        1294487023272595511
+        1294487023272595511,
     
     },
-    "token": "MTE0OTUzNTgzNDc1Njg3NDI1MA.GVpIbW.lvZYmGc_g6QdvZyy649OxNtMen5v3Quc_ZlOgM",
+    "token": "MTE0OTUzNTgzNDc1Njg3NDI1MA.GSOfph.hblFTcu2t1qmcPB61TnnB_eIIu2hNXRWk6QnSo",
     "rival_api": "abc2f2fe-a27b-43c0-8b0d-5b4b76752209",
     "domain": "https://eyes.rocks",
 }
