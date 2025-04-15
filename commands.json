@@ -2954,13 +2954,13 @@
     "Instances": [
         {
             "name": "instance",
-            "brief": "manage your instance of greed",
+            "brief": "manage your instance of eyes",
             "example": "No usage example provided",
             "perms": "None"
         },
         {
             "name": "instance create",
-            "brief": "create your instance of greed",
+            "brief": "create your instance of eyes",
             "example": "No usage example provided",
             "perms": "None"
         },
@@ -2978,7 +2978,7 @@
         },
         {
             "name": "instance restart",
-            "brief": "restart your instance of greed",
+            "brief": "restart your instance of eyes",
             "example": "No usage example provided",
             "perms": "None"
         },
