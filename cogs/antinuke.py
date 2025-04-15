@@ -25,7 +25,7 @@ from collections import defaultdict
 from typing import Optional, Union
 from contextlib import suppress
 from loguru import logger
-from tool.greed import Eyes
+from tool.eyes import Eyes
 import random
 import discord
 
