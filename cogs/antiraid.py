@@ -20,7 +20,7 @@ class Antiraid(commands.Cog):
             CREATE TABLE IF NOT EXISTS whitelist ( 
                 user_id BIGINT PRIMARY KEY 
             )
-        """
+            """
         )
         await self.bot.db.execute(
             """ 
@@ -33,43 +33,7 @@ class Antiraid(commands.Cog):
                 log_channel_id BIGINT,
                 raid_punishment TEXT DEFAULT 'ban'
             )
-        """
-        )
-        await self.bot.db.execute(
-            """ 
-            ALTER TABLE server_settings 
-            ADD COLUMN IF NOT EXISTS antiraid_enabled BOOLEAN DEFAULT FALSE 
-        """
-        )
-        await self.bot.db.execute(
-            """ 
-            ALTER TABLE server_settings
-            ADD COLUMN IF NOT EXISTS minimum_account_age INT DEFAULT 7 
-        """
-        )
-        await self.bot.db.execute(
-            """ 
-            ALTER TABLE server_settings
-            ADD COLUMN IF NOT EXISTS lockdown BOOLEAN DEFAULT FALSE 
-        """
-        )
-        await self.bot.db.execute(
-            """ 
-            ALTER TABLE server_settings
-            ADD COLUMN IF NOT EXISTS default_pfp_check BOOLEAN DEFAULT FALSE 
-        """
-        )
-        await self.bot.db.execute(
-            """ 
-            ALTER TABLE server_settings
-            ADD COLUMN IF NOT EXISTS log_channel_id BIGINT
-        """
-        )
-        await self.bot.db.execute(
-            """ 
-            ALTER TABLE server_settings
-            ADD COLUMN IF NOT EXISTS raid_punishment TEXT DEFAULT 'ban'
-        """
+            """
         )
 
     async def get_server_settings(self, guild_id):
@@ -85,7 +49,7 @@ class Antiraid(commands.Cog):
                 """ 
                 INSERT INTO server_settings (guild_id) 
                 VALUES ($1)
-            """,
+                """,
                 guild_id,
             )
             return {
@@ -113,7 +77,7 @@ class Antiraid(commands.Cog):
             log_channel = guild.get_channel(log_channel_id)
             if log_channel:
                 await log_channel.send(
-                    f"**[Raid Log]** {member} attempted to join with reason: {reason}"
+                    f"[Raid Log] {member} attempted to join with reason: {reason}"
                 )
             else:
                 await guild.system_channel.send(
@@ -123,10 +87,8 @@ class Antiraid(commands.Cog):
             log_channel = discord.utils.get(guild.text_channels, name="raid-log")
             if log_channel:
                 await log_channel.send(
-                    f"**[Raid Log]** {member} attempted to join with reason: {reason}"
+                    f"[Raid Log] {member} attempted to join with reason: {reason}"
                 )
-            else:
-                return
 
     @commands.group(name="antiraid", invoke_without_command=True)
     @commands.has_permissions(administrator=True)
@@ -145,7 +107,7 @@ class Antiraid(commands.Cog):
             UPDATE server_settings
             SET antiraid_enabled = $1
             WHERE guild_id = $2 
-        """,
+            """,
             new_status,
             ctx.guild.id,
         )
@@ -161,7 +123,7 @@ class Antiraid(commands.Cog):
             UPDATE server_settings
             SET minimum_account_age = $1
             WHERE guild_id = $2
-        """,
+            """,
             days,
             ctx.guild.id,
         )
@@ -172,18 +134,18 @@ class Antiraid(commands.Cog):
     async def toggle_lockdown(self, ctx, status: str):
         """Enable or disable server lockdown (block all new joins)."""
         if status.lower() not in ["on", "off"]:
-            await ctx.fail("Invalid status! Use `on` or `off`.")  # Handle invalid input
+            await ctx.fail("Invalid status! Use on or off.")  # Handle invalid input
             return
 
         new_lockdown = status.lower() == "on"
-
+        
         # Update lockdown status in the database
         await self.bot.db.execute(
             """
             UPDATE server_settings
             SET lockdown = $1
             WHERE guild_id = $2
-        """,
+            """,
             new_lockdown,
             ctx.guild.id,
         )
@@ -214,9 +176,7 @@ class Antiraid(commands.Cog):
                         send_messages=original["send_messages"],
                         read_messages=original["read_messages"],
                     )
-                    del self.original_permissions[
-                        channel.id
-                    ]  # Clean up after restoring permissions
+                    del self.original_permissions[channel.id]  # Clean up after restoring permissions
 
         state = "locked down" if new_lockdown else "lifted"
         await ctx.success(
@@ -234,7 +194,7 @@ class Antiraid(commands.Cog):
             UPDATE server_settings
             SET default_pfp_check = $1
             WHERE guild_id = $2
-        """,
+            """,
             new_status,
             ctx.guild.id,
         )
@@ -262,12 +222,12 @@ class Antiraid(commands.Cog):
             UPDATE server_settings
             SET raid_punishment = $1
             WHERE guild_id = $2
-        """,
+            """,
             punishment,
             ctx.guild.id,
         )
 
-        await ctx.success(f"Raid punishment has been set to **{punishment}**")
+        await ctx.success(f"Raid punishment has been set to {punishment}")
 
     @antiraid.command(name="status")
     async def status(self, ctx):
@@ -337,7 +297,7 @@ class Antiraid(commands.Cog):
             INSERT INTO server_settings (guild_id, log_channel_id)
             VALUES ($1, $2)
             ON CONFLICT (guild_id) DO UPDATE SET log_channel_id = $2
-        """,
+            """,
             ctx.guild.id,
             channel.id,
         )
