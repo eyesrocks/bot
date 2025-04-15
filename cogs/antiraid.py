@@ -2,13 +2,13 @@ import discord
 from discord.ext import commands
 from datetime import datetime
 import pytz  # For handling timezone
-from tool.greed import Greed
+from tool.eyes import Eyes
 from loguru import logger
 from cogs.moderation import Moderation
 
 
 class Antiraid(commands.Cog):
-    def __init__(self, bot: Greed):
+    def __init__(self, bot: Eyes):
         self.bot = bot
         self.original_permissions = {}
         self.bot.loop.create_task(self.setup_db())  # Initialize the database
