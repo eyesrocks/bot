@@ -4,7 +4,7 @@ from typing import Optional, Union, List
 from discord.ext.commands import Context
 from tool.important.subclasses.command import TextChannel
 from cogs.servers import EmbedConverter
-from tool.greed import Greed
+from tool.eyes import Eyes
 from loguru import logger
 from rival_tools import ratelimit
 from contextlib import suppress
@@ -13,7 +13,7 @@ from collections import defaultdict
 
 
 class Vanity(commands.Cog):
-    def __init__(self, bot: Greed):
+    def __init__(self, bot: Eyes):
         self.bot = bot
         self.local_addr = "23.160.168.122"
         self.locks = defaultdict(asyncio.Lock)
@@ -31,7 +31,7 @@ class Vanity(commands.Cog):
     @vanity.command(
         name="set",
         brief="set the channel for checking vanities",
-        example=",vanity set #vanity-updates",
+        example=";vanity set #vanity-updates",
     )
     async def vanity_set(self, ctx, channel: TextChannel):
         await self.bot.db.execute(
@@ -44,7 +44,7 @@ class Vanity(commands.Cog):
     @vanity.command(
         name="unset",
         brief="unset the channel for checking vanities",
-        example=",vanity unset",
+        example=";vanity unset",
     )
     async def vanity_unset(self, ctx):
         result = await self.bot.db.execute(
