@@ -25,7 +25,7 @@ from collections import defaultdict
 from typing import Optional, Union
 from contextlib import suppress
 from loguru import logger
-from tool.greed import Greed
+from tool.greed import Eyes
 import random
 import discord
 
@@ -72,7 +72,7 @@ def get_action(e: Union[AuditLogAction, AuditLogEntry]) -> str:
 class Antinuke(Cog):
     """A class that implements an anti-nuke system to protect a guild from malicious actions."""
 
-    def __init__(self, bot: Greed):
+    def __init__(self, bot: Eyes):
         self.bot = bot
         self.locks = defaultdict(Lock)
         self.user_locks = defaultdict(Lock)
