@@ -31,7 +31,7 @@ from functools import lru_cache
 from tenacity import retry, stop_after_attempt, wait_exponential
 from dataclasses import dataclass
 from contextlib import asynccontextmanager
-from tool.greed import Greed
+from tool.eyes import Eyes
 
 cache.setup("mem://")
 
@@ -143,7 +143,7 @@ def default_lock_cache(max_size: int = 5000) -> dict[Any, asyncio.Lock]:
 
 
 class Events(commands.Cog):
-    def __init__(self, bot: Greed):
+    def __init__(self, bot: Eyes):
         self.bot = bot
         self.locks = defaultdict(asyncio.Lock)
         self.no_snipe = []
